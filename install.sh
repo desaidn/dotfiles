@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOCAL_DIR="$HOME/.local/share/dotfiles"
+OS_NAME="$(uname -s)"
 
 missing=()
 require() {
@@ -14,13 +15,23 @@ require fish         https://fishshell.com
 require zsh          https://www.zsh.org
 require nvim         https://neovim.io
 require tmux         https://github.com/tmux/tmux
-require ghostty      https://ghostty.org
 require lazygit      https://github.com/jesseduffield/lazygit
 require mise         https://mise.jdx.dev
 require atuin        https://atuin.sh
 require rg           https://github.com/BurntSushi/ripgrep
 require tree-sitter  https://tree-sitter.github.io
 require difft        https://difftastic.wilfred.me.uk
+
+has_ghostty() {
+    command -v ghostty >/dev/null && return 0
+    [[ "$OS_NAME" == "Darwin" ]] && {
+        [[ -d "/Applications/Ghostty.app" || -d "$HOME/Applications/Ghostty.app" ]]
+    }
+}
+
+if [[ "$OS_NAME" == "Darwin" ]] && ! has_ghostty; then
+    missing+=("ghostty: https://ghostty.org")
+fi
 
 if (( ${#missing[@]} > 0 )); then
     echo "Missing prerequisites:"
@@ -43,7 +54,11 @@ link() {
 }
 
 link fish        .config/fish
-link ghostty     .config/ghostty
+if [[ "$OS_NAME" == "Darwin" ]]; then
+    link ghostty     .config/ghostty
+else
+    echo "  skipped:        $HOME/.config/ghostty (macOS-only)"
+fi
 link lazygit     .config/lazygit
 link nvim        .config/nvim
 link tmux        .config/tmux
@@ -53,7 +68,7 @@ mkdir -p "$LOCAL_DIR"
 cp -n "$REPO_ROOT/templates/local.fish" "$LOCAL_DIR/"
 cp -n "$REPO_ROOT/templates/local.zsh"  "$LOCAL_DIR/"
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
+if [[ "$OS_NAME" == "Darwin" ]]; then
     APP_DIR="$HOME/Applications"
     APP="$APP_DIR/NvimOpener.app"
     SRC="$REPO_ROOT/macos/NvimOpener.applescript"
