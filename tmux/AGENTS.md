@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Guidance for Claude Code working on the tmux config. See [`../CLAUDE.md`](../CLAUDE.md) for monorepo-level conventions.
+Guidance for Codex working on the tmux config. See [`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions.
 
 ## Configuration Purpose
 
@@ -47,5 +47,4 @@ tmux -f ~/.config/tmux/tmux.conf new-session -d -s test \; kill-session -t test
 - Maintain compatibility with standard tmux installations (no plugin-manager dependencies)
 - Preserve the directory-context philosophy for new bindings (`-c "#{pane_current_path}"`)
 
-See `../CLAUDE.md` for repo-wide modification guidelines.
-
+See `../AGENTS.md` for repo-wide modification guidelines.

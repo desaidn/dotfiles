@@ -79,7 +79,7 @@ nvim
 
 ## Configuration
 
-Leader key is `<Space>`. Configuration is documented in `init.lua` and `CLAUDE.md`.
+Leader key is `<Space>`. Configuration is documented in `init.lua` and `AGENTS.md`.
 
 Use `:Lazy` to manage plugins, `:Mason` for LSP servers, and `:checkhealth` to diagnose issues.
 

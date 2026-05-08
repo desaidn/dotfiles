@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Guidance for Claude Code working on the nvim config. See [`../CLAUDE.md`](../CLAUDE.md) for monorepo-level conventions.
+Guidance for Codex working on the nvim config. See [`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions.
 
 ## Neovim Configuration Overview
 

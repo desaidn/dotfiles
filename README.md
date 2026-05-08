@@ -14,7 +14,7 @@ Personal config monorepo. Clone anywhere, run `./install.sh`, and your system is
 | `zsh/.zshrc`  | `~/.zshrc`            | λ prompt + nvim-reset aliases. No OMZ dependency.  |
 | `macos/`      | `~/Applications/`     | macOS-only. AppleScript droplet → nvim in Ghostty. |
 
-Each subdirectory has its own `README.md` (and `CLAUDE.md` where relevant).
+Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
 
 ## Quick start
 
