@@ -22,3 +22,7 @@ export PATH="$HOME/.local/bin:$PATH"
 if [ -f "$HOME/.local/share/dotfiles/local.zsh" ]; then
     source "$HOME/.local/share/dotfiles/local.zsh"
 fi
+
+if [[ -o interactive && -z "${ZSH_EXECUTION_STRING:-}" ]] && command -v fish >/dev/null; then
+    exec fish
+fi

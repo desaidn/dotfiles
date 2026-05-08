@@ -10,3 +10,4 @@ Part of [dotfiles](../README.md). Custom λ prompt + aliases. No Oh My Zsh depen
 ## Scope
 
 Per-machine activations (`mise`, `atuin`, etc.) live in `~/.local/share/dotfiles/local.zsh`.
+Interactive zsh sessions hand off to Fish with `exec fish` after local activation has loaded.

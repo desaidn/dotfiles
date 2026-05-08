@@ -48,7 +48,6 @@ background-opacity = 0.80
 background-blur-radius = 8
 macos-option-as-alt = true
 
-command = /opt/homebrew/bin/fish -l
 scrollback-limit = 5000
 
 keybind = shift+enter=text:\n
