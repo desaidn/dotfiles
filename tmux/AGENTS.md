@@ -13,6 +13,7 @@ A single `tmux.conf` file. Provides:
 ## Common Operations
 
 ### Testing Configuration Changes
+
 ```bash
 # Reload tmux configuration in existing session
 tmux source-file ~/.config/tmux/tmux.conf
@@ -22,6 +23,7 @@ tmux kill-server
 ```
 
 ### Verifying Configuration
+
 ```bash
 # Check tmux configuration syntax
 tmux -f ~/.config/tmux/tmux.conf new-session -d -s test \; kill-session -t test
@@ -46,3 +48,4 @@ tmux -f ~/.config/tmux/tmux.conf new-session -d -s test \; kill-session -t test
 - Preserve the directory-context philosophy for new bindings (`-c "#{pane_current_path}"`)
 
 See `../CLAUDE.md` for repo-wide modification guidelines.
+

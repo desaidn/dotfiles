@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Repository Overview
 
@@ -17,7 +17,7 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 
 ### Development Tools
 
-- **Neovim** (`nvim/`) - Primary editor for most languages (see `nvim/CLAUDE.md` for details)
+- **Neovim** (`nvim/`) - Primary editor for most languages (see `nvim/AGENTS.md` for details)
 - **LazyGit** (`lazygit/config.yml`) - Git TUI with nvim integration, difftastic diffs, and custom theme
 
 ### macOS Finder Integration
@@ -55,7 +55,7 @@ All configurations follow these principles:
 git clone <this-repo> ~/dotfiles
 ~/dotfiles/install.sh           # Symlink configs, write per-machine activation files
 mise install                    # Install language runtimes
-nvim                            # Start editor (see nvim/CLAUDE.md for details)
+nvim                            # Start editor (see nvim/AGENTS.md for details)
 ```
 
 ### Terminal Usage
@@ -78,7 +78,7 @@ tmux new-session -s dev
 ### File Organization
 
 - Each tool maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`
-- Individual tools may have their own CLAUDE.md files (e.g., `nvim/CLAUDE.md`, `tmux/CLAUDE.md`)
+- Individual tools may have their own AGENTS.md files (e.g., `nvim/AGENTS.md`, `tmux/AGENTS.md`)
 - Configurations are environment-specific and not intended for multi-user scenarios
 
 ### Tool Integration Points
@@ -111,5 +111,5 @@ When modifying configurations:
 2. Maintain integration between related tools
 3. Keep configurations minimal and purpose-driven
 4. Respect XDG directory structure
-5. Document significant changes in relevant CLAUDE.md files
+5. Document significant changes in relevant AGENTS.md files
 6. Do not add platform-specific paths (e.g., `/opt/homebrew/...`) into rc files. They go in the per-machine `local.{fish,zsh}`.
