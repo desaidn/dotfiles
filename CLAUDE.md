@@ -10,7 +10,7 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 
 ### Terminal & Shell
 
-- **Ghostty** (`ghostty/config`) - Primary terminal emulator
+- **Ghostty** (`ghostty/config`) - macOS terminal emulator config
 - **Fish** (`fish/`) - Primary shell, with custom λ prompt
 - **Zsh** (`zsh/.zshrc`) - Secondary shell, mirrored prompt and aliases
 - **Tmux** (`tmux/tmux.conf`) - Terminal multiplexer with directory preservation and 1-based indexing
@@ -22,7 +22,7 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 
 ### macOS Finder Integration
 
-- **NvimOpener** (`macos/NvimOpener.applescript`) - AppleScript droplet compiled by `install.sh` into `~/Applications/NvimOpener.app`. Lets Finder "Open With" launch nvim inside a Ghostty window. The compiled bundle's `Info.plist` is patched post-`osacompile` to set `CFBundleDocumentTypes[0].LSItemContentTypes = ["public.item"]`, `CFBundleTypeRole = Editor`, `LSHandlerRank = Alternate` — without this, the droplet does not appear in modern macOS's "Open With" menu (legacy `CFBundleTypeExtensions = ["*"]` is ignored). Bundle is re-signed (`codesign -s -`) and re-registered with `lsregister -f` after the patch. Compile step is gated on `uname -s == Darwin`.
+- **NvimOpener** (`macos/NvimOpener.applescript`) - AppleScript droplet compiled by `install.sh` into `~/Applications/NvimOpener.app` on macOS. Lets Finder "Open With" launch nvim inside a Ghostty window. The compiled bundle's `Info.plist` is patched post-`osacompile` to set `CFBundleDocumentTypes[0].LSItemContentTypes = ["public.item"]`, `CFBundleTypeRole = Editor`, `LSHandlerRank = Alternate` — without this, the droplet does not appear in modern macOS's "Open With" menu (legacy `CFBundleTypeExtensions = ["*"]` is ignored). Bundle is re-signed (`codesign -s -`) and re-registered with `lsregister -f` after the patch.
 
 ### Per-machine prerequisites (not in this repo)
 
@@ -32,6 +32,8 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 - **Atuin** - Shell history sync
 
 Per-machine activation lines (`mise activate`, `atuin init`) are written to `~/.local/share/dotfiles/local.{fish,zsh}` by `install.sh`.
+
+Ghostty is macOS-only for install: `install.sh` skips the Ghostty config symlink and `NvimOpener.app` on non-macOS hosts, but requires Ghostty on macOS.
 
 ## Configuration Philosophy
 
@@ -82,7 +84,7 @@ tmux new-session -s dev
 ### Tool Integration Points
 
 - **Editor ↔ Git**: Neovim integrates with both gitsigns and lazygit
-- **Shell ↔ Terminal**: Fish in Ghostty with tmux multiplexing
+- **Shell ↔ Terminal**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; tmux handles multiplexing
 - **Runtime Management**: Mise handles all language version requirements
 - **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty)
 

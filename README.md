@@ -7,7 +7,7 @@ Personal config monorepo. Clone anywhere, run `./install.sh`, and your system is
 | Directory     | Target                | Notes                                              |
 | ------------- | --------------------- | -------------------------------------------------- |
 | `fish/`       | `~/.config/fish/`     | Prompt + nvim-reset aliases. Platform-agnostic.    |
-| `ghostty/`    | `~/.config/ghostty/`  | Ghostty terminal config.                           |
+| `ghostty/`    | `~/.config/ghostty/`  | macOS Ghostty terminal config.                     |
 | `lazygit/`    | `~/.config/lazygit/`  | Uses `nvim-remote` editor + `difft` external diff. |
 | `nvim/`       | `~/.config/nvim/`     | kickstart-based config; lazy.nvim auto-bootstraps. |
 | `tmux/`       | `~/.config/tmux/`     | 1-indexed, vi copy mode, AI/build pane bindings.   |
@@ -34,7 +34,9 @@ cd ~/dotfiles
 
 `install.sh` checks for the binaries below on PATH and prints the install URL of anything missing.
 
-**Tools this repo configures**: `git`, `fish`, `zsh`, `nvim`, `tmux`, `ghostty`, `lazygit`
+**Required tools this repo configures**: `git`, `fish`, `zsh`, `nvim`, `tmux`, `lazygit`
+
+**macOS-only tool config**: `ghostty` is required on macOS and skipped on non-macOS hosts. `install.sh` accepts either the `ghostty` CLI or `Ghostty.app` in `/Applications` or `~/Applications`.
 
 **Auxiliary deps**:
 
@@ -46,7 +48,7 @@ cd ~/dotfiles
 | `tree-sitter`   | nvim treesitter parser mgmt  |
 | `difft`         | lazygit external diff viewer |
 
-**Not checked** (no portable `command -v` equivalent): JetBrains Mono font (used by ghostty) — install from <https://www.jetbrains.com/lp/mono/>.
+**Not checked** (no portable `command -v` equivalent): JetBrains Mono font (used by Ghostty) — install from <https://www.jetbrains.com/lp/mono/>.
 
 ## Per-machine activation
 
