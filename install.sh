@@ -69,7 +69,7 @@ cp -n "$REPO_ROOT/templates/local.fish" "$LOCAL_DIR/"
 cp -n "$REPO_ROOT/templates/local.zsh"  "$LOCAL_DIR/"
 
 if [[ "$OS_NAME" == "Darwin" ]]; then
-    APP_DIR="$HOME/Applications"
+    APP_DIR="/System/Applications"
     APP="$APP_DIR/NvimOpener.app"
     SRC="$REPO_ROOT/macos/NvimOpener.applescript"
     mkdir -p "$APP_DIR"
