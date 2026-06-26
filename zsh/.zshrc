@@ -18,6 +18,9 @@ alias nvim-reset-all='rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nv
 
 export XDG_CONFIG_HOME="$HOME/.config"
 export PATH="$HOME/.local/bin:$PATH"
+export EDITOR=nvim
+export VISUAL=nvim
+export GIT_EDITOR=nvim
 
 if [ -f "$HOME/.local/share/dotfiles/local.zsh" ]; then
     source "$HOME/.local/share/dotfiles/local.zsh"

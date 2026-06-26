@@ -1,0 +1,3 @@
+# Keep the code interface agent-harness agnostic
+
+This dotfiles repo treats Codex, Claude Code, and future coding agents as interchangeable harnesses over the same local workflow. The durable interface is Neovim plus terminal tools: Hunk is the direct full stacked working-tree review surface from Neovim, lazygit remains the Git transaction surface for staging, commits, stashes, branches, and history, and gitsigns stays limited to hunk-local in-buffer actions; harness-specific files should only adapt into that shared interface so the way code is edited, reviewed, and committed stays uniform across personal and work machines. The setup should prefer upstream defaults unless a deviation directly supports that uniform interface.

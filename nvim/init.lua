@@ -147,34 +147,7 @@ vim.o.pumborder = 'rounded'
 -- See `:help 'confirm'`
 vim.o.confirm = true
 
--- Always show tabline
-vim.o.showtabline = 2
-
-function _G.custom_tabline()
-  local tabs = {}
-  local lg_open = vim.g.lazygit_open
-  local current_tabpage = vim.api.nvim_get_current_tabpage()
-  for i, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
-    local buf
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
-      if vim.api.nvim_win_get_config(win).relative == '' then
-        buf = vim.api.nvim_win_get_buf(win)
-        break
-      end
-    end
-    if buf then
-      local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ':t')
-      if name == '' then name = vim.fn.fnamemodify(vim.fn.getcwd(), ':t') end
-      if vim.bo[buf].modified then name = name .. ' +' end
-      local hl = (tabpage == current_tabpage and not lg_open) and '%#TabLineSel#' or '%#TabLine#'
-      table.insert(tabs, hl .. '%' .. i .. 'T' .. '   ' .. name .. '   ')
-    end
-  end
-  if lg_open then table.insert(tabs, '%#TabLineSel#' .. '   lazygit   ') end
-  return table.concat(tabs) .. '%#TabLineFill#%T'
-end
-
-vim.o.tabline = '%!v:lua.custom_tabline()'
+vim.o.showtabline = 0
 
 -- [[ Diagnostic Config ]]
 -- See `:help vim.diagnostic.Opts`

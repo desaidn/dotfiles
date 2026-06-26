@@ -2,19 +2,36 @@
 
 Personal config monorepo. Clone anywhere, run `./install.sh`, and your system is wired up via symlinks into `~/.config/` and `~/`.
 
+The setup is designed around one uniform code interface: Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working.
+
 ## Layout
 
 | Directory     | Target                | Notes                                              |
 | ------------- | --------------------- | -------------------------------------------------- |
 | `fish/`       | `~/.config/fish/`     | Prompt + nvim-reset aliases. Platform-agnostic.    |
 | `ghostty/`    | `~/.config/ghostty/`  | macOS Ghostty terminal config.                     |
-| `lazygit/`    | `~/.config/lazygit/`  | Uses `nvim-remote` editor + `difft` external diff. |
+| `lazygit/`    | `~/.config/lazygit/`  | Git TUI with Neovim editor handoff and native staging UI. |
 | `nvim/`       | `~/.config/nvim/`     | kickstart-based config; lazy.nvim auto-bootstraps. |
-| `tmux/`       | `~/.config/tmux/`     | 1-indexed, vi copy mode, AI/build pane bindings.   |
+| `tmux/`       | `~/.config/tmux/`     | 1-indexed, vi copy mode, agent/build pane bindings. |
 | `zsh/.zshrc`  | `~/.zshrc`            | λ prompt + nvim-reset aliases. No OMZ dependency.  |
-| `macos/`      | `~/Applications/`     | macOS-only. AppleScript droplet → nvim in Ghostty. |
 
 Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
+
+## Code interface contract
+
+This repo keeps the interface to code agent-harness agnostic:
+
+- Start and return to Neovim for editing.
+- Use gitsigns for local in-buffer hunk operations.
+- Use Hunk directly from Neovim for full stacked working-tree review.
+- Use lazygit for Git state, staging, stashes, history, branches, and commits.
+- Let shell configuration declare Neovim as the global editor through `EDITOR`, `VISUAL`, and `GIT_EDITOR`.
+- Use flatten.nvim for editor handoff from terminal tools back into the host Neovim instance.
+- Keep Neovim gitsigns actions hunk-local; buffer-wide Git transactions belong in lazygit.
+- Prefer upstream defaults unless a deviation directly supports the uniform code interface.
+- Keep Codex, Claude Code, and future harnesses as adapters over the same files, commands, and review surfaces.
+
+Harness-specific files should only bridge into the shared workflow. They should not introduce a second review model, separate Git transaction surface, or different way to open code. Global Git behavior stays outside this contract unless the repo explicitly starts managing Git config.
 
 ## Quick start
 
@@ -46,7 +63,7 @@ cd ~/dotfiles
 | `atuin`         | shell rc (per-machine init)  |
 | `rg`            | nvim Telescope / fff.nvim    |
 | `tree-sitter`   | nvim treesitter parser mgmt  |
-| `difft`         | lazygit external diff viewer |
+| `hunk`          | nvim stacked working-tree review |
 
 **Not checked** (no portable `command -v` equivalent): JetBrains Mono font (used by Ghostty) — install from <https://www.jetbrains.com/lp/mono/>.
 
@@ -59,11 +76,7 @@ The `fish` and `zsh` rc files source an optional per-machine file if it exists:
 
 `install.sh` writes these for you. They contain `mise activate`, `mise completion`, `atuin init`, and `[ -d ]`/`[ -f ]`-gated PATH additions for optional tools (`bun`, `ghcup`, `lmstudio`, `claude/local`) — every line is a no-op on a machine that lacks the tool. Edit freely — these files live outside the repo.
 
-## Finder integration (macOS)
-
-On macOS, `install.sh` compiles `macos/NvimOpener.applescript` into `~/Applications/NvimOpener.app`. The bundle's `Info.plist` is patched to declare `LSItemContentTypes = public.item` so it appears in Finder's **Open With** menu for any file. Double-clicking (or **Get Info → Open With → Change All…**) opens the file in `nvim` inside a fresh Ghostty window. Multi-file selections coalesce into one nvim window with each file as a buffer.
-
-The droplet shells out via `/bin/zsh -lc "exec nvim …"` so `/etc/zprofile` runs `path_helper` and `nvim` resolves on both Apple Silicon and Intel without hardcoded paths.
+The shared shell rc files set `EDITOR`, `VISUAL`, and `GIT_EDITOR` to `nvim`; per-machine files should only override that when a machine genuinely needs a different editor contract.
 
 ## Rollback
 

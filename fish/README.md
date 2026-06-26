@@ -1,6 +1,10 @@
 # fish
 
-Part of [dotfiles](../README.md). Custom λ prompt + aliases.
+Part of [dotfiles](../README.md). Custom λ prompt, editor environment, and aliases.
+
+## Environment
+
+- `EDITOR`, `VISUAL`, and `GIT_EDITOR` are set to `nvim`.
 
 ## Aliases
 

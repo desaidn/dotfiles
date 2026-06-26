@@ -1,9 +1,4 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/jesseduffield/lazygit/v0.52.0/schema/config.json
-os:
-  editPreset: "nvim-remote"
-git:
-  paging:
-    externalDiffCommand: "difft --color=always --display=inline --background=dark --context=5"
 gui:
   theme:
     selectedLineBgColor:

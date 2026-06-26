@@ -24,14 +24,6 @@ remove nvim        .config/nvim
 remove tmux        .config/tmux
 remove zsh/.zshrc  .zshrc
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    APP="$HOME/Applications/NvimOpener.app"
-    if [[ -d "$APP" ]]; then
-        rm -rf "$APP"
-        echo "  removed:          $APP"
-    fi
-fi
-
 echo
 echo "Backups (if any) remain at:"
 ls -d "$HOME"/.config/*.bak.* "$HOME"/.zshrc.bak.* 2>/dev/null || echo "  (none)"

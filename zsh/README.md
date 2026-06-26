@@ -1,6 +1,10 @@
 # zsh
 
-Part of [dotfiles](../README.md). Custom λ prompt + aliases. No Oh My Zsh dependency.
+Part of [dotfiles](../README.md). Custom λ prompt, editor environment, and aliases. No Oh My Zsh dependency.
+
+## Environment
+
+- `EDITOR`, `VISUAL`, and `GIT_EDITOR` are set to `nvim`.
 
 ## Aliases
 

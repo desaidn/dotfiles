@@ -20,7 +20,7 @@ require mise         https://mise.jdx.dev
 require atuin        https://atuin.sh
 require rg           https://github.com/BurntSushi/ripgrep
 require tree-sitter  https://tree-sitter.github.io
-require difft        https://difftastic.wilfred.me.uk
+require hunk         https://github.com/modem-dev/hunk
 
 has_ghostty() {
     command -v ghostty >/dev/null && return 0
@@ -67,28 +67,3 @@ link zsh/.zshrc  .zshrc
 mkdir -p "$LOCAL_DIR"
 cp -n "$REPO_ROOT/templates/local.fish" "$LOCAL_DIR/"
 cp -n "$REPO_ROOT/templates/local.zsh"  "$LOCAL_DIR/"
-
-if [[ "$OS_NAME" == "Darwin" ]]; then
-    APP_DIR="/System/Applications"
-    APP="$APP_DIR/NvimOpener.app"
-    SRC="$REPO_ROOT/macos/NvimOpener.applescript"
-    mkdir -p "$APP_DIR"
-    if [[ ! -d "$APP" || "$SRC" -nt "$APP/Contents/Info.plist" ]]; then
-        osacompile -o "$APP" "$SRC"
-        PLIST="$APP/Contents/Info.plist"
-        PB="/usr/libexec/PlistBuddy"
-        "$PB" -c "Delete :CFBundleDocumentTypes" "$PLIST" 2>/dev/null || true
-        "$PB" -c "Add :CFBundleDocumentTypes array" "$PLIST"
-        "$PB" -c "Add :CFBundleDocumentTypes:0 dict" "$PLIST"
-        "$PB" -c "Add :CFBundleDocumentTypes:0:CFBundleTypeName string AllFiles" "$PLIST"
-        "$PB" -c "Add :CFBundleDocumentTypes:0:CFBundleTypeRole string Editor" "$PLIST"
-        "$PB" -c "Add :CFBundleDocumentTypes:0:LSHandlerRank string Alternate" "$PLIST"
-        "$PB" -c "Add :CFBundleDocumentTypes:0:LSItemContentTypes array" "$PLIST"
-        "$PB" -c "Add :CFBundleDocumentTypes:0:LSItemContentTypes:0 string public.item" "$PLIST"
-        codesign --force --sign - "$APP" >/dev/null
-        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
-        echo "  compiled:       $APP"
-    else
-        echo "  already built:  $APP"
-    fi
-fi

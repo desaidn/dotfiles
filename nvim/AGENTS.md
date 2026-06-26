@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for Codex working on the nvim config. See [`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions.
+Guidance for coding agents working on the nvim config. See [`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions.
 
 ## Neovim Configuration Overview
 
@@ -26,10 +26,13 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
   - `indent_line.lua` - Indentation guides via indent-blankline.nvim (**currently disabled** — `require` is commented out in `init.lua`)
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
+- `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should open in a tmux popup inside tmux and a floating terminal outside tmux
 - `lua/custom/plugins/` - Auto-imported by lazy.nvim via `{ import = 'custom.plugins' }`; every `*.lua` file here is loaded as a plugin spec:
   - `init.lua` - Returns `{}`; kept as a placeholder for ad-hoc additions
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
-  - `lazygit.lua` - Fullscreen floating lazygit (owns `<leader>gg`)
+  - `lazygit.lua` - Thin lazygit Git transaction spec over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gg`)
+  - `hunk.lua` - Thin Hunk stacked working-tree review spec over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gd`)
+  - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
 - `lazy-lock.json` - Plugin version lockfile
 
 ### Plugin Management
@@ -39,7 +42,7 @@ Uses lazy.nvim as the plugin manager. Core plugins include:
 - **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ configuration lives in `lua/kickstart/plugins/lsp.lua`, with substantial overrides in `after/lsp/lua_ls.lua`
 - **Completion**: blink.cmp with LuaSnip for snippets
 - **Fuzzy Finding**: fff.nvim for files and live grep (`<leader>sf`, `<leader>sg`); Telescope with fzf-native for help, keymaps, diagnostics, buffers, LSP symbols, and word-under-cursor grep
-- **Git Integration**: gitsigns (in-editor signs, blame, hunks); lazygit (diffs, history, staging UI)
+- **Git Integration**: gitsigns (in-editor signs, blame, local hunks); Hunk (working-tree review); lazygit (Git transaction UI)
 - **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
 - **Formatting**: conform.nvim for auto-formatting
 - **Linting**: nvim-lint with eslint_d, ruff
@@ -51,7 +54,7 @@ Uses lazy.nvim as the plugin manager. Core plugins include:
 - Leader key: `<Space>`
 - Search operations: `<leader>s*` (files, grep, help, keymaps, diagnostics, etc.)
 - Toggle options: `<leader>t*` — `th` inlay hints, `tb` git blame line, `td` inline git diff, `ts` spell check
-- Git operations: `<leader>gg` (lazygit), `<leader>h*` (hunk stage/reset/preview), `]c`/`[c` (hunk navigation)
+- Git operations: `<leader>gg` (lazygit), `<leader>gd` (Hunk review), `<leader>g*` (hunk-local gitsigns actions), `]c`/`[c` (hunk navigation)
 - LSP operations: `gr*` prefix (Neovim 0.11 defaults for rename/code action, Telescope overrides for references/definitions)
 - Format: `<leader>f` (format buffer)
 - Explorer: `<leader>e` (neo-tree toggle)
@@ -91,16 +94,29 @@ Minimal terminal integration (tmux handles primary terminal functionality):
 
 - `<Esc><Esc>` - Exit terminal mode when needed
 - `<C-h/j/k/l>` - Navigate between windows
+- flatten.nvim redirects nested `nvim +line file` calls from terminal tools back into the host Neovim instance. Tool launchers may set `DOTFILES_EDITOR_HANDOFF_SOURCE` only to identify the source surface for post-handoff polish; they should not override `EDITOR`.
+
+### Neovim-Owned Terminal Tools
+
+Use `lua/custom/lib/terminal_tool.lua` for any future flow that Neovim should launch as an interactive terminal tool, such as Hunk or lazygit. This is the standard shape:
+
+- Inside tmux: start one persistent hidden tmux session per Neovim server and repo, then attach it in a fullscreen tmux popup.
+- Outside tmux: run the tool in a Neovim floating terminal with the same key toggling the float.
+- Pass through shell-owned `EDITOR`, `VISUAL`, and `GIT_EDITOR`; do not override the editor contract in tool-specific config.
+- Tag `DOTFILES_EDITOR_HANDOFF_SOURCE` so flatten.nvim can hide or polish the originating surface after nested `nvim` opens the target file in the host Neovim.
+- Keep each plugin file thin: declare the tool name, command, key, source marker, and any tool-specific post-handoff behavior.
 
 ### Git Integration
 
-Focused on in-editor git context (diffs and file history are handled by lazygit):
+Focused on in-editor git context and full working-tree review. Git transactions and object selection are handled by lazygit:
 
 - **gitsigns**: In-editor git signs, blame, and hunk navigation
-- `<leader>gg` - Toggle fullscreen floating lazygit (custom plugin: `lua/custom/plugins/lazygit.lua`)
+- `<leader>gg` - Open fullscreen lazygit Git transaction surface (custom plugin: `lua/custom/plugins/lazygit.lua`)
+- `<leader>gd` - Open fullscreen Hunk stacked working-tree review (custom plugin: `lua/custom/plugins/hunk.lua`)
+- Lazygit and Hunk use the shell-owned global editor contract (`EDITOR=nvim`) for native editor handoff; flatten.nvim returns nested Neovim invocations to the host editor and hides the originating review/transaction surface.
 - `<leader>tb` - Toggle git blame line
 - `<leader>td` - Toggle inline git diff (deleted lines + word diff)
-- `<leader>h*` - Hunk operations (stage, reset, undo, preview)
+- `<leader>ga` / `<leader>gr` / `<leader>gu` / `<leader>gp` - Hunk-local actions (stage/add, reset, undo stage, preview)
 - `]c` / `[c` - Navigate between git hunks
 
 ### File Explorer

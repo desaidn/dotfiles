@@ -50,11 +50,19 @@ nvim
 
 ### Git
 
-- `<leader>gg` - Toggle fullscreen lazygit
+- `<leader>gg` - Open fullscreen lazygit
+- `<leader>gd` - Open fullscreen Hunk stacked working-tree review
+- `<leader>ga` - Stage/add current hunk
+- `<leader>gr` - Reset current hunk
+- `<leader>gu` - Undo staged hunk
+- `<leader>gp` - Preview current hunk
 - `<leader>tb` - Toggle git blame line
 - `<leader>td` - Toggle inline git diff
-- `<leader>h*` - Hunk operations (stage, reset, preview, undo)
 - `]c` / `[c` - Navigate git hunks
+
+Lazygit and Hunk open files through the shell-owned `EDITOR=nvim` contract. flatten.nvim routes nested Neovim calls back into the host editor and hides the originating Git surface.
+
+Neovim-launched terminal tools use one shared flow: persistent fullscreen tmux popup inside tmux, floating terminal outside tmux, and flatten.nvim for editor handoff. Add future flows through `lua/custom/lib/terminal_tool.lua` instead of writing a bespoke launcher.
 
 ### File Explorer
 

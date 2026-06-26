@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for Codex working on the tmux config. See [`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions.
+Guidance for coding agents working on the tmux config. See [`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions.
 
 ## Configuration Purpose
 

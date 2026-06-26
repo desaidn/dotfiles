@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working in this repository. Codex reads it directly; Claude Code reaches it through the `CLAUDE.md` adapter. Keep guidance here harness-agnostic unless a detail genuinely belongs to one runtime.
 
 ## Repository Overview
 
@@ -18,11 +18,8 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 ### Development Tools
 
 - **Neovim** (`nvim/`) - Primary editor for most languages (see `nvim/AGENTS.md` for details)
-- **LazyGit** (`lazygit/config.yml`) - Git TUI with nvim integration, difftastic diffs, and custom theme
-
-### macOS Finder Integration
-
-- **NvimOpener** (`macos/NvimOpener.applescript`) - AppleScript droplet compiled by `install.sh` into `~/Applications/NvimOpener.app` on macOS. Lets Finder "Open With" launch nvim inside a Ghostty window. The compiled bundle's `Info.plist` is patched post-`osacompile` to set `CFBundleDocumentTypes[0].LSItemContentTypes = ["public.item"]`, `CFBundleTypeRole = Editor`, `LSHandlerRank = Alternate` — without this, the droplet does not appear in modern macOS's "Open With" menu (legacy `CFBundleTypeExtensions = ["*"]` is ignored). Bundle is re-signed (`codesign -s -`) and re-registered with `lsregister -f` after the patch.
+- **LazyGit** (`lazygit/config.yml`) - Git TUI with nvim integration, native staging UI, and custom theme
+- **Hunk** - Full stacked working-tree review surface from Neovim
 
 ### Per-machine prerequisites (not in this repo)
 
@@ -33,7 +30,7 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 
 Per-machine activation lines (`mise activate`, `atuin init`) are written to `~/.local/share/dotfiles/local.{fish,zsh}` by `install.sh`.
 
-Ghostty is macOS-only for install: `install.sh` skips the Ghostty config symlink and `NvimOpener.app` on non-macOS hosts, but requires Ghostty on macOS.
+Ghostty is macOS-only for install: `install.sh` skips the Ghostty config symlink on non-macOS hosts, but requires Ghostty on macOS.
 
 ## Configuration Philosophy
 
@@ -43,6 +40,8 @@ All configurations follow these principles:
 - Minimal, focused setups without unnecessary complexity
 - Consistent directory structure following XDG standards
 - Integration between tools (e.g., lazygit ↔ nvim, ghostty ↔ tmux)
+- Agent harnesses are adapters, not workflow owners; Codex, Claude Code, and future tools should use the same Neovim, Git, and review surfaces
+- Prefer upstream defaults unless a deviation directly supports the uniform code interface; avoid custom maintenance burden for taste-only changes
 - Development-focused workflows for TypeScript, Kotlin/Java, Python, and Rust
 - Prefer standard, idiomatic shortcuts and conventions over custom bindings to ensure compatibility across systems (e.g., use Ctrl+W for delete-word rather than custom Cmd+Backspace)
 - Platform-agnostic rc files: no hardcoded `/opt/homebrew/...` paths in `fish/config.fish` or `zsh/.zshrc`. Per-machine state lives in `~/.local/share/dotfiles/local.{fish,zsh}`.
@@ -72,6 +71,15 @@ tmux new-session -s dev
 
 - Use `lazygit` for TUI operations (integrated with nvim via `<leader>gg`)
 - Configured with custom theme matching development environment
+- Use direct Hunk from Neovim only for full stacked working-tree review (`<leader>gd` → `hunk diff --watch --mode stack`).
+- Keep gitsigns keymaps hunk-local; buffer-wide stage/reset operations belong in lazygit.
+
+### Agent Harnesses
+
+- Treat the user-facing code interface as Neovim plus terminal tools, regardless of which agent harness is active.
+- Keep harness-specific instructions as thin adapters into shared repo guidance.
+- Do not add Codex-only or Claude-only workflows when a shared command, file, or review surface can express the same behavior.
+- Hunk is the direct full working-tree review surface from Neovim; lazygit remains the Git transaction surface and uses its native diff/staging UI.
 
 ## Architecture Notes
 
@@ -84,6 +92,9 @@ tmux new-session -s dev
 ### Tool Integration Points
 
 - **Editor ↔ Git**: Neovim integrates with both gitsigns and lazygit
+- **Shell ↔ Editor**: Fish and zsh own the global editor contract (`EDITOR`, `VISUAL`, and `GIT_EDITOR` all point to `nvim`)
+- **Terminal tool ↔ Editor**: flatten.nvim handles editor handoff from nested `nvim` calls back into the host Neovim; tool launchers may tag `DOTFILES_EDITOR_HANDOFF_SOURCE` for post-handoff polish but should not override `EDITOR`
+- **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: persistent fullscreen tmux popup inside tmux, floating terminal outside tmux, and flatten.nvim for editor handoff
 - **Shell ↔ Terminal**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; tmux handles multiplexing
 - **Runtime Management**: Mise handles all language version requirements
 - **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty)
