@@ -4,16 +4,26 @@ Personal config monorepo. Clone anywhere, run `./install.sh`, and your system is
 
 The setup is designed around one uniform code interface: Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working.
 
+## Screenshots
+
+<img src="docs/assets/screenshots/neovim-editing.png" alt="Neovim editing session in tmux" width="100%">
+
+<img src="docs/assets/screenshots/neovim-completion.png" alt="Neovim completion menu in tmux" width="100%">
+
+<img src="docs/assets/screenshots/lazygit-patch.png" alt="lazygit patch view in tmux" width="100%">
+
+<img src="docs/assets/screenshots/hunk-review.png" alt="Hunk stacked working-tree review in tmux" width="100%">
+
 ## Layout
 
-| Directory     | Target                | Notes                                              |
-| ------------- | --------------------- | -------------------------------------------------- |
-| `fish/`       | `~/.config/fish/`     | Prompt + nvim-reset aliases. Platform-agnostic.    |
-| `ghostty/`    | `~/.config/ghostty/`  | macOS Ghostty terminal config.                     |
-| `lazygit/`    | `~/.config/lazygit/`  | Git TUI with Neovim editor handoff and native staging UI. |
-| `nvim/`       | `~/.config/nvim/`     | kickstart-based config; lazy.nvim auto-bootstraps. |
-| `tmux/`       | `~/.config/tmux/`     | 1-indexed, vi copy mode, agent/build pane bindings. |
-| `zsh/.zshrc`  | `~/.zshrc`            | λ prompt + nvim-reset aliases. No OMZ dependency.  |
+| Directory    | Target               | Notes                                                     |
+| ------------ | -------------------- | --------------------------------------------------------- |
+| `fish/`      | `~/.config/fish/`    | Prompt + nvim-reset aliases. Platform-agnostic.           |
+| `ghostty/`   | `~/.config/ghostty/` | macOS Ghostty terminal config.                            |
+| `lazygit/`   | `~/.config/lazygit/` | Git TUI with Neovim editor handoff and native staging UI. |
+| `nvim/`      | `~/.config/nvim/`    | kickstart-based config; lazy.nvim auto-bootstraps.        |
+| `tmux/`      | `~/.config/tmux/`    | 1-indexed, vi copy mode, agent/build pane bindings.       |
+| `zsh/.zshrc` | `~/.zshrc`           | λ prompt + nvim-reset aliases. No OMZ dependency.         |
 
 Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
 
@@ -57,13 +67,13 @@ cd ~/dotfiles
 
 **Auxiliary deps**:
 
-| Binary          | Required by                  |
-| --------------- | ---------------------------- |
-| `mise`          | shell rc (per-machine init)  |
-| `atuin`         | shell rc (per-machine init)  |
-| `rg`            | nvim Telescope / fff.nvim    |
-| `tree-sitter`   | nvim treesitter parser mgmt  |
-| `hunk`          | nvim stacked working-tree review |
+| Binary        | Required by                      |
+| ------------- | -------------------------------- |
+| `mise`        | shell rc (per-machine init)      |
+| `atuin`       | shell rc (per-machine init)      |
+| `rg`          | nvim Telescope / fff.nvim        |
+| `tree-sitter` | nvim treesitter parser mgmt      |
+| `hunk`        | nvim stacked working-tree review |
 
 **Not checked** (no portable `command -v` equivalent): JetBrains Mono font (used by Ghostty) — install from <https://www.jetbrains.com/lp/mono/>.
 
