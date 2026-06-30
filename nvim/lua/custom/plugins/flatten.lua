@@ -14,8 +14,8 @@ return {
       end,
       post_open = function(opts)
         local source = opts.data and opts.data.editor_handoff_source
-        if source == 'hunk' then pcall(vim.cmd.HunkHide) end
-        if source == 'lazygit' then pcall(vim.cmd, 'LazygitHide!') end
+        if source == 'hunk' then pcall(function() vim.cmd.HunkHide() end) end
+        if source == 'lazygit' then pcall(function() vim.cmd 'LazygitHide!' end) end
       end,
     },
   },
