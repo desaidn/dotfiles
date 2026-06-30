@@ -6,6 +6,10 @@ return {
   lazy = false,
   build = function() require('fff.download').download_or_build_binary() end,
   opts = {
+    hl = {
+      matched = 'Search',
+      grep_match = 'Search',
+    },
     grep = {
       modes = { 'fuzzy', 'plain', 'regex' },
     },
