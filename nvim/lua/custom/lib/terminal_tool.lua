@@ -16,6 +16,11 @@ local function tmux_target(session)
   return '=' .. session
 end
 
+local function tmux_current_pane()
+  if vim.env.TMUX_PANE == nil or vim.env.TMUX_PANE == '' then return nil end
+  return vim.env.TMUX_PANE
+end
+
 local function run_tmux(args)
   local command = { 'tmux' }
   vim.list_extend(command, args)
@@ -57,15 +62,56 @@ local function job_env(source)
   return env
 end
 
-local function float_opts()
+local function current_window_geometry()
+  local win = vim.api.nvim_get_current_win()
+  local position = vim.api.nvim_win_get_position(win)
+
   return {
-    relative = 'editor',
-    width = vim.o.columns,
-    height = vim.o.lines - 3,
-    row = 1,
+    win = win,
+    row = position[1],
+    col = position[2],
+    width = math.max(1, vim.api.nvim_win_get_width(win)),
+    height = math.max(1, vim.api.nvim_win_get_height(win)),
+  }
+end
+
+local function float_opts(geometry)
+  return {
+    relative = 'win',
+    win = geometry.win,
+    width = geometry.width,
+    height = geometry.height,
+    row = 0,
     col = 0,
     style = 'minimal',
     border = 'none',
+  }
+end
+
+local function tmux_pane_origin()
+  local args = { 'display-message', '-p' }
+  local target_pane = tmux_current_pane()
+  if target_pane then vim.list_extend(args, { '-t', target_pane }) end
+  table.insert(args, '#{pane_left} #{pane_top}')
+
+  local ok, output = run_tmux(args)
+  if not ok then return nil end
+
+  local left, top = output:match '(%d+)%s+(%d+)'
+  if not left or not top then return nil end
+
+  return tonumber(left), tonumber(top)
+end
+
+local function tmux_popup_position(geometry)
+  local pane_left, pane_top = tmux_pane_origin()
+  if not pane_left or not pane_top then return nil end
+
+  -- tmux positions popups in client coordinates; Neovim reports windows
+  -- relative to the editor grid inside the current tmux pane.
+  return {
+    x = pane_left + geometry.col,
+    y = pane_top + geometry.row,
   }
 end
 
@@ -120,7 +166,7 @@ function M.create(config)
   vim.api.nvim_create_user_command(hide_command, hide, { bang = true })
 
   local function open_window()
-    state.win = vim.api.nvim_open_win(state.buf, true, float_opts())
+    state.win = vim.api.nvim_open_win(state.buf, true, float_opts(current_window_geometry()))
     vim.api.nvim_set_option_value('winhl', 'NormalFloat:Normal', { win = state.win })
     vim.cmd.startinsert()
   end
@@ -156,6 +202,7 @@ function M.create(config)
   end
 
   local function open_tmux_popup()
+    local geometry = current_window_geometry()
     local session = ensure_tmux_session()
     if not session then return end
 
@@ -165,13 +212,29 @@ function M.create(config)
       '-E',
       '-B',
       '-w',
-      '100%',
+      tostring(geometry.width),
       '-h',
-      '100%',
+      tostring(geometry.height),
+    }
+
+    local target_pane = tmux_current_pane()
+    if target_pane then vim.list_extend(popup, { '-t', target_pane }) end
+
+    local position = tmux_popup_position(geometry)
+    if position then
+      vim.list_extend(popup, {
+        '-x',
+        tostring(position.x),
+        '-y',
+        tostring(position.y),
+      })
+    end
+
+    vim.list_extend(popup, {
       '-d',
       vim.fn.getcwd(),
       shell_command { 'tmux', 'attach-session', '-t', tmux_target(session) },
-    }
+    })
 
     local job = vim.fn.jobstart(popup)
     if job <= 0 then vim.notify('Unable to open ' .. name .. ' tmux popup', vim.log.levels.ERROR) end

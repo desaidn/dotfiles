@@ -89,6 +89,12 @@ vim.api.nvim_set_hl(0, 'TreesitterContextLineNumber', { fg = colors.grey, bg = c
 vim.api.nvim_set_hl(0, 'TreesitterContextBottom', { bg = colors.charcoal, underline = true, sp = colors.grey })
 vim.api.nvim_set_hl(0, 'TreesitterContextLineNumberBottom', { fg = colors.grey, bg = colors.charcoal, underline = true, sp = colors.grey })
 
+-- Rendered Markdown code surfaces
+vim.api.nvim_set_hl(0, 'RenderMarkdownCode', { bg = colors.charcoal })
+vim.api.nvim_set_hl(0, 'RenderMarkdownCodeBorder', { fg = colors.grey, bg = colors.charcoal })
+vim.api.nvim_set_hl(0, 'RenderMarkdownCodeInfo', { fg = colors.grey, bg = colors.charcoal })
+vim.api.nvim_set_hl(0, 'RenderMarkdownCodeFallback', { fg = colors.peach, bg = colors.charcoal })
+
 -- Markup tag colors (HTML, XML, JSX, TSX)
 vim.api.nvim_set_hl(0, '@tag', { fg = colors.peach })
 vim.api.nvim_set_hl(0, '@tag.builtin', { fg = colors.peach })
