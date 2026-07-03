@@ -23,7 +23,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `treesitter.lua` - nvim-treesitter and treesitter-context
   - `gitsigns.lua` - Git signs, blame, and hunk navigation keymaps
   - `neo-tree.lua` - File explorer (right-side, text-based icons)
-  - `debug.lua` - DAP debugger setup (Go via delve, Python via debugpy/uv)
+  - `debug.lua` - DAP debugger keymaps plus on-demand setup (Go via delve, Python via debugpy/uv); DAP plugins load on first debug action, not normal startup
   - `lint.lua` - nvim-lint with eslint_d and ruff
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
   - `indent_line.lua` - Indentation guides via indent-blankline.nvim (**currently disabled** — `require` is commented out in `init.lua`)
@@ -63,7 +63,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - Explorer: `<leader>e` (neo-tree toggle)
 - Undo tree: `<leader>u` (toggle undotree)
 - Path copy: `<leader>p*` (copy absolute/relative file paths)
-- Debug: `<leader>b` (breakpoint), `F1-F3` (stepping), `F5` (continue), `F7` (DAP UI)
+- Debug: `<leader>b` (breakpoint), `F1-F3` (stepping), `F5` (continue), `F7` (DAP UI). These keys lazy-load and configure DAP on first use.
 - Diagnostic quickfix: `<leader>q`
 
 ## Development Workflows

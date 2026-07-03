@@ -1,7 +1,7 @@
 # Per-machine fish init. Created by dotfiles install.sh; safe to edit.
 
 # Homebrew (macOS): puts /opt/homebrew/bin on PATH
-test -x /opt/homebrew/bin/brew; and eval (/opt/homebrew/bin/brew shellenv)
+test -x /opt/homebrew/bin/brew; and eval (/opt/homebrew/bin/brew shellenv fish)
 
 # Put atuin on PATH if installed via the official installer
 test -f $HOME/.atuin/bin/env.fish; and source $HOME/.atuin/bin/env.fish
