@@ -1,6 +1,6 @@
 # fish
 
-Part of [dotfiles](../README.md). Custom λ prompt, editor environment, and aliases.
+Part of [dotfiles](../README.md). Custom λ prompt, editor environment, and reset alias.
 
 ## Environment
 
@@ -8,8 +8,7 @@ Part of [dotfiles](../README.md). Custom λ prompt, editor environment, and alia
 
 ## Aliases
 
-- `nvim-reset` — wipe lazy + Mason install dirs
-- `nvim-reset-all` — wipe all nvim state, cache, and data
+- `nvim-reset` — wipe all nvim state, cache, and data
 
 ## Scope
 

@@ -13,8 +13,7 @@ git_prompt() {
 PROMPT='%F{white}[%D %*] [%~]%f $(git_prompt)
 %F{cyan}%n@%m λ%f '
 
-alias nvim-reset='rm -rf ~/.local/share/nvim/lazy ~/.local/share/nvim/mason'
-alias nvim-reset-all='rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim'
+alias nvim-reset='rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim'
 
 export XDG_CONFIG_HOME="$HOME/.config"
 export PATH="$HOME/.local/bin:$PATH"

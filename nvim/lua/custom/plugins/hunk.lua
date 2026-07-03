@@ -11,10 +11,4 @@ local hunk = require('custom.lib.terminal_tool').create {
   hide_command = 'HunkHide',
 }
 
-return {
-  'hunk',
-  virtual = true,
-  keys = {
-    { '<leader>gd', hunk.toggle, desc = 'Hunk diff' },
-  },
-}
+vim.keymap.set('n', '<leader>gd', hunk.toggle, { desc = 'Hunk diff' })

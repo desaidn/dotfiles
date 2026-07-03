@@ -12,10 +12,4 @@ local lazygit = require('custom.lib.terminal_tool').create {
   acknowledge_editor_return = true,
 }
 
-return {
-  'lazygit',
-  virtual = true,
-  keys = {
-    { '<leader>gg', lazygit.toggle, desc = 'Lazygit' },
-  },
-}
+vim.keymap.set('n', '<leader>gg', lazygit.toggle, { desc = 'Lazygit' })

@@ -4,16 +4,18 @@ Guidance for coding agents working on the nvim config. See [`../AGENTS.md`](../A
 
 ## Neovim Configuration Overview
 
-This is a Neovim configuration based on kickstart.nvim, providing a well-documented starting point for Neovim customization. `init.lua` handles core settings, basic keymaps, and the lazy.nvim plugin list; each plugin's configuration lives in its own module under `lua/kickstart/plugins/` or `lua/custom/plugins/`.
+This is a Neovim configuration based on kickstart.nvim, providing a well-documented starting point for Neovim customization. `init.lua` handles core settings, basic keymaps, native `vim.pack` build hooks, and core UI plugins; each modular plugin configuration lives under `lua/kickstart/plugins/` or `lua/custom/plugins/`.
 
 ## Core Architecture
 
 ### File Structure
 
-- `init.lua` - Core settings, basic keymaps, autocommands, and the lazy.nvim plugin list
+- `init.lua` - Core settings, basic keymaps, autocommands, native `vim.pack` build hooks, core UI plugins, and module imports
 - `after/lsp/lua_ls.lua` - LSP server override for `lua_ls` (the only server that needs substantial custom logic)
 - `colors/custom.lua` - Custom colorscheme (transparent backgrounds, peach accents)
-- `lua/kickstart/plugins/` - Modular plugin specs, each returning a lazy.nvim spec table:
+- `lua/kickstart/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
+- `lua/kickstart/parsers.lua` - Shared nvim-treesitter parser install set
+- `lua/kickstart/plugins/` - Modular plugin setup files; each file calls `vim.pack.add()` for the plugin(s) it owns and then configures them:
   - `lsp.lua` - nvim-lspconfig, Mason, fidget, `servers` table, and `vim.lsp.config()` overrides
   - `blink-cmp.lua` - blink.cmp completion with LuaSnip
   - `conform.lua` - conform.nvim formatter config and format-on-save
@@ -27,18 +29,18 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `indent_line.lua` - Indentation guides via indent-blankline.nvim (**currently disabled** — `require` is commented out in `init.lua`)
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
 - `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should open in a tmux popup inside tmux and a floating terminal outside tmux
-- `lua/custom/plugins/` - Auto-imported by lazy.nvim via `{ import = 'custom.plugins' }`; every `*.lua` file here is loaded as a plugin spec:
-  - `init.lua` - Returns `{}`; kept as a placeholder for ad-hoc additions
+- `lua/custom/plugins/` - Auto-imported by `lua/custom/plugins/init.lua`; every sibling `*.lua` file is required, following symlinks:
+  - `init.lua` - Custom plugin loader
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
-  - `lazygit.lua` - Thin lazygit Git transaction spec over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gg`)
-  - `hunk.lua` - Thin Hunk stacked working-tree review spec over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gd`)
+  - `lazygit.lua` - Thin lazygit Git transaction launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gg`)
+  - `hunk.lua` - Thin Hunk stacked working-tree review launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gd`)
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
   - `render-markdown.lua` - In-editor Markdown rendering without Nerd Font dependencies (owns `<leader>tm`)
-- `lazy-lock.json` - Plugin version lockfile
+- `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
 ### Plugin Management
 
-Uses lazy.nvim as the plugin manager. Core plugins include:
+Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple and idiomatic: call `vim.pack.add()` for the package(s) they own, configure them directly, and avoid recreating lazy.nvim's trigger DSL. Core plugins include:
 
 - **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ configuration lives in `lua/kickstart/plugins/lsp.lua`, with substantial overrides in `after/lsp/lua_ls.lua`
 - **Completion**: blink.cmp with LuaSnip for snippets
@@ -68,8 +70,8 @@ Uses lazy.nvim as the plugin manager. Core plugins include:
 
 ### Plugin Management
 
-- `:Lazy` - View plugin status and manage installations
-- `:Lazy update` - Update all plugins
+- `:lua vim.pack.update(nil, { offline = true })` - Inspect plugin state and pending updates
+- `:lua vim.pack.update()` - Update all plugins
 - `:Mason` - Manage LSP servers, formatters, and linters
 - `:checkhealth` - Diagnose configuration issues
 
@@ -133,7 +135,7 @@ Neo-tree file explorer is enabled with right-side positioning and minimal stylin
 
 ### Customization Points
 
-- `lua/custom/plugins/` - Drop a new `*.lua` file here and it will be auto-imported by lazy.nvim
+- `lua/custom/plugins/` - Drop a new `*.lua` file here and it will be auto-imported by the custom plugin loader
 - `after/lsp/*.lua` - Add LSP server configs with substantial custom logic
 - `vim.lsp.config()` in `lua/kickstart/plugins/lsp.lua` for small LSP server overrides
 - Modify the `servers` table in `lua/kickstart/plugins/lsp.lua` to enable or remove LSP servers

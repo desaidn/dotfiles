@@ -1,6 +1,5 @@
 if status is-interactive
-    alias nvim-reset 'rm -rf ~/.local/share/nvim/lazy ~/.local/share/nvim/mason'
-    alias nvim-reset-all 'rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim'
+    alias nvim-reset 'rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim'
 end
 
 set -gx XDG_CONFIG_HOME $HOME/.config

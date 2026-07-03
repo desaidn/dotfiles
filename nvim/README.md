@@ -12,6 +12,8 @@ Kickstart.nvim targets _only_ the latest
 ['stable'](https://github.com/neovim/neovim/releases/tag/stable) and latest
 ['nightly'](https://github.com/neovim/neovim/releases/tag/nightly) of Neovim.
 If you are experiencing issues, please make sure you have the latest versions.
+This configuration follows the current kickstart.nvim mainline baseline and
+requires Neovim 0.12 or newer.
 
 > For detailed installation methods (Homebrew, Bob, Flatpak, etc.), see the
 > [upstream kickstart.nvim documentation](https://github.com/nvim-lua/kickstart.nvim#install-neovim).
@@ -93,14 +95,13 @@ Neovim-launched terminal tools use one shared flow: persistent tmux popup sized 
 
 Leader key is `<Space>`. Configuration is documented in `init.lua` and `AGENTS.md`.
 
-Use `:Lazy` to manage plugins, `:Mason` for LSP servers, and `:checkhealth` to diagnose issues.
+Use `:lua vim.pack.update(nil, { offline = true })` to inspect plugin state,
+`:lua vim.pack.update()` to update plugins, `:Mason` for LSP servers and tools,
+and `:checkhealth` to diagnose issues.
 
 ## Reset
 
 ```sh
-# Reset plugins and Mason installations
-alias nvim-reset='rm -rf ~/.local/share/nvim/lazy ~/.local/share/nvim/mason'
-
 # Full reset (all state, cache, and data)
-alias nvim-reset-all='rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim'
+alias nvim-reset='rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim'
 ```

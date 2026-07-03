@@ -1,8 +1,7 @@
 -- Auto-close brackets, quotes, etc.
 -- https://github.com/windwp/nvim-autopairs
 
-return {
-  'windwp/nvim-autopairs',
-  event = 'InsertEnter',
-  opts = {},
-}
+local gh = require('kickstart.pack').gh
+
+vim.pack.add { gh 'windwp/nvim-autopairs' }
+require('nvim-autopairs').setup {}

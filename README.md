@@ -18,12 +18,12 @@ The setup is designed around one uniform code interface: Neovim is the developme
 
 | Directory    | Target               | Notes                                                     |
 | ------------ | -------------------- | --------------------------------------------------------- |
-| `fish/`      | `~/.config/fish/`    | Prompt + nvim-reset aliases. Platform-agnostic.           |
+| `fish/`      | `~/.config/fish/`    | Prompt + `nvim-reset` alias. Platform-agnostic.           |
 | `ghostty/`   | `~/.config/ghostty/` | macOS Ghostty terminal config.                            |
 | `lazygit/`   | `~/.config/lazygit/` | Git TUI with Neovim editor handoff and native staging UI. |
-| `nvim/`      | `~/.config/nvim/`    | kickstart-based config; lazy.nvim auto-bootstraps.        |
+| `nvim/`      | `~/.config/nvim/`    | kickstart-based config using native `vim.pack`.           |
 | `tmux/`      | `~/.config/tmux/`    | 1-indexed, vi copy mode, agent/build pane bindings.       |
-| `zsh/.zshrc` | `~/.zshrc`           | λ prompt + nvim-reset aliases. No OMZ dependency.         |
+| `zsh/.zshrc` | `~/.zshrc`           | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
 
 Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
 
