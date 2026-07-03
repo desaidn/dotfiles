@@ -422,17 +422,8 @@ end
 -- Modular plugin setup
 -- ============================================================
 do
-  require 'kickstart.plugins.telescope'
-  require 'kickstart.plugins.lsp'
-  require 'kickstart.plugins.conform'
-  require 'kickstart.plugins.blink-cmp'
-  require 'kickstart.plugins.treesitter'
-  require 'kickstart.plugins.debug'
-  require 'kickstart.plugins.lint'
-  require 'kickstart.plugins.autopairs'
-  require 'kickstart.plugins.neo-tree'
-  require 'kickstart.plugins.gitsigns'
-  -- require 'kickstart.plugins.indent_line'
+  -- Plugins in this module come from upstream nvim-lua/kickstart.nvim.
+  require 'kickstart.plugins'
 
   -- Add your own plugins to `lua/custom/plugins/*.lua`.
   require 'custom.plugins'

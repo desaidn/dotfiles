@@ -10,12 +10,12 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 
 ### File Structure
 
-- `init.lua` - Core settings, basic keymaps, autocommands, native `vim.pack` build hooks, core UI plugins, and module imports
+- `init.lua` - Core settings, basic keymaps, autocommands, native `vim.pack` build hooks, core UI plugins, and top-level module imports
 - `after/lsp/lua_ls.lua` - LSP server override for `lua_ls` (the only server that needs substantial custom logic)
 - `colors/custom.lua` - Custom colorscheme (transparent backgrounds, peach accents)
 - `lua/kickstart/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
 - `lua/kickstart/parsers.lua` - Shared nvim-treesitter parser install set
-- `lua/kickstart/plugins/` - Modular plugin setup files; each file calls `vim.pack.add()` for the plugin(s) it owns and then configures them:
+- `lua/kickstart/plugins/` - Auto-imported by `lua/kickstart/plugins/init.lua` in the established startup order; each plugin file calls `vim.pack.add()` for the plugin(s) it owns and then configures them:
   - `lsp.lua` - nvim-lspconfig, Mason, fidget, `servers` table, and `vim.lsp.config()` overrides
   - `blink-cmp.lua` - blink.cmp completion with LuaSnip
   - `conform.lua` - conform.nvim formatter config and format-on-save
@@ -26,8 +26,8 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `debug.lua` - DAP debugger keymaps plus on-demand setup (Go via delve, Python via debugpy/uv); DAP plugins load on first debug action, not normal startup
   - `lint.lua` - nvim-lint with eslint_d and ruff
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
-  - `indent_line.lua` - Indentation guides via indent-blankline.nvim (**currently disabled** — `require` is commented out in `init.lua`)
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
+- `lua/custom/lib/plugins_loader.lua` - Shared sorted directory plugin module loader used by `kickstart.plugins` and `custom.plugins`
 - `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should open in a tmux popup inside tmux and a floating terminal outside tmux
 - `lua/custom/plugins/` - Auto-imported by `lua/custom/plugins/init.lua`; every sibling `*.lua` file is required, following symlinks:
   - `init.lua` - Custom plugin loader
