@@ -12,6 +12,7 @@ vim.pack.add {
 vim.keymap.set('n', '<leader>e', '<cmd>Neotree toggle reveal<CR>', { desc = '[E]xplorer' })
 
 require('neo-tree').setup {
+  log_to_file = false,
   window = {
     position = 'right',
     width = function() return math.floor(vim.o.columns * 0.25) end,

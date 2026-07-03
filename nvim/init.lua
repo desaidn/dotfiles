@@ -30,11 +30,11 @@ Kickstart Guide:
 -- ============================================================
 do
   local version = vim.version()
-  local has_supported_version = vim.version.ge and vim.version.ge(version, '0.12')
+  local has_supported_version = version.major == 0 and version.minor == 12 and version.patch == 3 and not version.prerelease
   if not has_supported_version then
     vim.api.nvim_echo({
-      { ("Neovim out of date: '%s'. Upgrade to latest stable or nightly.\n"):format(version), 'ErrorMsg' },
-      { 'This config follows the latest kickstart.nvim mainline baseline and requires Neovim 0.12+.' },
+      { ("Unsupported Neovim version: '%s'. Install Neovim 0.12.3.\n"):format(version), 'ErrorMsg' },
+      { 'This config follows the latest kickstart.nvim mainline baseline and requires exactly Neovim 0.12.3.' },
     }, true, {})
     vim.fn.getchar()
     os.exit(1)
@@ -381,14 +381,13 @@ do
   --  - va)  - [V]isually select [A]round [)]paren
   --  - yiiq - [Y]ank [I]nside [I]+1 [Q]uote
   --  - ci'  - [C]hange [I]nside [']quote
-  require('mini.ai').setup {
-    -- Avoid conflicts with built-in incremental selection mappings on Neovim >= 0.12.
-    mappings = {
-      around_next = 'aa',
-      inside_next = 'ii',
-    },
-    n_lines = 500,
-  }
+  --
+  -- mini.ai defaults map next textobjects to `an`/`in`. Neovim 0.12 also uses
+  -- those keys for native tree-sitter node selection, but keeping mini.ai's
+  -- defaults preserves the established textobject interface. Avoid remapping
+  -- them to `aa`/`ii`: those become prefixes and obscure common argument
+  -- textobjects like `daa` and `cia`.
+  require('mini.ai').setup { n_lines = 500 }
 
   -- Add/delete/replace surroundings (brackets, quotes, etc.)
   --

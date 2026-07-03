@@ -2,7 +2,7 @@
 
 A lean Neovim configuration based on kickstart.nvim. Part of [dotfiles](../README.md).
 
-**Philosophy**: Text editing focused, minimal dependencies, tmux-integrated workflow.
+**Philosophy**: Text editing focused, native Neovim first, minimal external dependencies, tmux-integrated workflow. Prefer built-in Neovim APIs and small locally-owned tools over broad plugin layers when the native surface is enough.
 
 ## Installation
 

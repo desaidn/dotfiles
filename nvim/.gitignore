@@ -3,3 +3,4 @@ nvim
 spell/
 .DS_Store
 .claude/
+nvim.log

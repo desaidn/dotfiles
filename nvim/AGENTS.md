@@ -40,7 +40,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 
 ### Plugin Management
 
-Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple and idiomatic: call `vim.pack.add()` for the package(s) they own, configure them directly, and avoid recreating lazy.nvim's trigger DSL. Core plugins include:
+Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple and idiomatic: call `vim.pack.add()` for the package(s) they own, configure them directly, and avoid recreating lazy.nvim's trigger DSL. Prefer native Neovim APIs before adding plugins, and keep each plugin responsible for a clear capability that is not already covered by core Neovim or a local helper. Core plugins include:
 
 - **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ configuration lives in `lua/kickstart/plugins/lsp.lua`, with substantial overrides in `after/lsp/lua_ls.lua`
 - **Completion**: blink.cmp with LuaSnip for snippets
@@ -165,8 +165,10 @@ External tools required:
 This configuration prioritizes:
 
 - **Text editing focus**: Core LSP, search, and navigation functionality
-- **Lua API over vim.cmd**: Always use `vim.api.*` and `vim.fn.*` instead of `vim.cmd('string')` — we're using neovim for a reason
-- **Minimal external dependencies**: Let tmux handle terminal/window management
+- **Native Neovim first**: Use built-in LSP, diagnostics, `vim.pack`, Lua APIs, terminal buffers, and standard runtime behavior before adding plugin abstractions
+- **Native Lua API first**: Prefer stable `vim.*`/`vim.api.*` Lua APIs where they exist (for example `vim.system()` for external commands and `vim.uv` for libuv). Use `vim.fn.*` for documented Vimscript-only functions such as `stdpath()`, `executable()`, registers, ranges, and prompts.
+- **Minimal external dependencies**: Add plugins only for clear, durable capabilities; avoid wrapping native behavior in extra layers
+- **Local performant tools**: For workflows outside Neovim's core job, prefer thin integrations with self-made or locally-owned CLI tools over large in-editor plugin surfaces
 - **Readability and documentation**: Lean init.lua plus one file per plugin under `lua/kickstart/plugins/` and `lua/custom/plugins/`
 - **Integration with ecosystem**: Works seamlessly with tmux-based workflows
 
@@ -199,6 +201,7 @@ Avoid redundant comments that simply restate what the code does. Reserve comment
 - Always explain your reasoning and cite sources before implementing — never change code without understanding why
 - Always inline clear, concise and useful documentation in code
 - Always explain choices and follow latest standards and best practices
+- Before adding a plugin, check whether native Neovim, an existing local helper, or a small self-made tool can solve the problem with less long-term weight
 - Prioritize reliable, cross-platform solutions over clever hacks
 - The simplest solution is often the most correct and maintainable
 - Never remove kickstart.nvim instructional comments or other educational comments

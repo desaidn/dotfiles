@@ -40,6 +40,9 @@ All configurations follow these principles:
 - Minimal, focused setups without unnecessary complexity
 - Consistent directory structure following XDG standards
 - Integration between tools (e.g., lazygit ↔ nvim, ghostty ↔ tmux)
+- Prefer native platform and Neovim capabilities before adding third-party abstractions
+- Keep external dependencies few, purposeful, and replaceable; every dependency should justify its maintenance and portability cost
+- Prefer small self-made or locally-owned performant development tools when native capabilities are not enough and the workflow should stay inspectable
 - Agent harnesses are adapters, not workflow owners; Codex, Claude Code, and future tools should use the same Neovim, Git, and review surfaces
 - Prefer upstream defaults unless a deviation directly supports the uniform code interface; avoid custom maintenance burden for taste-only changes
 - Development-focused workflows for TypeScript, Kotlin/Java, Python, and Rust
@@ -135,6 +138,7 @@ When modifying configurations:
 1. Test changes in isolation before committing
 2. Maintain integration between related tools
 3. Keep configurations minimal and purpose-driven
-4. Respect XDG directory structure
-5. Document significant changes in relevant AGENTS.md files
-6. Do not add platform-specific paths (e.g., `/opt/homebrew/...`) into rc files. They go in the per-machine `local.{fish,zsh}`.
+4. Prefer native APIs and existing local helpers before adding external dependencies
+5. Respect XDG directory structure
+6. Document significant changes in relevant AGENTS.md files
+7. Do not add platform-specific paths (e.g., `/opt/homebrew/...`) into rc files. They go in the per-machine `local.{fish,zsh}`.

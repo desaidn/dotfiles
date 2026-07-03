@@ -16,7 +16,6 @@ local colors = {
   dark_green = '#1e3d2a', -- diff changes
   mid_green = '#2a4d35', -- diff changed text
   dark_red = '#3d1e1e', -- diff deletions
-  highlighter_yellow = '#6b5f2a', -- search matches
 }
 
 -- Transparent backgrounds
@@ -70,10 +69,9 @@ vim.api.nvim_set_hl(0, 'DiffDelete', { bg = colors.dark_red })
 vim.api.nvim_set_hl(0, 'DiffText', { bg = colors.mid_green, fg = colors.white })
 vim.api.nvim_set_hl(0, 'DiffTextAdd', { bg = colors.light_green, fg = colors.white })
 
--- Search matches use a muted highlighter-yellow background.
-local search_match_hl = vim.tbl_extend('force', vim.api.nvim_get_hl(0, { name = 'Visual' }), { bg = colors.highlighter_yellow, bold = true })
+-- Keep search matches visually identical to Visual line selection.
 for _, group in ipairs { 'Search', 'IncSearch', 'CurSearch' } do
-  vim.api.nvim_set_hl(0, group, search_match_hl)
+  vim.api.nvim_set_hl(0, group, { link = 'Visual' })
 end
 
 -- Popup menu border (used when pumborder = 'rounded')
@@ -88,12 +86,6 @@ vim.api.nvim_set_hl(0, 'TreesitterContext', { bg = colors.charcoal })
 vim.api.nvim_set_hl(0, 'TreesitterContextLineNumber', { fg = colors.grey, bg = colors.charcoal })
 vim.api.nvim_set_hl(0, 'TreesitterContextBottom', { bg = colors.charcoal, underline = true, sp = colors.grey })
 vim.api.nvim_set_hl(0, 'TreesitterContextLineNumberBottom', { fg = colors.grey, bg = colors.charcoal, underline = true, sp = colors.grey })
-
--- Rendered Markdown code surfaces
-vim.api.nvim_set_hl(0, 'RenderMarkdownCode', { bg = colors.charcoal })
-vim.api.nvim_set_hl(0, 'RenderMarkdownCodeBorder', { fg = colors.grey, bg = colors.charcoal })
-vim.api.nvim_set_hl(0, 'RenderMarkdownCodeInfo', { fg = colors.grey, bg = colors.charcoal })
-vim.api.nvim_set_hl(0, 'RenderMarkdownCodeFallback', { fg = colors.peach, bg = colors.charcoal })
 
 -- Markup tag colors (HTML, XML, JSX, TSX)
 vim.api.nvim_set_hl(0, '@tag', { fg = colors.peach })

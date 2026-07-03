@@ -2,7 +2,7 @@
 
 Personal config monorepo. Clone anywhere, run `./install.sh`, and your system is wired up via symlinks into `~/.config/` and `~/`.
 
-The setup is designed around one uniform code interface: Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working.
+The setup is designed around one uniform code interface: Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
 
 ## Screenshots
 
@@ -32,6 +32,9 @@ Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
 This repo keeps the interface to code agent-harness agnostic:
 
 - Start and return to Neovim for editing.
+- Prefer native Neovim features and Lua APIs when they can express the workflow clearly.
+- Keep external dependencies narrow, durable, and easy to replace; avoid plugin layers that only wrap behavior Neovim already owns.
+- Use self-made or locally-owned performant tools when a workflow needs more than native Neovim but should remain inspectable, fast, and independent of an agent harness.
 - Use gitsigns for local in-buffer hunk operations.
 - Use Hunk directly from Neovim for full stacked working-tree review.
 - Use lazygit for Git state, staging, stashes, history, branches, and commits.

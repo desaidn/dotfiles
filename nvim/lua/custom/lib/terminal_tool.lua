@@ -24,8 +24,11 @@ end
 local function run_tmux(args)
   local command = { 'tmux' }
   vim.list_extend(command, args)
-  local output = vim.fn.system(command)
-  return vim.v.shell_error == 0, output
+  local ok, result = pcall(function() return vim.system(command, { text = true }):wait() end)
+  if not ok then return false, tostring(result) end
+
+  local output = result.code == 0 and result.stdout or result.stderr
+  return result.code == 0, output or ''
 end
 
 local function editor_env()
@@ -270,7 +273,7 @@ function M.create(config)
       end,
     })
 
-    vim.keymap.set('t', key, toggle, { buffer = state.buf, desc = config.terminal_key_desc or config.desc })
+    vim.keymap.set('t', key, toggle, { buf = state.buf, desc = config.terminal_key_desc or config.desc })
     vim.cmd.startinsert()
   end
 
