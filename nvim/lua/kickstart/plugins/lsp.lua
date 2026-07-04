@@ -1,7 +1,7 @@
 -- LSP Configuration
 -- See `:help lsp` and `:help lsp-config`
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add {
   gh 'neovim/nvim-lspconfig',

@@ -2,7 +2,7 @@
 -- Replaces Telescope for file finding and live grep. Telescope is kept for
 -- help, diagnostics, LSP symbols, keymaps, buffers, and other pickers.
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add { gh 'dmtrKovalenko/fff.nvim' }
 

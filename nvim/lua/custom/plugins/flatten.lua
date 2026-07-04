@@ -1,4 +1,4 @@
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add { gh 'willothy/flatten.nvim' }
 

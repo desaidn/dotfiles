@@ -1,7 +1,7 @@
 -- Autocompletion
 -- See `:help blink-cmp`
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add {
   { src = gh 'L3MON4D3/LuaSnip', version = vim.version.range '2.*' },
@@ -33,7 +33,15 @@ require('blink.cmp').setup {
   completion = {
     -- By default, you may press `<c-space>` to show the documentation.
     -- Optionally, set `auto_show = true` to show the documentation after a delay.
-    documentation = { auto_show = true, auto_show_delay_ms = 200 },
+    documentation = {
+      auto_show = true,
+      auto_show_delay_ms = 200,
+      window = {
+        max_width = 96,
+        max_height = 24,
+        desired_min_width = 72,
+      },
+    },
 
     -- Customize completion menu appearance
     menu = {

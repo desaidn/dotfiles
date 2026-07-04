@@ -1,7 +1,7 @@
 -- Git gutter signs, inline blame, and hunk management keymaps.
 -- See `:help gitsigns`
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add { gh 'lewis6991/gitsigns.nvim' }
 

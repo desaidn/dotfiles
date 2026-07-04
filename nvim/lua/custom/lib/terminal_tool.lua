@@ -122,6 +122,12 @@ local function sanitize_name(name)
   return name:gsub('[^%w]', '')
 end
 
+local function project_name(cwd)
+  local name = sanitize_name(vim.fn.fnamemodify(cwd, ':t'))
+  if name ~= '' then return name end
+  return 'workspace'
+end
+
 function M.create(config)
   local state = { buf = nil, win = nil, tmux_session = nil, job = nil }
   local source = assert(config.source, 'terminal tool source is required')
@@ -136,8 +142,9 @@ function M.create(config)
   end
 
   local function tmux_session_name()
-    local seed = vim.fn.getcwd() .. '\n' .. vim.v.servername
-    return 'dotfiles-' .. source .. '-' .. vim.fn.sha256(seed):sub(1, 12)
+    local cwd = vim.fn.getcwd()
+    local seed = cwd .. '\n' .. vim.v.servername
+    return project_name(cwd) .. '-' .. source .. '-' .. vim.fn.sha256(seed):sub(1, 12)
   end
 
   local function close_window()

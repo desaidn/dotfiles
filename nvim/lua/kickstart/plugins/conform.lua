@@ -1,7 +1,7 @@
 -- Autoformat
 -- See `:help conform`
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 local prettier = { 'prettierd', 'prettier', stop_after_first = true }
 
 vim.pack.add { gh 'stevearc/conform.nvim' }

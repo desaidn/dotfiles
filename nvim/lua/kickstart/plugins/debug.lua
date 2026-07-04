@@ -1,7 +1,7 @@
 -- DAP (Debug Adapter Protocol) setup for Go and Python.
 -- Can be extended to other languages — see https://github.com/mfussenegger/nvim-dap
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add({
   gh 'mfussenegger/nvim-dap',

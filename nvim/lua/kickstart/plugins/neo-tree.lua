@@ -1,7 +1,7 @@
 -- Neo-tree is a Neovim plugin to browse the file system
 -- https://github.com/nvim-neo-tree/neo-tree.nvim
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add {
   { src = gh 'nvim-neo-tree/neo-tree.nvim', version = vim.version.range '*' },

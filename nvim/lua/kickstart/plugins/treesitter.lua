@@ -1,7 +1,7 @@
 -- Treesitter: syntax highlighting and code parsing
 -- See `:help nvim-treesitter`
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add {
   { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' },

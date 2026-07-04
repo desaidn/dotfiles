@@ -1,6 +1,6 @@
 --- Markdown rendering inside Neovim.
 --- Requires: render-markdown.nvim (https://github.com/MeanderingProgrammer/render-markdown.nvim)
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 local function callout(raw, rendered, highlight, category)
   return { raw = raw, rendered = rendered, highlight = highlight, category = category }
@@ -20,6 +20,9 @@ require('render-markdown').setup {
     sign = false,
     icons = { '# ', '## ', '### ', '#### ', '##### ', '###### ' },
     width = 'block',
+    -- Single-entry highlight lists clamp all heading levels to the same color.
+    backgrounds = { 'RenderMarkdownH1Bg' },
+    foregrounds = { 'RenderMarkdownH1' },
   },
   code = {
     language_icon = false,

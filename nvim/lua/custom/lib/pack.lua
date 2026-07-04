@@ -38,7 +38,7 @@ end
 
 function M.setup()
   vim.api.nvim_create_autocmd('PackChanged', {
-    group = vim.api.nvim_create_augroup('kickstart-pack-build', { clear = true }),
+    group = vim.api.nvim_create_augroup('custom-pack-build', { clear = true }),
     callback = function(ev)
       local name = ev.data.spec.name
       local kind = ev.data.kind

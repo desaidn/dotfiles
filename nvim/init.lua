@@ -243,6 +243,7 @@ do
   end, { desc = 'Copy [P]ath [R]elative' })
 
   -- NOTE: Some terminals have colliding keymaps or are not able to send distinct keycodes
+  --
   -- vim.keymap.set("n", "<C-S-h>", "<C-w>H", { desc = "Move window to the left" })
   -- vim.keymap.set("n", "<C-S-l>", "<C-w>L", { desc = "Move window to the right" })
   -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
@@ -301,8 +302,8 @@ do
   --    :lua vim.pack.update()
   --
   --  Build hooks for plugins that need native binaries or parser updates live in
-  --  lua/kickstart/pack.lua and run after install/update via PackChanged.
-  require('kickstart.pack').setup()
+  --  lua/custom/lib/pack.lua and run after install/update via PackChanged.
+  require('custom.lib.pack').setup()
 end
 
 -- ============================================================
@@ -310,7 +311,7 @@ end
 -- guess-indent, which-key, todo-comments, mini modules, undotree
 -- ============================================================
 do
-  local gh = require('kickstart.pack').gh
+  local gh = require('custom.lib.pack').gh
 
   vim.pack.add { gh 'NMAC427/guess-indent.nvim' }
   require('guess-indent').setup {}

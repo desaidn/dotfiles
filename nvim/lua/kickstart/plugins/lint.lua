@@ -1,7 +1,7 @@
 -- Linting via nvim-lint with eslint_d and ruff.
 -- https://github.com/mfussenegger/nvim-lint
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 vim.pack.add { gh 'mfussenegger/nvim-lint' }
 

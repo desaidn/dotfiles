@@ -1,7 +1,7 @@
 -- Fuzzy Finder (files, lsp, etc)
 -- See `:help telescope` and `:help telescope.setup()`
 
-local gh = require('kickstart.pack').gh
+local gh = require('custom.lib.pack').gh
 
 local telescope_plugins = {
   gh 'nvim-lua/plenary.nvim',
