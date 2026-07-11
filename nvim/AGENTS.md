@@ -38,6 +38,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `render-markdown.lua` - In-editor Markdown rendering without Nerd Font dependencies (owns `<leader>tm`)
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, persistence, handoff, failure/race recovery, environment handling, live float sizing, and host tmux input routing
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside the Neovim float
+- `tests/lsp_hover_spec.lua` - Headless screen regression using an in-process LSP to prove native `K` hover documentation remains complete
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
 ### Plugin Management
@@ -89,6 +90,8 @@ Configured with multiple language servers (TypeScript, Python, Rust, Go, Lua, JS
 1. **nvim-lspconfig defaults** — cmd, filetypes, root_dir, commands (no files needed)
 2. **`after/lsp/*.lua`** — servers with substantial custom logic (only `lua_ls`)
 3. **`vim.lsp.config()` in `lua/kickstart/plugins/lsp.lua`** — small overrides (settings, init_options)
+
+Run `nvim -u NONE --headless -l nvim/tests/lsp_hover_spec.lua` to verify native `K` hover documentation renders without clipping.
 
 To add a new language server:
 

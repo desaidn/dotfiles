@@ -6,6 +6,13 @@ local function callout(raw, rendered, highlight, category)
   return { raw = raw, rendered = rendered, highlight = highlight, category = category }
 end
 
+local function is_lsp_float(buf)
+  for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+    if vim.w[win].lsp_floating_bufnr then return true end
+  end
+  return false
+end
+
 vim.pack.add {
   gh 'MeanderingProgrammer/render-markdown.nvim',
   gh 'nvim-treesitter/nvim-treesitter',
@@ -13,6 +20,8 @@ vim.pack.add {
 
 require('render-markdown').setup {
   file_types = { 'markdown', 'gitcommit' },
+  -- Neovim sizes native hover floats before rendered Markdown adds virtual padding.
+  ignore = is_lsp_float,
   completions = {
     lsp = { enabled = true },
   },
