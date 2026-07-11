@@ -4,16 +4,6 @@ Personal config monorepo. Clone anywhere, run `./install.sh`, and your system is
 
 The setup is designed around one uniform code interface: Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
 
-## Screenshots
-
-<img src="docs/assets/screenshots/neovim-editing.png" alt="Neovim editing session in tmux" width="100%">
-
-<img src="docs/assets/screenshots/neovim-completion.png" alt="Neovim completion menu in tmux" width="100%">
-
-<img src="docs/assets/screenshots/lazygit-patch.png" alt="lazygit patch view in tmux" width="100%">
-
-<img src="docs/assets/screenshots/hunk-review.png" alt="Hunk stacked working-tree review in tmux" width="100%">
-
 ## Layout
 
 | Directory    | Target               | Notes                                                     |
