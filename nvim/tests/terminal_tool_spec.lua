@@ -1,4 +1,11 @@
+local real_vim = vim
 local failures = {}
+local script_path = real_vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
+local nvim_root = real_vim.fs.normalize(real_vim.fs.dirname(script_path) .. '/..')
+local terminal_tool_path = nvim_root .. '/lua/custom/lib/terminal_tool.lua'
+local hunk_path = nvim_root .. '/lua/custom/plugins/hunk.lua'
+local lazygit_path = nvim_root .. '/lua/custom/plugins/lazygit.lua'
+local flatten_path = nvim_root .. '/lua/custom/plugins/flatten.lua'
 
 local function check(name, body)
   local ok, err = pcall(body)
@@ -11,12 +18,27 @@ local function check(name, body)
   io.stderr:write('FAIL ', name, '\n  ', tostring(err):gsub('\n', '\n  '), '\n')
 end
 
-local function fake_vim()
+local function fake_vim(options)
+  options = options or {}
   local fixture = {
-    geometry = { row = 0, col = 0, width = 80, height = 24 },
+    geometry = { width = 80, height = 24 },
+    cwd = options.cwd or '/repo/one',
+    current_tab = 1,
     autocmds = {},
-    float_config = nil,
+    buffers = {},
+    windows = { [1] = { valid = true, host = true, tab = 1 } },
+    current_win = 1,
+    next_buf = 1,
+    next_win = 2,
+    next_job = 1,
+    job_results = real_vim.deepcopy(options.job_results or {}),
+    synchronous_exits = real_vim.deepcopy(options.synchronous_exits or {}),
+    job_attempts = {},
     jobs = {},
+    mappings = {},
+    deferred = {},
+    notifications = {},
+    sends = {},
   }
 
   local function deepcopy(value)
@@ -28,6 +50,8 @@ local function fake_vim()
     return copy
   end
 
+  local function mapping_key(mode, lhs, buf) return table.concat({ mode, lhs, tostring(buf or 0) }, '\0') end
+
   local fake = {
     env = {
       TMUX = '/tmp/tmux-test/default,1,0',
@@ -36,39 +60,129 @@ local function fake_vim()
       VISUAL = 'nvim',
       GIT_EDITOR = 'nvim',
     },
+    log = { levels = { ERROR = 4, WARN = 3 } },
     cmd = { startinsert = function() end },
-    keymap = { set = function() end },
+    pack = { add = function() end },
     deepcopy = deepcopy,
-    defer_fn = function(callback) callback() end,
+    schedule = function(callback) callback() end,
+    defer_fn = function(callback, delay) fixture.deferred[#fixture.deferred + 1] = { callback = callback, delay = delay } end,
+    notify = function(message, level, notify_options)
+      fixture.notifications[#fixture.notifications + 1] = {
+        message = message,
+        level = level,
+        options = deepcopy(notify_options),
+      }
+    end,
+    keymap = {
+      set = function(mode, lhs, callback, map_options)
+        local buf = map_options and map_options.buf or nil
+        fixture.mappings[mapping_key(mode, lhs, buf)] = {
+          callback = callback,
+          options = deepcopy(map_options or {}),
+        }
+      end,
+    },
     fn = {
-      jobstart = function(command, options)
-        fixture.jobs[#fixture.jobs + 1] = deepcopy(command)
-        fixture.job_options = fixture.job_options or {}
-        fixture.job_options[#fixture.job_options + 1] = deepcopy(options)
-        return #fixture.jobs
+      getcwd = function() return fixture.cwd end,
+      chansend = function(job_id, input)
+        local job = fixture.jobs[job_id]
+        if not job or not job.running then return 0 end
+        fixture.sends[#fixture.sends + 1] = { job = job_id, input = input }
+        return #input
+      end,
+      jobstart = function(command, job_options)
+        fixture.job_attempts[#fixture.job_attempts + 1] = {
+          command = deepcopy(command),
+          options = deepcopy(job_options),
+        }
+
+        local result = table.remove(fixture.job_results, 1)
+        if result and result <= 0 then return result end
+
+        local job_id = fixture.next_job
+        fixture.next_job = fixture.next_job + 1
+        fixture.jobs[job_id] = {
+          command = deepcopy(command),
+          options = deepcopy(job_options),
+          running = true,
+        }
+        if table.remove(fixture.synchronous_exits, 1) then
+          fixture.jobs[job_id].running = false
+          job_options.on_exit(job_id, 0, 'exit')
+        end
+        return job_id
+      end,
+      jobstop = function(job_id)
+        local job = fixture.jobs[job_id]
+        if not job or not job.running then return 0 end
+        job.running = false
+        return 1
       end,
     },
     api = {
-      nvim_get_current_win = function() return 1 end,
-      nvim_win_get_width = function() return fixture.geometry.width end,
-      nvim_win_get_height = function() return fixture.geometry.height end,
-      nvim_create_buf = function() return 1 end,
-      nvim_buf_is_valid = function() return true end,
-      nvim_buf_delete = function() end,
-      nvim_open_win = function(_, _, config)
-        fixture.float_config = deepcopy(config)
-        return 2
+      nvim_get_current_win = function() return fixture.current_win end,
+      nvim_get_current_tabpage = function() return fixture.current_tab end,
+      nvim_set_current_win = function(win)
+        assert(fixture.windows[win] and fixture.windows[win].valid, 'cannot focus an invalid window')
+        fixture.current_win = win
+        fixture.current_tab = fixture.windows[win].tab
       end,
-      nvim_win_is_valid = function() return fixture.float_config ~= nil end,
-      nvim_win_hide = function() fixture.float_config = nil end,
-      nvim_win_set_config = function(_, config) fixture.float_config = deepcopy(config) end,
+      nvim_win_get_tabpage = function(win) return assert(fixture.windows[win], 'unknown window').tab end,
+      nvim_win_call = function(win, callback)
+        assert(fixture.windows[win] and fixture.windows[win].valid, 'cannot call in an invalid window')
+        local previous_win = fixture.current_win
+        local previous_tab = fixture.current_tab
+        fixture.current_win = win
+        fixture.current_tab = fixture.windows[win].tab
+        local result = callback()
+        fixture.current_win = previous_win
+        fixture.current_tab = previous_tab
+        return result
+      end,
+      nvim_win_get_width = function(win)
+        local window = assert(fixture.windows[win], 'unknown window')
+        return window.host and fixture.geometry.width or window.config.width
+      end,
+      nvim_win_get_height = function(win)
+        local window = assert(fixture.windows[win], 'unknown window')
+        return window.host and fixture.geometry.height or window.config.height
+      end,
+      nvim_create_buf = function()
+        local buf = fixture.next_buf
+        fixture.next_buf = fixture.next_buf + 1
+        fixture.buffers[buf] = true
+        return buf
+      end,
+      nvim_buf_is_valid = function(buf) return fixture.buffers[buf] == true end,
+      nvim_buf_delete = function(buf)
+        fixture.buffers[buf] = false
+        for win, window in pairs(fixture.windows) do
+          if window.valid and window.buf == buf then
+            window.valid = false
+            if fixture.current_win == win then fixture.current_win = 1 end
+          end
+        end
+      end,
+      nvim_open_win = function(buf, enter, config)
+        assert(fixture.buffers[buf], 'cannot open an invalid buffer')
+        local win = fixture.next_win
+        fixture.next_win = fixture.next_win + 1
+        fixture.windows[win] = { valid = true, buf = buf, config = deepcopy(config), tab = fixture.current_tab }
+        if enter then fixture.current_win = win end
+        return win
+      end,
+      nvim_win_is_valid = function(win) return fixture.windows[win] ~= nil and fixture.windows[win].valid end,
+      nvim_win_hide = function(win)
+        fixture.windows[win].valid = false
+        if fixture.current_win == win then fixture.current_win = 1 end
+      end,
+      nvim_win_set_config = function(win, config) fixture.windows[win].config = deepcopy(config) end,
       nvim_set_option_value = function() end,
-      nvim_create_user_command = function() end,
       nvim_create_augroup = function() return 1 end,
-      nvim_create_autocmd = function(event, options)
+      nvim_create_autocmd = function(event, autocmd_options)
         for _, name in ipairs(type(event) == 'table' and event or { event }) do
           fixture.autocmds[name] = fixture.autocmds[name] or {}
-          fixture.autocmds[name][#fixture.autocmds[name] + 1] = options.callback
+          fixture.autocmds[name][#fixture.autocmds[name] + 1] = autocmd_options.callback
         end
       end,
     },
@@ -80,66 +194,112 @@ local function fake_vim()
     end
   end
 
-  function fixture.popups()
-    local result = {}
-    for _, command in ipairs(fixture.jobs) do
-      if command[1] == 'tmux' and command[2] == 'display-popup' then result[#result + 1] = command end
-    end
-    return result
+  function fixture.mapping(mode, lhs, buf) return fixture.mappings[mapping_key(mode, lhs, buf)] end
+
+  function fixture.invoke(mode, lhs, buf)
+    local mapping = fixture.mapping(mode, lhs, buf)
+    assert(mapping, string.format('missing %s-mode mapping for %s', mode, lhs))
+    return mapping.callback()
   end
 
   function fixture.surface()
-    if fixture.float_config then
-      return {
-        kind = 'Neovim float',
-        width = fixture.float_config.width,
-        height = fixture.float_config.height,
-      }
+    for win = fixture.next_win - 1, 2, -1 do
+      local window = fixture.windows[win]
+      if window and window.valid and not window.host then
+        return {
+          kind = 'Neovim float',
+          win = win,
+          buf = window.buf,
+          width = window.config.width,
+          height = window.config.height,
+        }
+      end
     end
+    return nil
+  end
 
-    local popup = fixture.popups()[#fixture.popups()]
-    if not popup then return nil end
+  function fixture.invalidate_surface_buffer()
+    local surface = assert(fixture.surface(), 'expected a visible terminal surface')
+    fixture.buffers[surface.buf] = false
+    fixture.windows[surface.win].valid = false
+    fixture.current_win = 1
+    return surface.buf
+  end
 
-    local values = {}
-    for index, value in ipairs(popup) do
-      values[value] = popup[index + 1]
+  function fixture.switch_tab()
+    local tab = fixture.current_tab + 1
+    local win = fixture.next_win
+    fixture.next_win = fixture.next_win + 1
+    fixture.current_tab = tab
+    fixture.current_win = win
+    fixture.windows[win] = { valid = true, host = true, tab = tab }
+  end
+
+  function fixture.exit_job(job_id)
+    local job = assert(fixture.jobs[job_id], 'unknown job')
+    job.running = false
+    job.options.on_exit(job_id, 0, 'exit')
+  end
+
+  function fixture.run_deferred()
+    local deferred = fixture.deferred
+    fixture.deferred = {}
+    for _, item in ipairs(deferred) do
+      item.callback()
     end
-    return {
-      kind = 'tmux popup',
-      width = tonumber(values['-w']),
-      height = tonumber(values['-h']),
-    }
+  end
+
+  function fixture.valid_buffer_count()
+    local count = 0
+    for _, valid in pairs(fixture.buffers) do
+      if valid then count = count + 1 end
+    end
+    return count
   end
 
   return fake, fixture
 end
 
-local function launch(overrides)
-  local fake, fixture = fake_vim()
+local function setup(overrides, fake_options)
+  local fake, fixture = fake_vim(fake_options)
   _G.vim = fake
-  local terminal_tool = dofile 'nvim/lua/custom/lib/terminal_tool.lua'
+  local terminal_tool = dofile(terminal_tool_path)
   local config = {
-    name = 'Lazygit',
-    source = 'lazygit',
+    id = 'lazygit',
     command = { 'lazygit' },
     key = '<leader>gg',
     desc = 'Lazygit',
-    hide_command = 'LazygitHide',
+    handoff = 'hide-and-acknowledge',
   }
   for name, value in pairs(overrides or {}) do
     config[name] = value
   end
 
-  local tool = terminal_tool.create(config)
-  tool.toggle()
-  return fixture, tool
+  local result = terminal_tool.create(config)
+  return fixture, terminal_tool, result
 end
+
+local function use_handoff_env(fixture, job_index)
+  local env = fixture.job_attempts[job_index].options.env
+  vim.env.DOTFILES_EDITOR_HANDOFF_SOURCE = env.DOTFILES_EDITOR_HANDOFF_SOURCE
+  vim.env.DOTFILES_EDITOR_HANDOFF_GENERATION = env.DOTFILES_EDITOR_HANDOFF_GENERATION
+end
+
+check('declaration owns mappings without exposing lifecycle state', function()
+  local fixture, _, result = setup()
+  assert(result == nil, 'create exposed a controller instead of keeping lifecycle state private')
+  assert(fixture.mapping('n', '<leader>gg'), 'expected create to install the normal-mode mapping')
+
+  fixture.invoke('n', '<leader>gg')
+  local surface = assert(fixture.surface(), 'expected a terminal surface')
+  assert(not fixture.mapping('t', '<leader>gg', surface.buf), 'terminal mapping would delay ordinary Space input in the TUI')
+end)
 
 check('terminal surface tracks a host resize while running under tmux', function()
   for _, event in ipairs { 'VimResized', 'WinResized' } do
-    local fixture = launch()
-    local before = fixture.surface()
-    assert(before, 'expected a terminal surface when the tool opens')
+    local fixture = setup()
+    fixture.invoke('n', '<leader>gg')
+    local before = assert(fixture.surface(), 'expected a terminal surface when the tool opens')
     assert(before.width == 80 and before.height == 24, 'expected the initial surface to match the 80x24 host')
 
     fixture.geometry.width = 120
@@ -147,53 +307,210 @@ check('terminal surface tracks a host resize while running under tmux', function
     fixture.fire(event)
 
     local after = fixture.surface()
-    assert(
-      after and after.width == 120 and after.height == 40,
-      string.format(
-        '%s: host changed from 80x24 to 120x40, but the live %s remained %sx%s',
-        event,
-        after and after.kind or 'surface',
-        tostring(after and after.width),
-        tostring(after and after.height)
-      )
-    )
+    assert(after and after.width == 120 and after.height == 40, event .. ': terminal surface did not follow the host resize')
   end
 end)
 
 check('terminal job persists when its float is hidden and reopened', function()
-  local fixture, tool = launch()
-  assert(#fixture.jobs == 1, 'expected one terminal job after opening the tool')
+  local fixture = setup()
+  fixture.invoke('n', '<leader>gg')
+  local surface = assert(fixture.surface(), 'expected the first terminal surface')
+  assert(#fixture.job_attempts == 1, 'expected one terminal job after opening the tool')
 
-  tool.toggle()
-  tool.toggle()
+  fixture.invoke('n', '<leader>gg')
+  fixture.invoke('n', '<leader>gg')
 
-  assert(#fixture.jobs == 1, 'hiding and reopening the float started a second terminal job')
-  assert(fixture.surface() and fixture.surface().kind == 'Neovim float', 'expected the terminal float to reopen')
+  assert(#fixture.job_attempts == 1, 'hiding and reopening the float started a second terminal job')
+  assert(fixture.surface(), 'expected the terminal float to reopen')
 end)
 
-check('tool-specific environment extends the shell-owned editor contract', function()
-  local fixture = launch {
-    env = {
-      OPENTUI_GRAPHICS = 'false',
-      EDITOR = 'tool-specific-editor',
-    },
+check('a hidden tool restarts in a new effective working directory', function()
+  local fixture = setup()
+  fixture.invoke('n', '<leader>gg')
+  fixture.invoke('n', '<leader>gg')
+  fixture.cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gg')
+
+  assert(#fixture.job_attempts == 2, 'new working directory reused the old repository process')
+  assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'replacement process did not start in the new directory')
+  assert(not fixture.jobs[1].running, 'old repository process was left running')
+end)
+
+check('a tool visible in another tab moves on the first toggle', function()
+  local fixture = setup()
+  fixture.invoke('n', '<leader>gg')
+  fixture.switch_tab()
+  fixture.invoke('n', '<leader>gg')
+
+  local surface = assert(fixture.surface(), 'first toggle in the new tab only hid the old float')
+  assert(fixture.windows[surface.win].tab == fixture.current_tab, 'terminal float did not move to the current tab')
+  assert(#fixture.job_attempts == 1, 'moving the float restarted its terminal job')
+end)
+
+check('tool environment extends the shell-owned editor contract', function()
+  local fixture = setup {
+    env = { OPENTUI_GRAPHICS = 'false' },
   }
-  local env = fixture.job_options[1].env
+  fixture.invoke('n', '<leader>gg')
+  local env = fixture.job_attempts[1].options.env
 
   assert(env.OPENTUI_GRAPHICS == 'false', 'expected the tool-specific environment variable')
-  assert(env.DOTFILES_EDITOR_HANDOFF_SOURCE == 'lazygit', 'expected the editor-handoff source marker')
-  assert(env.EDITOR == 'nvim', 'tool-specific environment replaced the shell-owned editor contract')
+  assert(env.DOTFILES_EDITOR_HANDOFF_SOURCE == 'lazygit', 'expected the tool id as the editor-handoff source')
+  assert(env.EDITOR == 'nvim', 'expected the shell-owned editor')
   assert(env.VISUAL == 'nvim' and env.GIT_EDITOR == 'nvim', 'expected the complete shell-owned editor contract')
 end)
 
-check('host tmux remains upstream for prefix navigation', function()
-  local fixture = launch()
-  local popups = fixture.popups()
-  assert(#popups == 0, 'tmux `display-popup` is modal and prevents host prefix and pane navigation')
-
-  local surface = fixture.surface()
-  assert(surface and surface.kind == 'Neovim float', 'expected the terminal tool to stay inside the host Neovim pane')
+check('reserved editor environment cannot be overridden', function()
+  local ok, err = pcall(function() setup { env = { EDITOR = 'tool-specific-editor' } } end)
+  assert(not ok and tostring(err):match 'cannot override EDITOR', 'expected an atomic configuration error for EDITOR')
 end)
+
+check('production declarations and flatten adapter share source-agnostic routing', function()
+  local fake, fixture = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local flatten_config
+  local module_names = { 'custom.lib.terminal_tool', 'custom.lib.pack', 'flatten' }
+  local previous_modules = {}
+  for _, name in ipairs(module_names) do
+    previous_modules[name] = package.loaded[name]
+  end
+
+  package.loaded['custom.lib.terminal_tool'] = terminal_tool
+  package.loaded['custom.lib.pack'] = { gh = function(repository) return repository end }
+  package.loaded.flatten = { setup = function(config) flatten_config = config end }
+
+  local loaded, load_error = pcall(function()
+    dofile(hunk_path)
+    dofile(lazygit_path)
+    dofile(flatten_path)
+  end)
+  for _, name in ipairs(module_names) do
+    package.loaded[name] = previous_modules[name]
+  end
+  assert(loaded, load_error)
+  assert(flatten_config and flatten_config.hooks, 'production flatten adapter did not register its hooks')
+
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.job_attempts[1].command[1] == 'hunk', 'production Hunk declaration registered the wrong command')
+  assert(fixture.job_attempts[1].options.env.OPENTUI_GRAPHICS == 'false', 'production Hunk declaration lost its render fix')
+  use_handoff_env(fixture, 1)
+  flatten_config.hooks.post_open { data = flatten_config.hooks.guest_data() }
+  assert(fixture.surface() == nil and #fixture.deferred == 0, 'production Hunk handoff did not hide without acknowledging')
+
+  fixture.invoke('n', '<leader>gg')
+  assert(fixture.job_attempts[2].command[1] == 'lazygit', 'production Lazygit declaration registered the wrong command')
+  use_handoff_env(fixture, 2)
+  flatten_config.hooks.post_open { data = flatten_config.hooks.guest_data() }
+  assert(fixture.surface() == nil and #fixture.deferred == 1, 'production Lazygit handoff did not schedule acknowledgement')
+  fixture.run_deferred()
+  assert(#fixture.sends == 1 and fixture.sends[1].job == 2, 'production Lazygit handoff acknowledged the wrong job')
+end)
+
+check('editor handoff is source-agnostic and acknowledges only configured tools', function()
+  local fixture, terminal_tool = setup()
+  fixture.invoke('n', '<leader>gg')
+  use_handoff_env(fixture, 1)
+
+  local data = terminal_tool.editor_handoff_data()
+  assert(terminal_tool.complete_editor_handoff(data), 'expected the registered source to handle editor return')
+  assert(fixture.surface() == nil, 'editor return did not hide the originating surface')
+  assert(#fixture.sends == 0, 'editor acknowledgement ignored its delay')
+
+  fixture.run_deferred()
+  assert(#fixture.sends == 1 and fixture.sends[1].input == '\r', 'expected one delayed editor acknowledgement')
+  assert(not terminal_tool.complete_editor_handoff {}, 'unknown handoff data should be ignored')
+end)
+
+check('hide-only editor handoff does not send terminal input', function()
+  local fixture, terminal_tool = setup { id = 'hunk', handoff = 'hide' }
+  fixture.invoke('n', '<leader>gg')
+  use_handoff_env(fixture, 1)
+
+  assert(terminal_tool.complete_editor_handoff(terminal_tool.editor_handoff_data()), 'expected Hunk handoff to be handled')
+  assert(fixture.surface() == nil, 'hide-only handoff did not close the surface')
+  fixture.run_deferred()
+  assert(#fixture.sends == 0, 'hide-only handoff sent terminal input')
+end)
+
+check('failed job startup rolls back and remains retryable', function()
+  for _, job_result in ipairs { -1, 0 } do
+    local fixture = setup(nil, { job_results = { job_result } })
+    assert(not fixture.invoke('n', '<leader>gg'), 'expected the first launch to report failure')
+    assert(fixture.surface() == nil, 'failed startup left a blank float')
+    assert(fixture.valid_buffer_count() == 0, 'failed startup leaked its provisional buffer')
+    assert(#fixture.notifications == 1, 'missing startup error notification')
+
+    assert(fixture.invoke('n', '<leader>gg'), 'expected a later mapping invocation to retry')
+    assert(#fixture.job_attempts == 2 and fixture.surface(), 'startup failure left the declaration unusable')
+  end
+end)
+
+check('a job that exits during startup cannot restore stale handles', function()
+  local fixture = setup(nil, { synchronous_exits = { true } })
+  assert(not fixture.invoke('n', '<leader>gg'), 'synchronously exited job reported a live terminal')
+  assert(fixture.surface() == nil and fixture.valid_buffer_count() == 0, 'synchronously exited job leaked its surface')
+
+  assert(fixture.invoke('n', '<leader>gg'), 'declaration did not recover after the short-lived job')
+  assert(#fixture.job_attempts == 2 and fixture.surface(), 'short-lived job restored stale lifecycle handles')
+end)
+
+check('an old exit callback cannot clear a replacement generation', function()
+  local fixture = setup()
+  fixture.invoke('n', '<leader>gg')
+  fixture.invalidate_surface_buffer()
+  fixture.invoke('n', '<leader>gg')
+  assert(#fixture.job_attempts == 2, 'expected a replacement terminal job')
+
+  fixture.exit_job(1)
+  local replacement = assert(fixture.surface(), 'old exit callback hid the replacement surface')
+  assert(replacement.buf, 'expected a replacement terminal buffer')
+  fixture.invoke('n', '<leader>gg')
+  fixture.invoke('n', '<leader>gg')
+
+  assert(#fixture.job_attempts == 2, 'old exit callback caused the replacement to restart')
+  assert(fixture.surface(), 'replacement terminal could not reopen')
+end)
+
+check('a delayed acknowledgement cannot reach a replacement job', function()
+  local fixture, terminal_tool = setup()
+  fixture.invoke('n', '<leader>gg')
+  use_handoff_env(fixture, 1)
+  terminal_tool.complete_editor_handoff(terminal_tool.editor_handoff_data())
+
+  -- Reopen, invalidate the old generation, and launch its replacement before
+  -- the delayed acknowledgement fires.
+  fixture.invoke('n', '<leader>gg')
+  fixture.invalidate_surface_buffer()
+  fixture.invoke('n', '<leader>gg')
+  fixture.run_deferred()
+
+  assert(#fixture.sends == 0, 'the old acknowledgement sent input to the replacement job')
+end)
+
+check('a stale editor handoff cannot hide a replacement generation', function()
+  local fixture, terminal_tool = setup()
+  fixture.invoke('n', '<leader>gg')
+  use_handoff_env(fixture, 1)
+  local stale_data = terminal_tool.editor_handoff_data()
+
+  fixture.invalidate_surface_buffer()
+  fixture.invoke('n', '<leader>gg')
+  assert(not terminal_tool.complete_editor_handoff(stale_data), 'stale handoff was accepted for a replacement generation')
+  assert(fixture.surface(), 'stale handoff hid the replacement surface')
+end)
+
+check('host tmux remains upstream for prefix navigation', function()
+  local fixture = setup()
+  fixture.invoke('n', '<leader>gg')
+
+  for _, attempt in ipairs(fixture.job_attempts) do
+    assert(attempt.command[1] ~= 'tmux', 'terminal_tool launched a nested tmux surface')
+  end
+  assert(fixture.surface() and fixture.surface().kind == 'Neovim float', 'expected the terminal tool inside host Neovim')
+end)
+
+_G.vim = real_vim
 
 if #failures > 0 then
   io.stderr:write(string.format('\n%d terminal_tool regression check%s failed\n', #failures, #failures == 1 and '' or 's'))

@@ -36,8 +36,8 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `hunk.lua` - Thin Hunk stacked working-tree review launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gd`)
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
   - `render-markdown.lua` - In-editor Markdown rendering without Nerd Font dependencies (owns `<leader>tm`)
-- `tests/terminal_tool_spec.lua` - Headless regression harness for terminal-tool persistence, environment handling, live float sizing, and host tmux input routing
-- `tests/terminal_tool_hunk_render.{exp,lua}` - Real-PTY regression harness proving Hunk renders its complete first frame without graphics-protocol artifacts inside the Neovim float
+- `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, persistence, handoff, failure/race recovery, environment handling, live float sizing, and host tmux input routing
+- `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside the Neovim float
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
 ### Plugin Management
@@ -80,7 +80,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 ### Terminal Tool Launcher
 
 - `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` - Run the terminal-tool regression checks from the repository root
-- `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` - Compare real Hunk in a direct PTY and through `terminal_tool.lua`, including its initial menu and mouse-triggered redraw behavior
+- `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` - Compare real Hunk in a direct PTY and through its production `terminal_tool.lua` declaration, then verify live resize propagation and host tmux prefix routing; requires Expect, tmux, Git, Hunk, and Neovim on `PATH`
 
 ### LSP and Language Support
 
@@ -104,20 +104,30 @@ Minimal terminal integration (tmux handles primary terminal functionality):
 
 - `<Esc><Esc>` - Exit terminal mode when needed
 - `<C-h/j/k/l>` - Navigate between windows
-- flatten.nvim redirects nested `nvim +line file` calls from terminal tools back into the host Neovim instance. Tool launchers may set `DOTFILES_EDITOR_HANDOFF_SOURCE` only to identify the source surface for post-handoff polish; they should not override `EDITOR`.
+- flatten.nvim redirects nested `nvim +line file` calls from terminal tools back into the host Neovim instance. `terminal_tool.lua` privately owns the source marker and opaque handoff payload; declarations should not set handoff environment variables or override `EDITOR`.
 
 ### Neovim-Owned Terminal Tools
 
 Use `lua/custom/lib/terminal_tool.lua` for any future flow that Neovim should launch as an interactive terminal tool, such as Hunk or lazygit. This is the standard shape:
 
-- Start one persistent Neovim terminal job per tool and display its buffer in a float that covers the launching Neovim window, with the same key hiding and reopening the float without restarting the tool.
+```lua
+require('custom.lib.terminal_tool').create {
+  id = 'example',
+  command = { 'example' },
+  key = '<leader>gx',
+  desc = 'Example',
+}
+```
+
+- Start one persistent Neovim terminal job per tool, restart it when the effective working directory changes, and display its buffer in a float that covers the launching Neovim window.
+- Let the shared module install the normal-mode mapping; declarations do not receive or inspect mutable buffer, window, or job state. Terminal input stays untouched, so use `<Esc><Esc>` before the normal tool key when hiding from the TUI.
 - Reconfigure an open float on `VimResized` and `WinResized` so it continues to cover its launching window.
 - Use the same Neovim float inside and outside tmux. This keeps the host tmux client upstream so its prefix, session picker, and pane navigation remain available while the tool is running.
 - Pass through shell-owned `EDITOR`, `VISUAL`, and `GIT_EDITOR`; do not override the editor contract in tool-specific config.
-- Keep tool-specific environment exceptions declarative in `config.env`; the shared launcher reapplies the source marker and shell-owned editor contract after those values.
+- Keep tool-specific environment exceptions declarative in `env`; reserved editor and handoff variables are rejected so the source marker and shell-owned editor contract cannot be replaced.
 - Hunk sets `OPENTUI_GRAPHICS=false` because its OpenTUI renderer otherwise mistakes inherited `TMUX` for its immediate terminal and sends tmux-wrapped graphics probes through Neovim's intervening terminal emulator.
-- Tag `DOTFILES_EDITOR_HANDOFF_SOURCE` so flatten.nvim can hide or polish the originating surface after nested `nvim` opens the target file in the host Neovim.
-- Keep each plugin file thin: declare the tool name, command, key, source marker, and any tool-specific post-handoff behavior.
+- Editor handoff hides by default; use `handoff = 'hide-and-acknowledge'` only for tools such as lazygit that wait for an Enter after returning. The shared module transports the originating process generation through flatten without source-specific branches in `flatten.lua`.
+- Keep each plugin file thin: declare the tool id, command, key, description, optional environment, and any exceptional handoff policy.
 
 ### Git Integration
 
