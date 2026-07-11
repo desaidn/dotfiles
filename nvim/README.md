@@ -64,7 +64,7 @@ nvim
 
 Lazygit and Hunk open files through the shell-owned `EDITOR=nvim` contract. flatten.nvim routes nested Neovim calls back into the host editor and hides the originating Git surface.
 
-Neovim-launched terminal tools use one shared flow: persistent tmux popup sized to the launching Neovim window inside tmux, floating terminal sized to the launching Neovim window outside tmux, and flatten.nvim for editor handoff. Add future flows through `lua/custom/lib/terminal_tool.lua` instead of writing a bespoke launcher.
+Neovim-launched terminal tools use one shared flow in every environment: a persistent terminal job shown in a Neovim float that follows the size of its launching window, leaves host tmux prefix and pane navigation available, and uses flatten.nvim for editor handoff. Add future flows through `lua/custom/lib/terminal_tool.lua` instead of writing a bespoke launcher.
 
 ### File Explorer
 

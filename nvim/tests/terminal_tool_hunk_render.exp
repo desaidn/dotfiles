@@ -1,0 +1,92 @@
+#!/usr/bin/expect -f
+
+set timeout 10
+set repo_root [file normalize [file join [file dirname [info script]] ../..]]
+set suffix [pid]
+set host_socket "/tmp/codex-hunk-render-host-$suffix.sock"
+set direct_socket "/tmp/codex-hunk-render-direct-$suffix.sock"
+set nvim_socket "/tmp/codex-hunk-render-nvim-$suffix.sock"
+set fixture [exec mktemp -d "/tmp/codex-hunk-render-$suffix.XXXXXX"]
+
+proc capture {socket target} {
+  return [exec tmux -S $socket capture-pane -p -t $target]
+}
+
+proc wait_for_screen {socket target pattern} {
+  for {set attempt 0} {$attempt < 30} {incr attempt} {
+    if {![catch { capture $socket $target } screen] && [regexp $pattern $screen]} {
+      return $screen
+    }
+    after 100
+  }
+  error "timed out waiting for $pattern on $target"
+}
+
+proc stop_servers {sockets fixture} {
+  foreach socket $sockets { catch { exec tmux -S $socket kill-server } }
+  catch { file delete -force $fixture }
+}
+
+set sample [open "$fixture/sample.txt" w]
+puts $sample "one\ntwo\nthree\nfour\nfive"
+close $sample
+exec git -C $fixture init -q
+exec git -C $fixture add sample.txt
+exec git -C $fixture -c user.name=Test -c user.email=test@example.com commit -qm base
+set sample [open "$fixture/sample.txt" w]
+puts $sample "one\nTWO changed\nthree\nFOUR changed\nfive\nsix"
+close $sample
+
+exec tmux -S $direct_socket -f /dev/null new-session -d -x 80 -y 21 -s direct -c $fixture \
+  "/usr/bin/env TERM=tmux-256color hunk diff --watch --mode stack"
+set direct [wait_for_screen $direct_socket direct:0.0 {File +View +Navigate +Theme +Agent +Help}]
+
+spawn -noecho /usr/bin/env TERM=xterm-256color HUNK_RENDER_FIXTURE=$fixture DOTFILES_REPO_ROOT=$repo_root \
+  tmux -S $host_socket -f /dev/null new-session -s host \
+  "nvim --clean --listen $nvim_socket -u $repo_root/nvim/tests/terminal_tool_hunk_render_init.lua"
+stty rows 24 columns 80
+set initial [wait_for_screen $host_socket host:0.0 {sample.txt}]
+after 200
+set initial [capture $host_socket host:0.0]
+
+set width [exec nvim --server $nvim_socket --remote-expr \
+  {luaeval("vim.api.nvim_win_get_width(_G.hunk_render_probe.state.win)")}]
+set height [exec nvim --server $nvim_socket --remote-expr \
+  {luaeval("vim.api.nvim_win_get_height(_G.hunk_render_probe.state.win)")}]
+
+if {$width != 80 || $height != 21} {
+  stop_servers [list $host_socket $direct_socket] $fixture
+  puts stderr "HARNESS ERROR: expected an 80x21 Hunk float, got ${width}x${height}"
+  exit 2
+}
+
+set menu_present [regexp {File +View +Navigate +Theme +Agent +Help} $initial]
+set protocol_present [expr {[string first {Gi=31337} $initial] >= 0}]
+
+if {$menu_present && !$protocol_present} {
+  stop_servers [list $host_socket $direct_socket] $fixture
+  puts "PASS real Hunk renders its complete menu without protocol artifacts on the initial terminal_tool frame"
+  exit 0
+}
+
+if {$menu_present} {
+  stop_servers [list $host_socket $direct_socket] $fixture
+  puts stderr "FAIL real Hunk initial render through terminal_tool"
+  puts stderr "  the complete menu is present, but the Gi=31337 graphics-protocol artifact remains"
+  exit 1
+}
+
+exec nvim --server $nvim_socket --remote-expr \
+  {luaeval("vim.api.nvim_input_mouse('left', 'press', '', 0, 0, 4)")}
+exec nvim --server $nvim_socket --remote-expr \
+  {luaeval("vim.api.nvim_input_mouse('left', 'release', '', 0, 0, 4)")}
+
+set clicked [wait_for_screen $host_socket host:0.0 {Toggle files/filter focus}]
+set protocol_artifact [expr {$protocol_present ? "present" : "absent"}]
+stop_servers [list $host_socket $direct_socket] $fixture
+
+puts stderr "FAIL real Hunk initial render through terminal_tool"
+puts stderr "  direct 80x21 Hunk renders: File View Navigate Theme Agent Help"
+puts stderr "  terminal_tool 80x21 initial row is the separator; the complete menu is absent"
+puts stderr "  clicking the missing File area reveals: Toggle files/filter focus (Gi protocol artifact $protocol_artifact)"
+exit 1

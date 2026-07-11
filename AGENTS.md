@@ -97,7 +97,7 @@ tmux new-session -s dev
 - **Editor ↔ Git**: Neovim integrates with both gitsigns and lazygit
 - **Shell ↔ Editor**: Fish and zsh own the global editor contract (`EDITOR`, `VISUAL`, and `GIT_EDITOR` all point to `nvim`)
 - **Terminal tool ↔ Editor**: flatten.nvim handles editor handoff from nested `nvim` calls back into the host Neovim; tool launchers may tag `DOTFILES_EDITOR_HANDOFF_SOURCE` for post-handoff polish but should not override `EDITOR`
-- **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: persistent tmux popup sized to the launching Neovim window inside tmux, floating terminal sized to the launching Neovim window outside tmux, and flatten.nvim for editor handoff
+- **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent terminal job shown in a Neovim float sized to the launching window in every environment, host tmux prefix and pane navigation kept upstream, and flatten.nvim for editor handoff
 - **Shell ↔ Terminal**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; tmux handles multiplexing
 - **Runtime Management**: Mise handles all language version requirements
 - **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty)
