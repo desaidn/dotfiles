@@ -1,23 +1,21 @@
--- Linting via nvim-lint with eslint_d and ruff.
+-- Linting via nvim-lint.
 -- https://github.com/mfussenegger/nvim-lint
 
 local gh = require('custom.lib.pack').gh
+local tooling = require 'custom.language_tooling'
 
 vim.pack.add { gh 'mfussenegger/nvim-lint' }
 
 local lint = require 'lint'
 
--- Base linter configuration
+-- Only enable declared linters when their executables are available.
 lint.linters_by_ft = {}
-
--- Only add linters if they're available
-if vim.fn.executable 'ruff' == 1 then lint.linters_by_ft.python = { 'ruff' } end
-
-if vim.fn.executable 'eslint_d' == 1 then
-  local js_fts = { 'javascript', 'javascriptreact', 'typescript', 'typescriptreact' }
-  for _, ft in ipairs(js_fts) do
-    lint.linters_by_ft[ft] = { 'eslint_d' }
+for filetype, declared_linters in pairs(tooling.linters_by_ft()) do
+  local available_linters = {}
+  for _, linter in ipairs(declared_linters) do
+    if vim.fn.executable(linter) == 1 then available_linters[#available_linters + 1] = linter end
   end
+  if #available_linters > 0 then lint.linters_by_ft[filetype] = available_linters end
 end
 
 -- For more linter options and default linters, see:

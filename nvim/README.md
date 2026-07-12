@@ -99,6 +99,10 @@ Use `:lua vim.pack.update(nil, { offline = true })` to inspect plugin state,
 `:lua vim.pack.update()` to update plugins, `:Mason` for LSP servers and tools,
 and `:checkhealth` to diagnose issues.
 
+Shared LSP, Mason, formatter, and linter support is declared once in
+`lua/custom/language_tooling.lua`; the plugin configurations consume its tested
+projections.
+
 ## Reset
 
 ```sh

@@ -8,6 +8,18 @@ Personal development environment configuration, organized around a small set of 
 The primary place where development work is initiated, coordinated, and returned to after using supporting tools.
 _Avoid_: Editor, shell, terminal
 
+**Language Tooling**:
+The language-centered part of the Development Surface contract: source-language capabilities that require coordination across supporting tools are declared as one coherent capability.
+_Avoid_: Tool config, plugin-specific language setup
+
+**Language Tooling Inventory**:
+The canonical catalogue of language capabilities shared across supporting tools; each Language Family should be declared through one entry point without repeating those shared facts elsewhere.
+_Avoid_: LSP server list, formatter list, parser list
+
+**Language Family**:
+A source-language grouping in the Language Tooling Inventory that may cover multiple Neovim filetypes for one coherent Development Surface capability.
+_Avoid_: Filetype bucket, tool section
+
 **Review Surface**:
 A focused place for inspecting complete changesets before deciding what to keep, change, or commit.
 _Avoid_: Diff viewer, pager

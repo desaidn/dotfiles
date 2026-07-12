@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — dotfiles</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "neutral",
+        securityLevel: "loose",
+      });
+    </script>
+    <style>
+      .seam {
+        border-style: dashed;
+      }
+      .leak {
+        color: #dc2626;
+        stroke: #dc2626;
+      }
+      .deep {
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        color: #f8fafc;
+      }
+      .paper {
+        background-image: radial-gradient(#e7e5e4 0.8px, transparent 0.8px);
+        background-size: 18px 18px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 9999px;
+        padding: 0.18rem 0.55rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .module {
+        border: 1px solid #cbd5e1;
+        border-radius: 0.75rem;
+        background: #fff;
+        padding: 0.75rem;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+      }
+      .interface-strip {
+        height: 0.8rem;
+        border-radius: 0.4rem 0.4rem 0 0;
+        background: #bae6fd;
+        border-bottom: 1px solid #38bdf8;
+      }
+      .impl-strip {
+        border-radius: 0 0 0.4rem 0.4rem;
+        background: #f8fafc;
+      }
+      .diagram-title {
+        font-size: 0.68rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #64748b;
+        font-weight: 800;
+      }
+      .arrow {
+        position: relative;
+        height: 1.6rem;
+      }
+      .arrow:after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        border-left: 2px solid #94a3b8;
+      }
+      .arrow:before {
+        content: "";
+        position: absolute;
+        left: calc(50% - 4px);
+        bottom: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 7px solid #94a3b8;
+        z-index: 1;
+      }
+      .red-arrow:after {
+        border-color: #dc2626;
+        border-left-style: dashed;
+      }
+      .red-arrow:before {
+        border-top-color: #dc2626;
+      }
+      pre.mermaid {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-6xl mx-auto px-6 py-12 space-y-12">
+      <header class="space-y-6">
+        <div
+          class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+        >
+          <div>
+            <p
+              class="text-xs uppercase tracking-[0.25em] text-slate-500 font-bold"
+            >
+              Architecture review
+            </p>
+            <h1 class="text-4xl font-black tracking-tight">dotfiles</h1>
+          </div>
+          <p class="text-sm text-slate-500">2026-07-11 16:40</p>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-4 text-sm">
+          <div class="module">
+            <span class="font-bold">solid box</span><br /><span
+              class="text-slate-500"
+              >module</span
+            >
+          </div>
+          <div class="module seam">
+            <span class="font-bold">dashed line</span><br /><span
+              class="text-slate-500"
+              >seam</span
+            >
+          </div>
+          <div class="module">
+            <span class="font-bold text-red-600">red arrow</span><br /><span
+              class="text-slate-500"
+              >leakage</span
+            >
+          </div>
+          <div class="module deep">
+            <span class="font-bold">thick dark box</span><br /><span
+              class="text-slate-300"
+              >deep module</span
+            >
+          </div>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-10">
+        <article
+          id="language-tooling"
+          class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+        >
+          <div class="p-6 space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h2 class="text-2xl font-black tracking-tight">
+                Deepen Development Surface language tooling
+              </h2>
+              <div class="flex gap-2">
+                <span class="badge bg-emerald-100 text-emerald-800"
+                  >Strong</span
+                >
+                <span class="badge bg-slate-100 text-slate-700"
+                  >in-process</span
+                >
+              </div>
+            </div>
+            <div>
+              <p
+                class="text-xs uppercase tracking-wider font-bold text-slate-500 mb-2"
+              >
+                Files
+              </p>
+              <div
+                class="font-mono text-sm text-slate-700 grid gap-1 sm:grid-cols-2"
+              >
+                <span>nvim/lua/kickstart/plugins/lsp.lua</span>
+                <span>nvim/lua/kickstart/plugins/conform.lua</span>
+                <span>nvim/lua/kickstart/plugins/lint.lua</span>
+                <span>nvim/lua/kickstart/plugins/treesitter.lua</span>
+                <span>nvim/lua/kickstart/parsers.lua</span>
+                <span>nvim/after/lsp/lua_ls.lua</span>
+              </div>
+            </div>
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div class="rounded-xl border border-slate-200 bg-stone-50 p-4">
+                <p class="diagram-title mb-3">Before — language facts leak</p>
+                <div class="rounded-lg border border-slate-200 bg-white p-4">
+                  <pre class="mermaid">
+flowchart TB
+  C[Change one language] --> L[LSP servers]
+  C --> M[Mason tools]
+  C --> F[Formatters]
+  C --> N[Linters]
+  C --> P[Parsers]
+  L -. package names .-> M
+  F -. executable names .-> M
+  N -. executable checks .-> M
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class L,M,F,N,P leak;
+                  </pre>
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-stone-50 p-4">
+                <p class="diagram-title mb-3">
+                  After — one deep language module
+                </p>
+                <div
+                  class="paper rounded-lg border border-slate-200 p-4 min-h-[285px] flex flex-col justify-center"
+                >
+                  <div class="module seam text-center text-sm font-bold">
+                    Language intent<br /><span
+                      class="text-xs font-normal text-slate-500"
+                      >small interface</span
+                    >
+                  </div>
+                  <div class="arrow"></div>
+                  <div
+                    class="deep rounded-xl border-4 border-slate-900 p-5 text-center shadow-xl"
+                  >
+                    <div
+                      class="text-xs uppercase tracking-wider text-slate-300 font-bold"
+                    >
+                      Deep module
+                    </div>
+                    <div class="text-lg font-black">
+                      Development Surface language tooling
+                    </div>
+                    <div class="mt-2 text-xs text-slate-300">
+                      implementation absorbs LSP, Mason, format, lint, parser
+                      decisions
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-5 gap-2 mt-4 text-center text-xs">
+                    <div class="module">LSP<br />adapter</div>
+                    <div class="module">Mason<br />adapter</div>
+                    <div class="module">format<br />adapter</div>
+                    <div class="module">lint<br />adapter</div>
+                    <div class="module">parser<br />adapter</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="grid gap-4 md:grid-cols-3">
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Problem
+                </p>
+                <p class="mt-1 text-sm">
+                  One language change crosses five modules; the current
+                  interface is nearly as complex as the implementation, so
+                  locality is weak.
+                </p>
+              </div>
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Solution
+                </p>
+                <p class="mt-1 text-sm">
+                  Put language intent behind one deep module and let existing
+                  plugin modules act as adapters at the seam.
+                </p>
+              </div>
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Benefits
+                </p>
+                <ul class="mt-1 text-sm list-disc pl-5 space-y-1">
+                  <li>locality: one language edit</li>
+                  <li>leverage: N plugin adapters</li>
+                  <li>interface becomes test surface</li>
+                  <li>deletion test exposes value</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article
+          id="install-plan"
+          class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+        >
+          <div class="p-6 space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h2 class="text-2xl font-black tracking-tight">
+                Deepen the dotfiles install plan
+              </h2>
+              <div class="flex gap-2">
+                <span class="badge bg-emerald-100 text-emerald-800"
+                  >Strong</span
+                >
+                <span class="badge bg-slate-100 text-slate-700"
+                  >local-substitutable</span
+                >
+              </div>
+            </div>
+            <div>
+              <p
+                class="text-xs uppercase tracking-wider font-bold text-slate-500 mb-2"
+              >
+                Files
+              </p>
+              <div
+                class="font-mono text-sm text-slate-700 grid gap-1 sm:grid-cols-2"
+              >
+                <span>install.sh</span>
+                <span>uninstall.sh</span>
+                <span>README.md</span>
+                <span>AGENTS.md</span>
+                <span>templates/local.fish</span>
+                <span>templates/local.zsh</span>
+              </div>
+            </div>
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div class="rounded-xl border border-slate-200 bg-stone-50 p-4">
+                <p class="diagram-title mb-3">
+                  Before — script knowledge repeats
+                </p>
+                <div class="grid grid-cols-3 gap-3 min-h-[285px] items-start">
+                  <div class="module">
+                    <div class="interface-strip"></div>
+                    <div class="impl-strip p-3 text-xs space-y-2 h-52">
+                      <p class="font-bold">install.sh</p>
+                      <p>prereqs</p>
+                      <p>targets</p>
+                      <p>Ghostty policy</p>
+                      <p>backup rule</p>
+                    </div>
+                  </div>
+                  <div class="module">
+                    <div class="interface-strip"></div>
+                    <div class="impl-strip p-3 text-xs space-y-2 h-52">
+                      <p class="font-bold">uninstall.sh</p>
+                      <p>targets</p>
+                      <p>symlink rule</p>
+                      <p>backup report</p>
+                    </div>
+                  </div>
+                  <div class="module border-red-200">
+                    <div
+                      class="interface-strip bg-red-100 border-red-300"
+                    ></div>
+                    <div class="impl-strip p-3 text-xs space-y-2 h-52">
+                      <p class="font-bold text-red-700">README / AGENTS</p>
+                      <p>targets</p>
+                      <p>install contract</p>
+                      <p>prereq prose</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-xs text-red-600 font-bold mt-3">
+                  red module = install contract leakage
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-stone-50 p-4">
+                <p class="diagram-title mb-3">
+                  After — contract behind one seam
+                </p>
+                <div
+                  class="paper rounded-lg border border-slate-200 p-4 min-h-[285px]"
+                >
+                  <div
+                    class="deep rounded-xl border-4 border-slate-900 p-5 shadow-xl text-center"
+                  >
+                    <div
+                      class="text-xs uppercase tracking-wider text-slate-300 font-bold"
+                    >
+                      Deep module
+                    </div>
+                    <div class="text-lg font-black">dotfiles install plan</div>
+                    <div class="mt-2 text-xs text-slate-300">
+                      managed links, prerequisites, macOS policy, backup
+                      invariants
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-4 gap-2 mt-6 text-center text-xs">
+                    <div class="module">install<br />adapter</div>
+                    <div class="module">uninstall<br />adapter</div>
+                    <div class="module">docs<br />adapter</div>
+                    <div class="module">temp HOME<br />tests</div>
+                  </div>
+                  <div
+                    class="mt-5 rounded-lg border border-dashed border-slate-300 p-3 text-sm text-slate-600"
+                  >
+                    Seam: the install contract. The interface is the test
+                    surface.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="grid gap-4 md:grid-cols-3">
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Problem
+                </p>
+                <p class="mt-1 text-sm">
+                  The install contract touches user paths, but its current
+                  module shape gives tests no small interface to exercise.
+                </p>
+              </div>
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Solution
+                </p>
+                <p class="mt-1 text-sm">
+                  Concentrate managed targets and invariants in a deep install
+                  plan module; keep scripts as adapters.
+                </p>
+              </div>
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Benefits
+                </p>
+                <ul class="mt-1 text-sm list-disc pl-5 space-y-1">
+                  <li>locality: one target list</li>
+                  <li>leverage: install and uninstall</li>
+                  <li>non-destructive contract tested</li>
+                  <li>Global Editor Contract stays visible</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article
+          id="nvim-runtime-harness"
+          class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+        >
+          <div class="p-6 space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h2 class="text-2xl font-black tracking-tight">
+                Deepen the Neovim runtime test harness
+              </h2>
+              <div class="flex gap-2">
+                <span class="badge bg-amber-100 text-amber-800"
+                  >Worth exploring</span
+                >
+                <span class="badge bg-slate-100 text-slate-700">mock</span>
+              </div>
+            </div>
+            <div>
+              <p
+                class="text-xs uppercase tracking-wider font-bold text-slate-500 mb-2"
+              >
+                Files
+              </p>
+              <div
+                class="font-mono text-sm text-slate-700 grid gap-1 sm:grid-cols-2"
+              >
+                <span>nvim/tests/terminal_tool_spec.lua</span>
+                <span>nvim/lua/custom/lib/terminal_tool.lua</span>
+                <span>nvim/lua/custom/plugins/hunk.lua</span>
+                <span>nvim/lua/custom/plugins/lazygit.lua</span>
+                <span>nvim/lua/custom/plugins/flatten.lua</span>
+                <span>nvim/lua/custom/lib/pack.lua</span>
+              </div>
+            </div>
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div class="rounded-xl border border-slate-200 bg-stone-50 p-4">
+                <p class="diagram-title mb-3">
+                  Before — fake runtime trapped in one spec
+                </p>
+                <div
+                  class="rounded-lg border border-slate-200 bg-white p-4 min-h-[285px]"
+                >
+                  <div class="relative h-64">
+                    <div
+                      class="absolute left-2 top-2 w-[86%] h-[88%] rounded-xl border-2 border-slate-300 bg-stone-50 p-4"
+                    >
+                      <div class="font-mono text-sm font-bold">
+                        terminal_tool_spec.lua
+                      </div>
+                      <div class="mt-4 grid grid-cols-2 gap-3 text-xs">
+                        <div class="module border-red-200">
+                          fake_vim<br /><span class="text-red-600"
+                            >large implicit interface</span
+                          >
+                        </div>
+                        <div class="module">terminal assertions</div>
+                        <div class="module">handoff cases</div>
+                        <div class="module">production declarations</div>
+                      </div>
+                    </div>
+                    <svg
+                      class="absolute left-0 top-0 w-full h-full"
+                      viewBox="0 0 420 260"
+                      fill="none"
+                    >
+                      <path
+                        d="M82 118 C30 118 30 210 112 210"
+                        class="leak"
+                        stroke-width="3"
+                        stroke-dasharray="5 5"
+                      />
+                      <path d="M112 210 l-10 -5 l2 11 z" fill="#dc2626" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-stone-50 p-4">
+                <p class="diagram-title mb-3">After — reusable runtime seam</p>
+                <div class="rounded-lg border border-slate-200 bg-white p-4">
+                  <pre class="mermaid">
+flowchart TB
+  T[terminal-tool tests] --> H[Neovim runtime harness]
+  P[pack tests] --> H
+  K[keymap tests] --> H
+  H:::deep --> J[jobs]
+  H --> W[windows]
+  H --> M[mappings]
+  H --> E[env]
+  R[real headless Neovim] -. second adapter .-> H
+  classDef deep fill:#0f172a,stroke:#0f172a,color:#f8fafc,stroke-width:4px;
+                  </pre>
+                </div>
+              </div>
+            </div>
+            <div class="grid gap-4 md:grid-cols-3">
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Problem
+                </p>
+                <p class="mt-1 text-sm">
+                  The terminal-tool module has depth, but its test fake is
+                  shallow: every runtime detail sits in the spec interface.
+                </p>
+              </div>
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Solution
+                </p>
+                <p class="mt-1 text-sm">
+                  Move fake Neovim behavior behind a deep runtime harness; tests
+                  cross that seam instead of editing the fake directly.
+                </p>
+              </div>
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Benefits
+                </p>
+                <ul class="mt-1 text-sm list-disc pl-5 space-y-1">
+                  <li>locality: fixture bugs concentrate</li>
+                  <li>leverage: more Neovim tests</li>
+                  <li>two adapters justify seam</li>
+                  <li>Review Surface handoff stays testable</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article
+          id="pack-build"
+          class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+        >
+          <div class="p-6 space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h2 class="text-2xl font-black tracking-tight">
+                Deepen package build ownership
+              </h2>
+              <div class="flex gap-2">
+                <span class="badge bg-slate-100 text-slate-700"
+                  >Speculative</span
+                >
+                <span class="badge bg-slate-100 text-slate-700"
+                  >in-process</span
+                >
+              </div>
+            </div>
+            <div>
+              <p
+                class="text-xs uppercase tracking-wider font-bold text-slate-500 mb-2"
+              >
+                Files
+              </p>
+              <div
+                class="font-mono text-sm text-slate-700 grid gap-1 sm:grid-cols-2"
+              >
+                <span>nvim/lua/custom/lib/pack.lua</span>
+                <span>nvim/lua/custom/plugins/fff.lua</span>
+                <span>nvim/lua/custom/plugins/render-markdown.lua</span>
+                <span>nvim/lua/kickstart/plugins/treesitter.lua</span>
+                <span>nvim/lua/kickstart/plugins/debug.lua</span>
+                <span>nvim/lua/kickstart/plugins/blink-cmp.lua</span>
+              </div>
+            </div>
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div class="rounded-xl border border-slate-200 bg-stone-50 p-4">
+                <p class="diagram-title mb-3">
+                  Before — build behavior keyed elsewhere
+                </p>
+                <div class="rounded-lg border border-slate-200 bg-white p-4">
+                  <pre class="mermaid">
+flowchart LR
+  A[plugin modules] --> B[vim.pack.add]
+  E[PackChanged event] --> C[pack.lua]
+  C -. package name strings .-> D[make / parser install / binary download]
+  A -. hidden build requirement .-> C
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#dc2626;
+  class C,D leak;
+                  </pre>
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-stone-50 p-4">
+                <p class="diagram-title mb-3">
+                  After — package owns its build implementation
+                </p>
+                <div
+                  class="paper rounded-lg border border-slate-200 p-4 min-h-[285px] flex flex-col justify-center"
+                >
+                  <div class="grid grid-cols-3 gap-2 text-xs text-center">
+                    <div class="module">treesitter<br />declaration</div>
+                    <div class="module">LuaSnip<br />declaration</div>
+                    <div class="module">fff<br />declaration</div>
+                  </div>
+                  <div class="arrow"></div>
+                  <div
+                    class="deep rounded-xl border-4 border-slate-900 p-5 text-center shadow-xl"
+                  >
+                    <div
+                      class="text-xs uppercase tracking-wider text-slate-300 font-bold"
+                    >
+                      Deep module
+                    </div>
+                    <div class="text-lg font-black">pack change handling</div>
+                    <div class="mt-2 text-xs text-slate-300">
+                      native vim.pack kept; package build behavior stays local
+                    </div>
+                  </div>
+                  <div class="mt-4 module seam text-center text-sm">
+                    PackChanged adapter
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+            >
+              ADR-0004 guardrail: preserve native vim.pack and avoid recreating
+              lazy.nvim's trigger DSL; reopen only if build-hook locality
+              becomes real friction.
+            </div>
+            <div class="grid gap-4 md:grid-cols-3">
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Problem
+                </p>
+                <p class="mt-1 text-sm">
+                  Package build behavior is separated from package declaration,
+                  so the seam leaks by package name strings.
+                </p>
+              </div>
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Solution
+                </p>
+                <p class="mt-1 text-sm">
+                  Keep vim.pack native, but let the pack module own build
+                  locality instead of scattering build knowledge across names.
+                </p>
+              </div>
+              <div>
+                <p
+                  class="text-xs uppercase tracking-wider font-bold text-slate-500"
+                >
+                  Benefits
+                </p>
+                <ul class="mt-1 text-sm list-disc pl-5 space-y-1">
+                  <li>locality: build with package</li>
+                  <li>leverage: one error path</li>
+                  <li>Default Bias preserved</li>
+                  <li>tests simulate PackChanged</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section
+        id="top-recommendation"
+        class="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-7"
+      >
+        <p
+          class="text-xs uppercase tracking-[0.2em] font-black text-emerald-700"
+        >
+          Top recommendation
+        </p>
+        <h2 class="mt-2 text-2xl font-black">
+          Start with
+          <a class="underline decoration-emerald-500" href="#language-tooling"
+            >Development Surface language tooling</a
+          >.
+        </h2>
+        <p class="mt-2 text-slate-700">
+          It has the clearest deletion test: remove the proposed deep module and
+          language complexity immediately scatters back across LSP, format,
+          lint, parser, and Mason modules.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -13,9 +13,9 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `init.lua` - Core settings, basic keymaps, autocommands, native `vim.pack` build hooks, core UI plugins, and top-level module imports
 - `after/lsp/lua_ls.lua` - LSP server override for `lua_ls` (the only server that needs substantial custom logic)
 - `colors/custom.lua` - Custom colorscheme (transparent backgrounds, peach accents)
-- `lua/kickstart/parsers.lua` - Shared nvim-treesitter parser install set
+- `lua/kickstart/parsers.lua` - nvim-treesitter parser install set consumed by `custom/lib/pack.lua` after package installs and updates; runtime parser attachment remains on demand
 - `lua/kickstart/plugins/` - Auto-imported by `lua/kickstart/plugins/init.lua` in the established startup order; each plugin file calls `vim.pack.add()` for the plugin(s) it owns and then configures them:
-  - `lsp.lua` - nvim-lspconfig, Mason, fidget, `servers` table, and `vim.lsp.config()` overrides
+  - `lsp.lua` - nvim-lspconfig, Mason, fidget, native `vim.lsp.config()` overrides, and Language Tooling Inventory projections
   - `blink-cmp.lua` - blink.cmp completion with LuaSnip
   - `conform.lua` - conform.nvim formatter config and format-on-save
   - `telescope.lua` - Telescope pickers and LSP reference/definition keymaps
@@ -27,8 +27,10 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
 - `lua/custom/lib/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
+- `lua/custom/lib/language_tooling.lua` - Pure-Lua Language Tooling factory, validation, and adapter-facing projections
 - `lua/custom/lib/plugins_loader.lua` - Shared sorted directory plugin module loader used by `kickstart.plugins` and `custom.plugins`
 - `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should run in a persistent Neovim floating terminal while leaving host tmux navigation available
+- `lua/custom/language_tooling.lua` - Canonical cross-tool Language Tooling Inventory; declare each Language Family's LSPs, Mason tools, filetypes, formatters, and linters here
 - `lua/custom/plugins/` - Auto-imported by `lua/custom/plugins/init.lua`; every sibling `*.lua` file is required, following symlinks:
   - `init.lua` - Custom plugin loader
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
@@ -37,6 +39,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
   - `render-markdown.lua` - In-editor Markdown rendering without Nerd Font dependencies (owns `<leader>tm`)
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, persistence, handoff, failure/race recovery, environment handling, live float sizing, and host tmux input routing
+- `tests/language_tooling_spec.lua` - Pure-Lua interface, validation, and production-inventory regression checks for Language Tooling projections
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside the Neovim float
 - `tests/lsp_hover_spec.lua` - Headless screen regression using an in-process LSP to prove native `K` hover documentation remains complete
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
@@ -91,15 +94,18 @@ Configured with multiple language servers (TypeScript, Python, Rust, Go, Lua, JS
 2. **`after/lsp/*.lua`** — servers with substantial custom logic (only `lua_ls`)
 3. **`vim.lsp.config()` in `lua/kickstart/plugins/lsp.lua`** — small overrides (settings, init_options)
 
+Common language facts live in `lua/custom/language_tooling.lua`. Its pure-Lua factory projects the ordered LSP server list, Mason install list, Conform formatter map, and nvim-lint linter map to the existing plugin modules. Language-level selection and ordering policy, including Conform formatter fallback chains, lives in that inventory. Plugin setup, event wiring, invocation, and other runtime behavior remain in the plugin modules. Treesitter's package-build parser set remains in `lua/kickstart/parsers.lua`; it is intentionally separate from the Language Tooling Inventory.
+
 Run `nvim -u NONE --headless -l nvim/tests/lsp_hover_spec.lua` to verify native `K` hover documentation renders without clipping.
+
+Run `nvim --clean --headless -l nvim/tests/language_tooling_spec.lua` to verify the Language Tooling interface and production inventory.
 
 To add a new language server:
 
-1. Add entry to the `servers` table in `lua/kickstart/plugins/lsp.lua` (`server_name = 'mason-package-name'`)
-2. Add a `vim.lsp.config()` override in the same file if custom settings are needed
-3. Only create `after/lsp/<server_name>.lua` if the server needs substantial logic (e.g., `on_init`)
-4. Add formatters to `formatters_by_ft` in `lua/kickstart/plugins/conform.lua` if needed
-5. Run `:Mason` to install required tools
+1. Add or update one Language Family in `lua/custom/language_tooling.lua`. Keep `lsps` as a list; declare `filetypes` when the family has formatters or linters.
+2. Add a `vim.lsp.config()` override in `lua/kickstart/plugins/lsp.lua` if plugin-native settings are needed.
+3. Only create `after/lsp/<server_name>.lua` if the server needs substantial logic such as `on_init`.
+4. Run the Language Tooling regression checks, then use `:Mason` to inspect installation status.
 
 ### Terminal Integration
 
@@ -159,11 +165,9 @@ Neo-tree file explorer is enabled with right-side positioning and minimal stylin
 ### Customization Points
 
 - `lua/custom/plugins/` - Drop a new `*.lua` file here and it will be auto-imported by the custom plugin loader
+- `lua/custom/language_tooling.lua` - Add or change language-server, Mason-tool, formatter, and linter declarations through one Language Family entry
 - `after/lsp/*.lua` - Add LSP server configs with substantial custom logic
 - `vim.lsp.config()` in `lua/kickstart/plugins/lsp.lua` for small LSP server overrides
-- Modify the `servers` table in `lua/kickstart/plugins/lsp.lua` to enable or remove LSP servers
-- Adjust `formatters_by_ft` in `lua/kickstart/plugins/conform.lua` for language-specific formatting
-- Adjust `linters_by_ft` in `lua/kickstart/plugins/lint.lua` for language-specific linting
 
 ### Important Settings
 

@@ -2,6 +2,7 @@
 -- See `:help lsp` and `:help lsp-config`
 
 local gh = require('custom.lib.pack').gh
+local tooling = require 'custom.language_tooling'
 
 vim.pack.add {
   gh 'neovim/nvim-lspconfig',
@@ -93,25 +94,6 @@ local capabilities = require('blink.cmp').get_lsp_capabilities()
 --
 -- See `:help lsp-config` for more information.
 
--- LSP servers to enable: maps server name → Mason package name.
--- nvim-lspconfig provides base configs (cmd, filetypes, root_dir, commands).
--- Server-specific overrides below are merged on top (highest priority).
--- lua_ls has substantial custom logic and lives in after/lsp/lua_ls.lua.
-local servers = {
-  lua_ls = 'lua-language-server',
-  ts_ls = 'typescript-language-server',
-  rust_analyzer = 'rust-analyzer',
-  gopls = 'gopls',
-  pyright = 'pyright',
-  jsonls = 'json-lsp',
-  yamlls = 'yaml-language-server',
-  html = 'html-lsp',
-  cssls = 'css-lsp',
-  hls = 'haskell-language-server',
-  jdtls = 'jdtls',
-  kotlin_lsp = 'kotlin-lsp',
-}
-
 -- Server-specific overrides (highest priority, merged on top of nvim-lspconfig defaults)
 vim.lsp.config('rust_analyzer', {
   settings = {
@@ -141,30 +123,18 @@ vim.lsp.config('cssls', { init_options = { provideFormatter = false } })
 vim.lsp.config('html', { init_options = { provideFormatter = false } })
 
 -- Configure and enable each server with blink.cmp capabilities
-local ensure_installed = {}
-for name, mason_pkg in pairs(servers) do
+for _, name in ipairs(tooling.lsp_servers()) do
   vim.lsp.config(name, { capabilities = capabilities })
   vim.lsp.enable(name)
-  table.insert(ensure_installed, mason_pkg)
 end
 
--- Ensure the servers and tools above are installed via Mason
+-- Ensure declared language servers, formatters, and linters are installed via Mason.
 --
 -- To check the current status of installed tools and/or manually install
 -- other tools, you can run
 --    :Mason
 --
 -- You can press `g?` for help in this menu.
-vim.list_extend(ensure_installed, {
-  'stylua',
-  'prettier',
-  'prettierd',
-  'eslint_d',
-  'ruff',
-  'google-java-format',
-  'ktlint',
-})
-
 require('mason-tool-installer').setup {
-  ensure_installed = ensure_installed,
+  ensure_installed = tooling.mason_tools(),
 }

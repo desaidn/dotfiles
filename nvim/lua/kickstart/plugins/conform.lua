@@ -2,7 +2,7 @@
 -- See `:help conform`
 
 local gh = require('custom.lib.pack').gh
-local prettier = { 'prettierd', 'prettier', stop_after_first = true }
+local tooling = require 'custom.language_tooling'
 
 vim.pack.add { gh 'stevearc/conform.nvim' }
 
@@ -22,22 +22,7 @@ require('conform').setup {
       }
     end
   end,
-  formatters_by_ft = {
-    lua = { 'stylua' },
-    javascript = prettier,
-    javascriptreact = prettier,
-    typescript = prettier,
-    typescriptreact = prettier,
-    json = prettier,
-    jsonc = prettier,
-    css = prettier,
-    scss = prettier,
-    html = prettier,
-    markdown = prettier,
-    python = { 'ruff_fix', 'ruff_format', 'ruff_organize_imports' },
-    java = { 'google-java-format' },
-    kotlin = { 'ktlint' },
-  },
+  formatters_by_ft = tooling.formatters_by_ft(),
 }
 
 vim.keymap.set({ 'n', 'v' }, '<leader>f', function() require('conform').format { async = true, lsp_format = 'fallback' } end, { desc = '[F]ormat buffer' })

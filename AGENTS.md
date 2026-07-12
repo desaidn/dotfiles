@@ -90,6 +90,7 @@ tmux new-session -s dev
 
 - Each tool maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`
 - Individual tools may have their own AGENTS.md files (e.g., `nvim/AGENTS.md`, `tmux/AGENTS.md`)
+- Long-lived architecture review reports that the user chooses to retain live under `docs/`; generated reports should not remain at the repository root
 - Configurations are environment-specific and not intended for multi-user scenarios
 
 ### Tool Integration Points
