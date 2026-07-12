@@ -9,6 +9,9 @@ local colors = {
   peach = '#ffb86c', -- accent, tags, functions, statusline insert mode
   blue = '#a6dbff', -- statusline normal mode
   green = '#b4f6c0', -- statusline command mode
+  -- Good alternative(s):
+  -- yellow = '#5f5a2a', -- - Less saturated, blends nicely with syntax colors.
+  yellow = '#6a4f1f', -- muted highlighter-style search and visual selection
   grey = '#7a8a9e', -- tag delimiters
   charcoal = '#2a2e38', -- floats, statusline, popups
   midnight = '#1e1e2e', -- statusline foreground
@@ -69,9 +72,10 @@ vim.api.nvim_set_hl(0, 'DiffDelete', { bg = colors.dark_red })
 vim.api.nvim_set_hl(0, 'DiffText', { bg = colors.mid_green, fg = colors.white })
 vim.api.nvim_set_hl(0, 'DiffTextAdd', { bg = colors.light_green, fg = colors.white })
 
--- Keep search matches visually identical to Visual line selection.
-for _, group in ipairs { 'Search', 'IncSearch', 'CurSearch' } do
-  vim.api.nvim_set_hl(0, group, { link = 'Visual' })
+-- Keep search matches and visual selection consistently yellow-ish without overriding syntax foregrounds.
+local selection = { bg = colors.yellow }
+for _, group in ipairs { 'Search', 'IncSearch', 'CurSearch', 'Visual', 'VisualNOS' } do
+  vim.api.nvim_set_hl(0, group, selection)
 end
 
 -- Popup menu border (used when pumborder = 'rounded')
