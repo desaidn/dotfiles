@@ -41,7 +41,6 @@ Point an agent at one brief and ask it to take ownership of that item. The agent
 ## Index
 
 - [Deepen the Neovim runtime test harness](01-neovim-runtime-test-harness.md)
-- [Improve the Language Tooling directory structure](02-language-tooling-directory-structure.md)
 - [Add OCaml and OxCaml](03-ocaml-and-oxcaml.md)
 - [Add Pi integration](04-pi-integration.md)
 - [Add a local model](05-local-model.md)

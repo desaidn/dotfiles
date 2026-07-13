@@ -1,4 +1,4 @@
-local M = {}
+local model = {}
 
 local options_fields = { languages = true }
 local language_fields = {
@@ -97,7 +97,7 @@ end
 
 ---@param options LanguageToolingOptions
 ---@return LanguageTooling
-function M.create(options)
+function model.create(options)
   if not is_plain_table(options) then error('Language Tooling options must be a plain table', 2) end
   validate_fields(options, options_fields, 'Language Tooling options')
   if not is_array(options.languages) then error('languages must be a plain table containing an ordered array', 2) end
@@ -230,4 +230,4 @@ function M.create(options)
   }
 end
 
-return M
+return model

@@ -1,4 +1,4 @@
-local language_tooling = require 'custom.lib.language_tooling'
+local model = require 'custom.language_tooling.model'
 
 ---@type LanguageToolingFormatterList
 local prettier = { 'prettierd', 'prettier', stop_after_first = true }
@@ -114,4 +114,4 @@ local languages = {
   },
 }
 
-return language_tooling.create { languages = languages }
+return model.create { languages = languages }

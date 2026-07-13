@@ -8,6 +8,8 @@ package.path = table.concat({
   package.path,
 }, ';')
 
+local model = require 'custom.language_tooling.model'
+
 local function check(name, body)
   local ok, err = pcall(body)
   if ok then
@@ -46,8 +48,7 @@ local function assert_deep_equal(actual, expected, path)
 end
 
 check('projects LSP servers in language declaration order', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local tooling = language_tooling.create {
+  local tooling = model.create {
     languages = {
       {
         name = 'typescript',
@@ -68,8 +69,7 @@ check('projects LSP servers in language declaration order', function()
 end)
 
 check('projects unique Mason installs in first-seen language order', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local tooling = language_tooling.create {
+  local tooling = model.create {
     languages = {
       {
         name = 'typescript',
@@ -92,8 +92,7 @@ check('projects unique Mason installs in first-seen language order', function()
 end)
 
 check('projects native formatter lists to every declared filetype', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local tooling = language_tooling.create {
+  local tooling = model.create {
     languages = {
       {
         name = 'typescript',
@@ -117,8 +116,7 @@ check('projects native formatter lists to every declared filetype', function()
 end)
 
 check('projects linter lists to every declared filetype', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local tooling = language_tooling.create {
+  local tooling = model.create {
     languages = {
       {
         name = 'typescript',
@@ -143,7 +141,6 @@ check('projects linter lists to every declared filetype', function()
 end)
 
 check('keeps validated declarations isolated from later mutation', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local options = {
     languages = {
       {
@@ -156,7 +153,7 @@ check('keeps validated declarations isolated from later mutation', function()
       },
     },
   }
-  local tooling = language_tooling.create(options)
+  local tooling = model.create(options)
 
   options.languages[1].lsps[1].server = 'mutated_lsp'
   options.languages[1].tools[1] = 'mutated_tool'
@@ -178,8 +175,7 @@ check('keeps validated declarations isolated from later mutation', function()
 end)
 
 check('rejects ambiguous formatter and linter filetype ownership', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       {
         name = 'web-script',
@@ -202,8 +198,7 @@ check('rejects ambiguous formatter and linter filetype ownership', function()
 end)
 
 check('requires filetypes when a Language Family declares formatters or linters', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       {
         name = 'python',
@@ -220,7 +215,6 @@ check('requires filetypes when a Language Family declares formatters or linters'
 end)
 
 check('validates field shapes before cross-field requirements', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local invalid_cases = {
     {
       field = 'formatters',
@@ -235,7 +229,7 @@ check('validates field shapes before cross-field requirements', function()
   }
 
   for _, invalid_case in ipairs(invalid_cases) do
-    local ok, err = pcall(language_tooling.create, { languages = { invalid_case.language } })
+    local ok, err = pcall(model.create, { languages = { invalid_case.language } })
     assert(not ok, string.format('expected invalid %s shape to fail', invalid_case.field))
     local message = tostring(err)
     assert(message:find(invalid_case.language.name, 1, true), 'error did not name the Language Family')
@@ -245,8 +239,7 @@ check('validates field shapes before cross-field requirements', function()
 end)
 
 check('requires every Language Family to have a name', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       ---@diagnostic disable-next-line: missing-fields -- Intentionally invalid input verifies runtime validation.
       { lsps = { { server = 'lua_ls' } } },
@@ -260,7 +253,6 @@ check('requires every Language Family to have a name', function()
 end)
 
 check('requires Language Family and LSP declarations to be tables', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local invalid_cases = {
     {
       label = 'Language Family',
@@ -277,7 +269,7 @@ check('requires Language Family and LSP declarations to be tables', function()
   }
 
   for _, invalid_case in ipairs(invalid_cases) do
-    local ok, err = pcall(language_tooling.create, invalid_case.options)
+    local ok, err = pcall(model.create, invalid_case.options)
     assert(not ok, string.format('expected a non-table %s declaration to fail', invalid_case.label))
     local message = tostring(err)
     assert(message:find(invalid_case.label, 1, true), string.format('error did not identify the invalid %s declaration', invalid_case.label))
@@ -286,7 +278,6 @@ check('requires Language Family and LSP declarations to be tables', function()
 end)
 
 check('requires declarations to use plain data tables', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local invalid_cases = {
     {
       context = 'options',
@@ -332,7 +323,7 @@ check('requires declarations to use plain data tables', function()
   }
 
   for _, invalid_case in ipairs(invalid_cases) do
-    local ok, err = pcall(language_tooling.create, invalid_case.options)
+    local ok, err = pcall(model.create, invalid_case.options)
     assert(not ok, string.format('expected metatable-backed %s declaration to fail', invalid_case.context))
     local message = tostring(err)
     assert(message:find(invalid_case.context, 1, true), 'error did not identify the declaration context')
@@ -341,7 +332,6 @@ check('requires declarations to use plain data tables', function()
 end)
 
 check('rejects unknown declaration fields', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local invalid_cases = {
     {
       context = 'options',
@@ -372,7 +362,7 @@ check('rejects unknown declaration fields', function()
   }
 
   for _, invalid_case in ipairs(invalid_cases) do
-    local ok, err = pcall(language_tooling.create, invalid_case.options)
+    local ok, err = pcall(model.create, invalid_case.options)
     assert(not ok, string.format('expected unknown %s field to fail', invalid_case.field))
     local message = tostring(err)
     assert(message:find(invalid_case.context, 1, true), 'error did not identify the declaration context')
@@ -381,8 +371,7 @@ check('rejects unknown declaration fields', function()
 end)
 
 check('rejects duplicate Language Family names', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       { name = 'typescript', lsps = { { server = 'ts_ls' } } },
       { name = 'typescript', tools = { 'prettier' } },
@@ -396,8 +385,7 @@ check('rejects duplicate Language Family names', function()
 end)
 
 check('requires every LSP declaration to name its runtime server', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       {
         name = 'lua',
@@ -414,7 +402,6 @@ check('requires every LSP declaration to name its runtime server', function()
 end)
 
 check('requires ordered arrays for languages and LSP declarations', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local sparse_languages = {}
   sparse_languages[2] = true
   sparse_languages[5] = true
@@ -445,18 +432,17 @@ check('requires ordered arrays for languages and LSP declarations', function()
   }
 
   for _, invalid_case in ipairs(invalid_cases) do
-    local ok, err = pcall(language_tooling.create, invalid_case.options)
+    local ok, err = pcall(model.create, invalid_case.options)
     assert(not ok, string.format('expected keyed %s data to fail', invalid_case.field))
     assert(tostring(err):find(invalid_case.field, 1, true), string.format('error did not identify invalid %s data', invalid_case.field))
   end
 end)
 
 check('rejects sparse install tool arrays', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local sparse_tools = {}
   sparse_tools[2] = 'ruff'
 
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       { name = 'python', tools = sparse_tools },
     },
@@ -470,11 +456,10 @@ check('rejects sparse install tool arrays', function()
 end)
 
 check('rejects sparse filetype arrays', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local sparse_filetypes = {}
   sparse_filetypes[2] = 'python'
 
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       {
         name = 'python',
@@ -492,11 +477,10 @@ check('rejects sparse filetype arrays', function()
 end)
 
 check('rejects sparse linter arrays', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local sparse_linters = {}
   sparse_linters[2] = 'ruff'
 
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       {
         name = 'python',
@@ -514,11 +498,10 @@ check('rejects sparse linter arrays', function()
 end)
 
 check('rejects sparse formatter lists while allowing fallback metadata', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local sparse_formatters = { stop_after_first = true }
   sparse_formatters[2] = 'prettier'
 
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       {
         name = 'typescript',
@@ -536,14 +519,13 @@ check('rejects sparse formatter lists while allowing fallback metadata', functio
 end)
 
 check('restricts formatter metadata to boolean stop_after_first', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local invalid_formatters = {
     { 'prettier', stop_after_first = 'yes' },
     { 'prettier', timeout_ms = 500 },
   }
 
   for _, formatters in ipairs(invalid_formatters) do
-    local ok, err = pcall(language_tooling.create, {
+    local ok, err = pcall(model.create, {
       languages = {
         {
           name = 'typescript',
@@ -562,7 +544,6 @@ check('restricts formatter metadata to boolean stop_after_first', function()
 end)
 
 check('requires every Mason install name to be a non-empty string', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local invalid_languages = {
     {
       name = 'lua',
@@ -575,7 +556,7 @@ check('requires every Mason install name to be a non-empty string', function()
   }
 
   for _, language in ipairs(invalid_languages) do
-    local ok, err = pcall(language_tooling.create, { languages = { language } })
+    local ok, err = pcall(model.create, { languages = { language } })
     assert(not ok, string.format('expected invalid Mason install data for %s to fail', language.name))
     local message = tostring(err)
     assert(message:find(language.name, 1, true), 'error did not name the Language Family')
@@ -584,7 +565,6 @@ check('requires every Mason install name to be a non-empty string', function()
 end)
 
 check('requires filetype formatter and linter names to be non-empty strings', function()
-  local language_tooling = require 'custom.lib.language_tooling'
   local invalid_cases = {
     {
       field = 'filetypes',
@@ -601,7 +581,7 @@ check('requires filetype formatter and linter names to be non-empty strings', fu
   }
 
   for _, invalid_case in ipairs(invalid_cases) do
-    local ok, err = pcall(language_tooling.create, { languages = { invalid_case.language } })
+    local ok, err = pcall(model.create, { languages = { invalid_case.language } })
     assert(not ok, string.format('expected invalid %s data to fail', invalid_case.field))
     local message = tostring(err)
     assert(message:find(invalid_case.language.name, 1, true), 'error did not name the Language Family')
@@ -610,8 +590,7 @@ check('requires filetype formatter and linter names to be non-empty strings', fu
 end)
 
 check('validates filetype values whenever filetypes are declared', function()
-  local language_tooling = require 'custom.lib.language_tooling'
-  local ok, err = pcall(language_tooling.create, {
+  local ok, err = pcall(model.create, {
     languages = {
       ---@diagnostic disable-next-line: assign-type-mismatch -- Intentionally invalid input verifies runtime validation.
       { name = 'metadata-only', filetypes = { 42 } },

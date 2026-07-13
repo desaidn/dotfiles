@@ -6,16 +6,16 @@ Provide reliable OCaml and OxCaml editing in Neovim—LSP features, formatting, 
 
 ## Context / current state
 
-The canonical Language Tooling Inventory in [`lua/custom/language_tooling.lua`](../../nvim/lua/custom/language_tooling.lua) currently has no OCaml Language Family. [`parsers.lua`](../../nvim/lua/kickstart/parsers.lua) does not install OCaml parsers.
+The canonical Language Tooling Inventory in [`lua/custom/language_tooling/init.lua`](../../nvim/lua/custom/language_tooling/init.lua) currently has no OCaml Language Family. [`parsers.lua`](../../nvim/lua/kickstart/parsers.lua) does not install OCaml parsers.
 
-The inventory factory in [`lua/custom/lib/language_tooling.lua`](../../nvim/lua/custom/lib/language_tooling.lua) currently treats every LSP as Mason-managed: each LSP contributes either its explicit `install` package name or its server name to `mason_tools()`. This conflicts with current OCaml guidance, which recommends installing `ocaml-lsp-server` in the active opam switch because the language server is compiler-version-sensitive. `ocamlformat` is similarly expected to match the project toolchain. At the time this brief was written, `opam`, `ocamllsp`, `ocamlformat`, and `dune` were not available on the investigating workstation's `PATH`.
+The Language Tooling Model in [`lua/custom/language_tooling/model.lua`](../../nvim/lua/custom/language_tooling/model.lua) currently treats every LSP as Mason-managed: each LSP contributes either its explicit `install` package name or its server name to `mason_tools()`. This conflicts with current OCaml guidance, which recommends installing `ocaml-lsp-server` in the active opam switch because the language server is compiler-version-sensitive. `ocamlformat` is similarly expected to match the project toolchain. At the time this brief was written, `opam`, `ocamllsp`, `ocamlformat`, and `dune` were not available on the investigating workstation's `PATH`.
 
 OxCaml is a fast-moving extension of OCaml, not a separate Neovim filetype. Its toolchain supplies modified OCaml tools, including `ocaml-lsp-server` and `ocamlformat`, through an OxCaml opam switch. The same Neovim language intent should therefore work with either toolchain while resolving binaries from the intended project environment.
 
 ## Scope
 
 - Verify current upstream OCaml, OxCaml, `ocaml-lsp`, `nvim-lspconfig`, Conform, Treesitter, Mason, and opam guidance before choosing the integration.
-- Extend the Language Tooling model as needed to represent an LSP or formatter whose installation is owned by the project toolchain rather than Mason.
+- Extend the Language Tooling Model as needed to represent an LSP or formatter whose installation is owned by the project toolchain rather than Mason.
 - Add one coherent OCaml Language Family covering both upstream OCaml and OxCaml project environments.
 - Enable the current `ocamllsp` configuration without allowing Mason to shadow an active switch's incompatible binary.
 - Configure `ocamlformat` for the appropriate Neovim filetypes without making Mason the source of truth unless current upstream guidance has changed.
@@ -50,7 +50,7 @@ OxCaml is a fast-moving extension of OCaml, not a separate Neovim filetype. Its 
 - Opening a project containing OxCaml-only syntax attaches the OxCaml-aware `ocamllsp` and provides diagnostics/hover without parser-version errors caused by an upstream-only server.
 - `ocamlformat` formats supported OCaml/OxCaml buffers using the intended project toolchain.
 - Mason does not install or prepend an incompatible OCaml LSP/formatter that shadows the active switch.
-- The Language Tooling Inventory represents installation ownership explicitly, validates it, and projects all existing languages exactly as before.
+- The Language Tooling Model represents installation ownership explicitly, validates it, and projects all existing languages exactly as before.
 - OCaml implementation and interface files receive working Treesitter highlighting with no startup errors.
 - Toolchain prerequisites and switch-selection expectations are documented without machine-specific paths.
 - The existing language-tooling regression suite and a clean production Neovim startup remain green.
@@ -79,9 +79,9 @@ Upstream behavior is especially time-sensitive here. Before changing code, re-re
 
 ## Starting points / references
 
-- [`nvim/lua/custom/language_tooling.lua`](../../nvim/lua/custom/language_tooling.lua) — current Language Tooling Inventory.
-- [`nvim/lua/custom/lib/language_tooling.lua`](../../nvim/lua/custom/lib/language_tooling.lua) — LSP installation schema, validation, and Mason projection.
-- [`nvim/tests/language_tooling_spec.lua`](../../nvim/tests/language_tooling_spec.lua) — schema/projection tests and exact production inventory expectation.
+- [`nvim/lua/custom/language_tooling/init.lua`](../../nvim/lua/custom/language_tooling/init.lua) — current Language Tooling Inventory.
+- [`nvim/lua/custom/language_tooling/model.lua`](../../nvim/lua/custom/language_tooling/model.lua) — Language Tooling Model, including installation rules, validation, and Mason projection.
+- [`nvim/tests/language_tooling_spec.lua`](../../nvim/tests/language_tooling_spec.lua) — Model tests and exact production Inventory expectation.
 - [`nvim/lua/kickstart/plugins/lsp.lua`](../../nvim/lua/kickstart/plugins/lsp.lua) — `nvim-lspconfig`, Mason, and LSP enablement adapter.
 - [`nvim/lua/kickstart/plugins/conform.lua`](../../nvim/lua/kickstart/plugins/conform.lua) — formatter adapter.
 - [`nvim/lua/kickstart/parsers.lua`](../../nvim/lua/kickstart/parsers.lua) — package-build parser set.
