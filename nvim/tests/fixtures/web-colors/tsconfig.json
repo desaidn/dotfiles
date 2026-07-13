@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "jsx": "preserve",
+    "strict": true,
+    "target": "ES2022"
+  },
+  "include": ["*.js", "*.jsx", "*.ts", "*.tsx"]
+}

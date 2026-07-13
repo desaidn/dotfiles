@@ -61,6 +61,22 @@ On both machines, from the same fixture and repository revision, capture at leas
 
 Diff the machine-readable snapshots, apply the smallest justified change, then repeat the same capture and visually inspect the fixture in both terminal environments.
 
+The repository includes a synthetic fixture and a headless capture tool for this comparison. From the repository root, run this on each machine:
+
+```bash
+nvim --headless -u nvim/init.lua -l nvim/scripts/web_color_snapshot.lua capture /tmp/web-colors.json ~/Projects/desaidn.dev
+```
+
+Copy one snapshot to the other machine, then compare them:
+
+```bash
+nvim --headless -u nvim/init.lua -l nvim/scripts/web_color_snapshot.lua compare /tmp/personal.json /tmp/work.json
+```
+
+The final argument selects the project TypeScript installation used for semantic tokens and defaults to `~/Projects/desaidn.dev` when omitted. The capture prints the resolved definition for each representative token and writes the full evidence as JSON. The comparison exits non-zero only when resolved token colors differ; parser, query, plugin, LSP, TypeScript, or environment differences are reported separately so they can explain a mismatch without being mistaken for one.
+
+Because the capture is headless, its `headless_termguicolors` value does not prove what the TUI auto-detected. In a normal Neovim session on each machine, also run `:set termguicolors?` and record the result alongside the JSON snapshot.
+
 ## Starting points / references
 
 - [`nvim/colors/custom.lua`](../../nvim/colors/custom.lua) — inherited defaults and explicit web-tag groups.

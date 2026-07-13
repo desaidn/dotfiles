@@ -40,6 +40,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `render-markdown.lua` - In-editor Markdown rendering without Nerd Font dependencies (owns `<leader>tm`)
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/language_tooling_spec.lua` - Pure-Lua interface, validation, and production-inventory regression checks for Language Tooling projections
+- `tests/fixtures/web-colors/`, `scripts/web_color_snapshot.lua`, and `tests/web_color_snapshot_spec.lua` - Repository-safe web-language highlight fixture, cross-machine capture/compare command, and comparison regression checks
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab
 - `tests/lsp_hover_spec.lua` - Headless screen regression using an in-process LSP to prove native `K` hover documentation remains complete
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
@@ -99,6 +100,8 @@ Common language facts live in `lua/custom/language_tooling.lua`. Its pure-Lua fa
 Run `nvim -u NONE --headless -l nvim/tests/lsp_hover_spec.lua` to verify native `K` hover documentation renders without clipping.
 
 Run `nvim --clean --headless -l nvim/tests/language_tooling_spec.lua` to verify the Language Tooling interface and production inventory.
+
+Run `nvim --headless -u nvim/init.lua -l nvim/scripts/web_color_snapshot.lua capture /tmp/web-colors.json ~/Projects/desaidn.dev` on each machine to print and capture resolved TS, JS, HTML, JSX, and TSX colors using that project's TypeScript installation. Compare captures with the same script's `compare <left.json> <right.json>` command.
 
 To add a new language server:
 
