@@ -6,5 +6,4 @@
 - [Add Pi integration](docs/todos/04-pi-integration.md)
 - [Add a local model](docs/todos/05-local-model.md)
 - [Add Hunk preferences](docs/todos/06-hunk-preferences.md)
-- [Prevent lazygit and Hunk float stacking](docs/todos/07-terminal-tool-float-stacking.md)
 - [Make web-language colors consistent across machines](docs/todos/08-cross-machine-neovim-colors.md)

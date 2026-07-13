@@ -6,5 +6,5 @@ require('custom.lib.terminal_tool').create {
   command = { 'lazygit' },
   key = '<leader>gg',
   desc = 'Lazygit',
-  handoff = 'hide-and-acknowledge',
+  handoff = 'return-and-acknowledge',
 }

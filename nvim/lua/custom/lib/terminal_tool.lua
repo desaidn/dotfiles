@@ -8,11 +8,10 @@ local HANDOFF_GENERATION_ENV = 'DOTFILES_EDITOR_HANDOFF_GENERATION'
 local HANDOFF_DATA_KEY = 'terminal_tool_id'
 local HANDOFF_DATA_GENERATION_KEY = 'terminal_tool_generation'
 local HANDOFF_ACK_DELAY_MS = 300
-local RESIZE_GROUP = 'DotfilesTerminalTools'
 
 local tools = {}
 local tool_keys = {}
-local resize_events_registered = false
+local host_win = nil
 
 local function editor_env()
   local editor = vim.env.EDITOR
@@ -42,39 +41,57 @@ local function job_env(id, generation, extra_env)
   return env
 end
 
-local function window_geometry(win)
-  return {
-    win = win,
-    width = math.max(1, vim.api.nvim_win_get_width(win)),
-    height = math.max(1, vim.api.nvim_win_get_height(win)),
-  }
-end
-
-local function float_opts(geometry)
-  return {
-    relative = 'win',
-    win = geometry.win,
-    width = geometry.width,
-    height = geometry.height,
-    row = 0,
-    col = 0,
-    style = 'minimal',
-    border = 'none',
-  }
-end
-
 local function notify(tool, message, level) vim.notify(string.format('%s: %s', tool.spec.desc, message), level, { title = 'Terminal tool' }) end
 
-local function clear_window(tool)
-  local state = tool.state
-  if state.win and vim.api.nvim_win_is_valid(state.win) then
-    local ok = pcall(vim.api.nvim_win_hide, state.win)
-    if not ok and vim.api.nvim_win_is_valid(state.win) then return false end
+local function valid_window(win) return win ~= nil and vim.api.nvim_win_is_valid(win) end
+
+local function valid_tab(tab) return tab ~= nil and vim.api.nvim_tabpage_is_valid(tab) end
+
+local function restore_window(win)
+  if valid_window(win) then pcall(vim.api.nvim_set_current_win, win) end
+end
+
+local function tab_is_tool(tab)
+  for _, registered in pairs(tools) do
+    if registered.state.tab == tab and valid_tab(tab) then return true end
   end
-  state.win = nil
-  state.anchor_win = nil
-  state.geometry = nil
-  return true
+  return false
+end
+
+local function current_tab_is_tool() return tab_is_tool(vim.api.nvim_get_current_tabpage()) end
+
+local function find_host_window()
+  if valid_window(host_win) and not tab_is_tool(vim.api.nvim_win_get_tabpage(host_win)) then return host_win end
+
+  for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+    if not tab_is_tool(tab) then
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+        if valid_window(win) then
+          host_win = win
+          return host_win
+        end
+      end
+    end
+  end
+
+  local ok = pcall(vim.cmd.tabnew)
+  if not ok then return nil end
+  host_win = vim.api.nvim_get_current_win()
+  return host_win
+end
+
+local function focus_host_window()
+  local win = find_host_window()
+  if not win then return false end
+  return pcall(vim.api.nvim_set_current_win, win)
+end
+
+local function host_cwd()
+  local win = find_host_window()
+  if not win then return nil end
+  local ok, cwd = pcall(vim.api.nvim_win_call, win, vim.fn.getcwd)
+  if not ok then return nil end
+  return cwd
 end
 
 local function delete_buffer(buf)
@@ -83,13 +100,36 @@ local function delete_buffer(buf)
   return ok or not vim.api.nvim_buf_is_valid(buf)
 end
 
+local function forget_stale_tab(state)
+  if state.tab and not valid_tab(state.tab) then
+    state.tab = nil
+    state.win = nil
+  elseif state.win and not valid_window(state.win) then
+    state.win = nil
+  end
+end
+
+local function close_tool_tab(tool)
+  local state = tool.state
+  forget_stale_tab(state)
+  if not state.tab then return true end
+
+  local tab = state.tab
+  if vim.api.nvim_get_current_tabpage() == tab and not focus_host_window() then return false end
+  local ok = pcall(vim.api.nvim_tabpage_close, tab, false)
+  if not ok and valid_tab(tab) then return false end
+  state.tab = nil
+  state.win = nil
+  return true
+end
+
 local function clear_generation(tool, generation, buf, retried)
   local state = tool.state
   if state.generation ~= generation or state.buf ~= buf then return false end
 
-  local window_cleared = clear_window(tool)
+  local tab_closed = close_tool_tab(tool)
   local buffer_deleted = delete_buffer(buf)
-  if not window_cleared or not buffer_deleted then
+  if not tab_closed or not buffer_deleted then
     if not retried then
       vim.schedule(function() clear_generation(tool, generation, buf, true) end)
     else
@@ -104,84 +144,57 @@ local function clear_generation(tool, generation, buf, retried)
   return true
 end
 
-local function open_window(tool)
+local function open_tool_tab(tool)
   local state = tool.state
+  forget_stale_tab(state)
+  local previous_win = vim.api.nvim_get_current_win()
+  local created_tab = false
+
   local ok, err = pcall(function()
-    state.anchor_win = vim.api.nvim_get_current_win()
-    state.geometry = window_geometry(state.anchor_win)
-    state.win = vim.api.nvim_open_win(state.buf, true, float_opts(state.geometry))
-    vim.api.nvim_set_option_value('winhl', 'NormalFloat:Normal', { win = state.win })
+    if state.tab then
+      vim.api.nvim_set_current_tabpage(state.tab)
+      if not valid_window(state.win) then state.win = vim.api.nvim_tabpage_list_wins(state.tab)[1] end
+    else
+      vim.cmd.tabnew()
+      created_tab = true
+      state.tab = vim.api.nvim_get_current_tabpage()
+      state.win = vim.api.nvim_get_current_win()
+    end
+    vim.api.nvim_win_set_buf(state.win, state.buf)
   end)
 
   if ok then return true end
 
-  clear_window(tool)
-  notify(tool, 'could not open its window: ' .. tostring(err), vim.log.levels.ERROR)
+  if created_tab and valid_tab(state.tab) then pcall(vim.api.nvim_tabpage_close, state.tab, false) end
+  state.tab = nil
+  state.win = nil
+  restore_window(previous_win)
+  notify(tool, 'could not open its Tool Tab: ' .. tostring(err), vim.log.levels.ERROR)
   return false
 end
 
 local function focus_terminal(tool)
+  if not open_tool_tab(tool) then return false end
   return pcall(function()
     vim.api.nvim_set_current_win(tool.state.win)
     vim.cmd.startinsert()
   end)
 end
 
-local function resize_window(tool)
+local function stop_generation(tool, preserve_tab)
   local state = tool.state
-  if not state.win then return end
-  if not vim.api.nvim_win_is_valid(state.win) then
-    clear_window(tool)
-    return
-  end
-  if not state.anchor_win or not vim.api.nvim_win_is_valid(state.anchor_win) then
-    clear_window(tool)
-    return
-  end
-
-  local geometry_ok, geometry = pcall(window_geometry, state.anchor_win)
-  if not geometry_ok then
-    clear_window(tool)
-    notify(tool, 'could not read its window size: ' .. tostring(geometry), vim.log.levels.WARN)
-    return
-  end
-  if state.geometry and state.geometry.width == geometry.width and state.geometry.height == geometry.height then return end
-
-  -- Floating-window dimensions are fixed cell counts, so keep them in sync
-  -- with the Neovim window that launched the terminal tool.
-  local ok, err = pcall(vim.api.nvim_win_set_config, state.win, float_opts(geometry))
-  if not ok then
-    clear_window(tool)
-    notify(tool, 'could not resize its window: ' .. tostring(err), vim.log.levels.WARN)
-    return
-  end
-  state.geometry = geometry
-end
-
-local function ensure_resize_events()
-  if resize_events_registered then return end
-
-  vim.api.nvim_create_autocmd({ 'VimResized', 'WinResized' }, {
-    group = vim.api.nvim_create_augroup(RESIZE_GROUP, { clear = true }),
-    callback = function()
-      for _, tool in pairs(tools) do
-        resize_window(tool)
-      end
-    end,
-  })
-  resize_events_registered = true
-end
-
-local function stop_generation(tool)
-  local state = tool.state
-  local generation = state.generation
   local buf = state.buf
   if state.job then pcall(vim.fn.jobstop, state.job) end
-  if state.buf == buf and not clear_generation(tool, generation, buf) then return false end
+
+  if not preserve_tab and not close_tool_tab(tool) then return false end
+  if not delete_buffer(buf) then return false end
+  state.buf = nil
+  state.job = nil
+  state.cwd = nil
   return true
 end
 
-local function start_tool(tool, cwd)
+local function start_tool(tool, cwd, return_win)
   local state = tool.state
   state.generation = state.generation + 1
   local generation = state.generation
@@ -195,8 +208,9 @@ local function start_tool(tool, cwd)
   local buf = buf_or_error
   state.buf = buf
   state.cwd = cwd
-  if not open_window(tool) then
+  if not open_tool_tab(tool) then
     clear_generation(tool, generation, buf)
+    restore_window(return_win)
     return false
   end
 
@@ -211,63 +225,65 @@ local function start_tool(tool, cwd)
     })
   end)
 
-  if not started then
+  if not started or job <= 0 then
     clear_generation(tool, generation, buf)
-    notify(tool, 'could not start its job: ' .. tostring(job), vim.log.levels.ERROR)
-    return false
-  end
-
-  if job <= 0 then
-    clear_generation(tool, generation, buf)
-    local reason = job == -1 and ('executable not found: ' .. tool.spec.command[1]) or 'Neovim could not start the job'
+    restore_window(return_win)
+    local reason
+    if not started then
+      reason = 'could not start its job: ' .. tostring(job)
+    else
+      reason = job == -1 and ('executable not found: ' .. tool.spec.command[1]) or 'Neovim could not start the job'
+    end
     notify(tool, reason, vim.log.levels.ERROR)
     return false
   end
 
   -- A very short-lived job may exit before jobstart returns. Its callback owns
   -- cleanup, so do not restore handles from a generation that already ended.
-  if state.generation ~= generation or state.buf ~= buf then return false end
+  if state.generation ~= generation or state.buf ~= buf then
+    restore_window(return_win)
+    return false
+  end
   state.job = job
   local focused, focus_error = focus_terminal(tool)
   if not focused then
     pcall(vim.fn.jobstop, job)
     clear_generation(tool, generation, buf)
-    notify(tool, 'could not focus its terminal window: ' .. tostring(focus_error), vim.log.levels.ERROR)
+    restore_window(return_win)
+    notify(tool, 'could not focus its Tool Tab: ' .. tostring(focus_error), vim.log.levels.ERROR)
     return false
   end
   return true
 end
 
-local function window_is_in_current_tab(win)
-  local ok, tab = pcall(vim.api.nvim_win_get_tabpage, win)
-  return ok and tab == vim.api.nvim_get_current_tabpage()
-end
-
 local function toggle(tool)
   local state = tool.state
-  if state.win and vim.api.nvim_win_is_valid(state.win) then
-    if window_is_in_current_tab(state.win) then return clear_window(tool) end
-    if not clear_window(tool) then return false end
+  forget_stale_tab(state)
+  local current_win = vim.api.nvim_get_current_win()
+
+  if state.tab and vim.api.nvim_get_current_tabpage() == state.tab then return focus_host_window() end
+  if not current_tab_is_tool() then host_win = current_win end
+
+  local cwd = host_cwd()
+  if not cwd then
+    notify(tool, 'could not determine the Host Window working directory', vim.log.levels.ERROR)
+    return false
   end
 
-  if state.win and not clear_window(tool) then return false end
-  if state.buf and not vim.api.nvim_buf_is_valid(state.buf) and not stop_generation(tool) then return false end
-
-  local cwd = vim.fn.getcwd()
-  if state.buf and state.cwd ~= cwd and not stop_generation(tool) then return false end
+  if state.buf and not vim.api.nvim_buf_is_valid(state.buf) and not stop_generation(tool, false) then return false end
+  if state.buf and state.cwd ~= cwd and not stop_generation(tool, true) then return false end
 
   if state.buf then
-    if not open_window(tool) then return false end
     local focused, focus_error = focus_terminal(tool)
     if not focused then
-      clear_window(tool)
-      notify(tool, 'could not focus its terminal window: ' .. tostring(focus_error), vim.log.levels.ERROR)
+      notify(tool, 'could not focus its Tool Tab: ' .. tostring(focus_error), vim.log.levels.ERROR)
+      restore_window(current_win)
       return false
     end
     return true
   end
 
-  return start_tool(tool, cwd)
+  return start_tool(tool, cwd, current_win)
 end
 
 local function acknowledge_editor_return(tool)
@@ -284,13 +300,12 @@ local function acknowledge_editor_return(tool)
   end, HANDOFF_ACK_DELAY_MS)
 end
 
-local function complete_handoff(tool)
-  if not clear_window(tool) then
-    notify(tool, 'could not hide after editor return', vim.log.levels.WARN)
-    return false
-  end
-  if tool.spec.handoff == 'hide-and-acknowledge' then acknowledge_editor_return(tool) end
-  return true
+local function handoff_tool(data)
+  if type(data) ~= 'table' then return nil end
+  local tool = tools[data[HANDOFF_DATA_KEY]]
+  if not tool then return nil end
+  if tostring(tool.state.generation) ~= data[HANDOFF_DATA_GENERATION_KEY] or not tool.state.job then return nil end
+  return tool
 end
 
 local function assert_nonempty_string(value, message)
@@ -314,8 +329,8 @@ local function normalize_config(config)
     assert_nonempty_string(value, string.format('terminal tool command argument %d must be a non-empty string', index))
   end
 
-  local handoff = config.handoff or 'hide'
-  assert(handoff == 'hide' or handoff == 'hide-and-acknowledge', "terminal tool handoff must be 'hide' or 'hide-and-acknowledge'")
+  local handoff = config.handoff or 'return'
+  assert(handoff == 'return' or handoff == 'return-and-acknowledge', "terminal tool handoff must be 'return' or 'return-and-acknowledge'")
 
   local env = config.env or {}
   assert(type(env) == 'table', 'terminal tool env must be a table')
@@ -348,7 +363,7 @@ end
 ---@field key string
 ---@field desc string
 ---@field env? table<string, string>
----@field handoff? 'hide'|'hide-and-acknowledge'
+---@field handoff? 'return'|'return-and-acknowledge'
 
 ---@param config custom.TerminalToolConfig
 function M.create(config)
@@ -358,15 +373,13 @@ function M.create(config)
       generation = 0,
       buf = nil,
       win = nil,
-      anchor_win = nil,
-      geometry = nil,
+      tab = nil,
       job = nil,
       cwd = nil,
     },
   }
   tool.toggle = function() return toggle(tool) end
 
-  ensure_resize_events()
   vim.keymap.set('n', tool.spec.key, tool.toggle, { desc = tool.spec.desc })
   tools[tool.spec.id] = tool
   tool_keys[tool.spec.key] = tool.spec.id
@@ -384,14 +397,23 @@ function M.editor_handoff_data()
 end
 
 ---@param data? table
+---@return integer? win
+function M.editor_handoff_window(data)
+  if not handoff_tool(data) then return nil end
+  return find_host_window()
+end
+
+---@param data? table
 ---@return boolean handled
 function M.complete_editor_handoff(data)
-  if type(data) ~= 'table' then return false end
-  local tool = tools[data[HANDOFF_DATA_KEY]]
+  local tool = handoff_tool(data)
   if not tool then return false end
-  if tostring(tool.state.generation) ~= data[HANDOFF_DATA_GENERATION_KEY] or not tool.state.job then return false end
-
-  return complete_handoff(tool)
+  if not focus_host_window() then
+    notify(tool, 'could not return to the Host Window after editor handoff', vim.log.levels.WARN)
+    return false
+  end
+  if tool.spec.handoff == 'return-and-acknowledge' then acknowledge_editor_return(tool) end
+  return true
 end
 
 return M

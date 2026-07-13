@@ -8,6 +8,14 @@ Personal development environment configuration, organized around a small set of 
 The primary place where development work is initiated, coordinated, and returned to after using supporting tools.
 _Avoid_: Editor, shell, terminal
 
+**Host Window**:
+The most recently used non-tool window to which Tool Tabs return. Moving between Tool Tabs does not change the Host Window.
+_Avoid_: Main buffer, previous tab, calling tool
+
+**Tool Tab**:
+A dedicated Development Surface workspace owned by one terminal tool. Invoking the tool returns to its existing workspace rather than creating another; the workspace exists until the tool exits.
+_Avoid_: Terminal float, tool window, Terminal Tool Surface
+
 **Language Tooling**:
 The language-centered part of the Development Surface contract: source-language capabilities that require coordination across supporting tools are declared as one coherent capability.
 _Avoid_: Tool config, plugin-specific language setup

@@ -30,17 +30,17 @@ proc wait_for_screen {socket target pattern} {
   error "timed out waiting for $pattern on $target"
 }
 
-proc wait_for_first_row {socket target pattern} {
+proc wait_for_row {socket target row pattern} {
   global timeout
   set attempts [expr {$timeout * 10}]
   for {set attempt 0} {$attempt < $attempts} {incr attempt} {
     if {![catch { capture $socket $target } screen]} {
-      set first_row [lindex [split $screen "\n"] 0]
-      if {[regexp $pattern $first_row]} { return $screen }
+      set content [lindex [split $screen "\n"] $row]
+      if {[regexp $pattern $content]} { return $screen }
     }
     after 100
   }
-  error "timed out waiting for $pattern on the first row of $target"
+  error "timed out waiting for $pattern on row $row of $target"
 }
 
 proc current_nvim_size {socket} {
@@ -111,7 +111,7 @@ proc run_test {} {
   puts $sample "one\nTWO changed\nthree\nFOUR changed\nfive\nsix"
   close $sample
 
-  set menu_pattern {File +View +Navigate +Theme +Agent +Help}
+  set menu_pattern {File +View +Navigate +(Theme +)?Agent +Help}
   exec tmux -S $direct_socket -f /dev/null new-session -d -x 80 -y 21 -s direct -c $fixture \
     "/usr/bin/env TERM=tmux-256color hunk diff --watch --mode stack"
   set direct [wait_for_screen $direct_socket direct:0.0 $menu_pattern]
@@ -128,7 +128,7 @@ proc run_test {} {
   log_user 0
   exec stty rows 24 columns 80 < $host_slave
   wait_for_screen $host_socket host:0.0 {sample.txt}
-  if {[catch { wait_for_first_row $host_socket host:0.0 $menu_pattern } initial]} {
+  if {[catch { wait_for_row $host_socket host:0.0 1 $menu_pattern } initial]} {
     set initial [capture $host_socket host:0.0]
   } else {
     after 100
@@ -137,15 +137,26 @@ proc run_test {} {
 
   lassign [current_nvim_size $nvim_socket] width height
 
-  if {$width != 80 || $height != 21} {
-    error "HARNESS ERROR: expected an 80x21 Hunk float, got ${width}x${height}"
+  if {$width != 80 || $height != 20} {
+    error "HARNESS ERROR: expected an 80x20 Hunk Tool Tab below Neovim's tabline, got ${width}x${height}"
   }
 
-  set initial_first_row [lindex [split $initial "\n"] 0]
-  set menu_present [regexp $menu_pattern $initial_first_row]
+  set initial_menu_row [lindex [split $initial "\n"] 1]
+  set menu_present [regexp $menu_pattern $initial_menu_row]
   set protocol_present [expr {[string first {Gi=31337} $initial] >= 0}]
 
   if {$menu_present && !$protocol_present} {
+    set nvim_pane [active_pane $host_socket host:0]
+    exec tmux -S $host_socket split-window -h -b -d -t $nvim_pane
+    exec tmux -S $host_socket bind-key h select-pane -L
+    exec tmux -S $host_socket select-pane -t $nvim_pane
+    send -- "\002"
+    after 100
+    send -- "h"
+    wait_for_active_pane_change $host_socket host:0 $nvim_pane
+    exec tmux -S $host_socket select-pane -t $nvim_pane
+    exec tmux -S $host_socket kill-pane -a -t $nvim_pane
+
     exec tmux -S $host_socket new-session -d -s other
     send -- "\002s"
     expect {
@@ -156,21 +167,14 @@ proc run_test {} {
     after 200
 
     exec stty rows 34 columns 100 < $host_slave
-    wait_for_nvim_size $nvim_socket 100 31
+    wait_for_nvim_size $nvim_socket 100 30
     set resized [capture $host_socket host:0.0]
-    set resized_first_row [lindex [split $resized "\n"] 0]
-    if {![regexp $menu_pattern $resized_first_row]} {
-      error "FAIL Hunk lost its first-row menu after the live host resize"
+    set resized_menu_row [lindex [split $resized "\n"] 1]
+    if {![regexp $menu_pattern $resized_menu_row]} {
+      error "FAIL Hunk lost its menu after the live host resize"
     }
 
-    set nvim_pane [active_pane $host_socket host:0]
-    exec tmux -S $host_socket split-window -h -b -d -t $nvim_pane
-    exec tmux -S $host_socket bind-key h select-pane -L
-    exec tmux -S $host_socket select-pane -t $nvim_pane
-    send -- "\002h"
-    wait_for_active_pane_change $host_socket host:0 $nvim_pane
-
-    return "PASS production Hunk renders cleanly, follows a live 80x21 to 100x31 resize, and leaves C-b s plus C-b h with host tmux"
+    return "PASS production Hunk Tool Tab renders cleanly below the tabline, follows a native 80x20 to 100x30 resize, and leaves C-b s plus C-b h with host tmux"
   }
 
   if {$menu_present} {
@@ -184,7 +188,7 @@ proc run_test {} {
 
   wait_for_screen $host_socket host:0.0 {Toggle files/filter focus}
   set protocol_artifact [expr {$protocol_present ? "present" : "absent"}]
-  error "FAIL real Hunk initial render through terminal_tool\n  direct 80x21 Hunk renders: File View Navigate Theme Agent Help\n  terminal_tool 80x21 initial row is the separator; the complete menu is absent\n  clicking the missing File area reveals: Toggle files/filter focus (Gi protocol artifact $protocol_artifact)"
+  error "FAIL real Hunk initial render through terminal_tool\n  direct 80x21 Hunk renders its complete menu\n  terminal_tool 80x21 initial row is the separator; the complete menu is absent\n  clicking the missing File area reveals: Toggle files/filter focus (Gi protocol artifact $protocol_artifact)"
 }
 
 set status [catch { run_test } result]

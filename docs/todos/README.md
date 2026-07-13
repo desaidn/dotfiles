@@ -20,5 +20,4 @@ Point an agent at one brief and ask it to take ownership of that item. The agent
 - [Add Pi integration](04-pi-integration.md)
 - [Add a local model](05-local-model.md)
 - [Add Hunk preferences](06-hunk-preferences.md)
-- [Prevent lazygit and Hunk float stacking](07-terminal-tool-float-stacking.md)
 - [Make web-language colors consistent across machines](08-cross-machine-neovim-colors.md)
