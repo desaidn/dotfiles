@@ -73,9 +73,9 @@ Copy one snapshot to the other machine, then compare them:
 nvim --headless -u nvim/init.lua -l nvim/scripts/web_color_snapshot.lua compare /tmp/personal.json /tmp/work.json
 ```
 
-The final argument selects the project TypeScript installation used for semantic tokens and defaults to `~/Projects/desaidn.dev` when omitted. The capture prints the resolved definition for each representative token and writes the full evidence as JSON. The comparison exits non-zero only when resolved token colors differ; parser, query, plugin, LSP, TypeScript, or environment differences are reported separately so they can explain a mismatch without being mistaken for one.
+The final argument selects the project TypeScript installation used for semantic tokens and defaults to `~/Projects/desaidn.dev` when omitted. The capture forces true-color rendering, reads each representative token's final RGB attributes back from Neovim's rendered screen grid, and writes the contributor stack and full environment evidence as JSON. The comparison exits non-zero only when rendered token colors differ; parser, query, plugin, LSP, TypeScript, or environment differences are reported separately so they can explain a mismatch without being mistaken for one.
 
-Because the capture is headless, its `headless_termguicolors` value does not prove what the TUI auto-detected. In a normal Neovim session on each machine, also run `:set termguicolors?` and record the result alongside the JSON snapshot.
+Because the capture is headless, its original `headless_termguicolors` value does not prove what the TUI auto-detected. In a normal Neovim session on each machine, also run `:set termguicolors?` and record the result alongside the JSON snapshot. A false value there means the RGB-grid comparison does not represent the terminal's actual cterm rendering.
 
 ## Starting points / references
 

@@ -57,6 +57,26 @@ check('artifact drift is evidence without a color failure', function()
   assert(evidence[1]:find('sha256', 1, true))
 end)
 
+check('reads renderer-composed RGB attributes from the screen grid', function()
+  vim.o.columns = 40
+  vim.o.lines = 12
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, buf)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'probe' })
+  vim.api.nvim_set_hl(0, 'WebColorScreenProbe', { fg = '#123456', bold = true })
+  local namespace = vim.api.nvim_create_namespace 'web-color-screen-probe'
+  vim.api.nvim_buf_set_extmark(buf, namespace, 0, 0, {
+    end_col = 5,
+    hl_group = 'WebColorScreenProbe',
+  })
+  vim.cmd.redraw { bang = true }
+
+  local rendered = snapshot.screen_render(buf, 0, 0)
+  assert(rendered.text == 'p', string.format('expected screen text %q, got %q', 'p', rendered.text))
+  assert(rendered.definition:find('fg=#123456', 1, true), rendered.definition)
+  assert(rendered.definition:find('bold=true', 1, true), rendered.definition)
+end)
+
 if #failures > 0 then error(string.format('%d web color snapshot check(s) failed: %s', #failures, table.concat(failures, ', '))) end
 
 io.stdout:write 'All web color snapshot checks passed.\n'

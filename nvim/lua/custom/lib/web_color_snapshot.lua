@@ -124,17 +124,48 @@ local function highlight_definition(group)
   return table.concat(parts, ',')
 end
 
+local function screen_definition(attributes)
+  local key_names = {
+    foreground = 'fg',
+    background = 'bg',
+    special = 'sp',
+  }
+  local parts = {}
+  for key, value in pairs(attributes) do
+    local normalized_key = key_names[key] or key
+    if key_names[key] then value = string.format('#%06x', value) end
+    parts[#parts + 1] = string.format('%s=%s', normalized_key, stable_value(value))
+  end
+  table.sort(parts)
+  return #parts > 0 and table.concat(parts, ',') or 'none'
+end
+
+function M.screen_render(buf, row, col)
+  local win = vim.fn.bufwinid(buf)
+  assert(win ~= -1, 'buffer must be visible to inspect its rendered color')
+  vim.api.nvim_win_set_cursor(win, { row + 1, col })
+  vim.cmd.redraw { bang = true }
+
+  local position = vim.fn.screenpos(win, row + 1, col + 1)
+  assert(position.row > 0 and position.col > 0, string.format('buffer position %d:%d is not visible', row + 1, col + 1))
+  local cell = vim.api.nvim__inspect_cell(1, position.row - 1, position.col - 1)
+  assert(type(cell[1]) == 'string' and type(cell[2]) == 'table', 'Neovim did not return a rendered grid cell')
+  return {
+    text = cell[1],
+    definition = screen_definition(cell[2]),
+  }
+end
+
 local function treesitter_priority(item)
   return item.metadata.priority or (item.metadata[item.id] and item.metadata[item.id].priority) or vim.hl.priorities.treesitter
 end
 
-local function contributor(layer, group, link, priority, order)
+local function contributor(layer, group, link, priority)
   return {
     layer = layer,
     group = group,
     link = link,
     priority = tonumber(priority) or 0,
-    order = order,
     definition = highlight_definition(link),
   }
 end
@@ -142,11 +173,7 @@ end
 local function inspect_token(buf, row, col)
   local inspected = vim.inspect_pos(buf, row, col)
   local contributors = {}
-  local order = 0
-  local function add(layer, group, link, priority)
-    order = order + 1
-    contributors[#contributors + 1] = contributor(layer, group, link, priority, order)
-  end
+  local function add(layer, group, link, priority) contributors[#contributors + 1] = contributor(layer, group, link, priority) end
 
   for _, item in ipairs(inspected.syntax) do
     add('syntax', item.hl_group, item.hl_group_link, 0)
@@ -162,7 +189,10 @@ local function inspect_token(buf, row, col)
   end
 
   table.sort(contributors, function(left, right)
-    if left.priority == right.priority then return left.order < right.order end
+    if left.priority == right.priority then
+      if left.layer == right.layer then return left.group < right.group end
+      return left.layer < right.layer
+    end
     return left.priority < right.priority
   end)
 
@@ -253,7 +283,8 @@ local function capture_tokens(fixture_root)
 
     for index, token in ipairs(fixture.tokens) do
       local position = positions[index]
-      local contributors, rendered = inspect_token(buf, position.row, position.col)
+      local contributors, resolved_stack = inspect_token(buf, position.row, position.col)
+      local rendered = M.screen_render(buf, position.row, position.col)
       result[#result + 1] = {
         file = fixture.file,
         language = fixture.language,
@@ -264,7 +295,9 @@ local function capture_tokens(fixture_root)
         clients = client_names,
         semantic_tokens_enabled = vim.lsp.semantic_tokens.is_enabled { bufnr = buf },
         contributors = contributors,
-        rendered = rendered,
+        resolved_stack = resolved_stack,
+        rendered = rendered.definition,
+        rendered_text = rendered.text,
       }
     end
   end
@@ -359,6 +392,9 @@ function M.capture(nvim_root, fixture_root, typescript_root)
   assert(vim.uv.fs_stat(tsserver_path), 'project TypeScript server is missing: ' .. tsserver_path)
   local typescript = vim.json.decode(read_file(typescript_package))
   vim.lsp.config('ts_ls', { init_options = { tsserver = { fallbackPath = tsserver_path } } })
+  local headless_termguicolors = vim.o.termguicolors
+  vim.o.termguicolors = true
+  vim.cmd.colorscheme(vim.g.colors_name)
 
   return {
     schema_version = 1,
@@ -368,7 +404,8 @@ function M.capture(nvim_root, fixture_root, typescript_root)
       luajit = jit and jit.version or 'none',
       os = vim.uv.os_uname().sysname .. ' ' .. vim.uv.os_uname().machine,
       colors_name = vim.g.colors_name,
-      headless_termguicolors = vim.o.termguicolors,
+      headless_termguicolors = headless_termguicolors,
+      render_mode = 'rgb-grid',
       background = vim.o.background,
       term = vim.env.TERM or '',
       colorterm = vim.env.COLORTERM or '',
@@ -476,9 +513,10 @@ end
 function M.summary(snapshot)
   local lines = {
     string.format(
-      'Neovim %s | colorscheme=%s | headless_termguicolors=%s',
+      'Neovim %s | colorscheme=%s | render_mode=%s | headless_termguicolors=%s',
       snapshot.environment.nvim,
       snapshot.environment.colors_name,
+      snapshot.environment.render_mode,
       tostring(snapshot.environment.headless_termguicolors)
     ),
   }
