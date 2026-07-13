@@ -4,3 +4,4 @@ fish/fish_variables
 nvim.log
 reports/
 pi-session-*
+!TODO.md
