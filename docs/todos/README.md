@@ -22,4 +22,3 @@ Point an agent at one brief and ask it to take ownership of that item. The agent
 - [Add Hunk preferences](06-hunk-preferences.md)
 - [Prevent lazygit and Hunk float stacking](07-terminal-tool-float-stacking.md)
 - [Make web-language colors consistent across machines](08-cross-machine-neovim-colors.md)
-- [Fix tmux command-prompt rendering](09-tmux-command-prompt-rendering.md)
