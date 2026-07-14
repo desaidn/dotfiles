@@ -6,7 +6,11 @@ TypeScript, JavaScript, HTML, JSX, and TSX should produce the same effective syn
 
 ## Reproduction / current state
 
-The work laptop displays different colors for the affected languages. The exact differing tokens and highlight groups have not yet been captured, so the cause is unproven.
+The work laptop displayed default foregrounds for JSX/TSX tags, attributes, and strings because its installed Treesitter highlight queries were unreachable. The query symlinks under `~/.local/share/nvim/site/queries/` still targeted the removed lazy.nvim checkout at `~/.local/share/nvim/lazy/nvim-treesitter/`, while nvim-treesitter now lives under the native `vim.pack` package directory. Parser binaries and revision files remained present, so ordinary `install()` calls skipped them without recreating the query links.
+
+A forced nvim-treesitter reinstall repaired the work laptop's HTML, JavaScript, TSX, and TypeScript parser/query pairs and their `ecma`, `jsx`, and `html_tags` query dependencies. The same headless snapshot then resolved strings to green, tags to peach, and attributes to italic white. A direct probe of the original work component produced the same corrected colors.
+
+The native package hook now uses nvim-treesitter's supported `update()` operation after plugin updates instead of calling `install()` for already-installed parsers. A personal-machine snapshot and comparison are still required before this item is complete.
 
 The custom colorscheme inherits Neovim's default colors and explicitly normalizes only a subset of markup tag captures in [`custom.lua`](../../nvim/colors/custom.lua). Highlighting can also be affected by Treesitter queries/parser artifacts and LSP semantic tokens. Plugin source revisions are recorded in [`nvim-pack-lock.json`](../../nvim/nvim-pack-lock.json), while Treesitter parsers are installed from the set in [`parsers.lua`](../../nvim/lua/kickstart/parsers.lua). Mason-managed language servers may differ by install date/version across machines.
 
@@ -32,11 +36,9 @@ The production config requires Neovim 0.12.4, which narrows but does not elimina
 
 ## Open decisions
 
-- Which exact tokens differ, and which highlight layer wins at those positions on each machine?
-- Are the repo checkout, lockfile, Neovim build, terminal settings, parser/query revisions, and Mason receipts actually identical?
-- Is the visible foreground coming from a Treesitter capture, an LSP semantic token, a legacy syntax group, or a link inherited from the default colorscheme?
-- If upstream runtime artifacts differ, should the repo pin them, verify them, or normalize the final groups?
-- What lightweight snapshot format is stable enough to compare without creating a brittle pixel test?
+- Does the personal machine produce the same resolved colors and query hashes after capturing from the same repository revision?
+- Does the normal TUI on each machine have `termguicolors` enabled?
+- Are any personal-machine query links still tied to an obsolete package-manager checkout even if their current targets remain readable?
 
 ## Acceptance criteria
 
@@ -74,6 +76,8 @@ nvim --headless -u nvim/init.lua -l nvim/scripts/web_color_snapshot.lua compare 
 ```
 
 The final argument selects the project TypeScript installation used for semantic tokens and defaults to `~/Projects/desaidn.dev` when omitted. The capture forces true-color rendering, reads each representative token's final RGB attributes back from Neovim's rendered screen grid, and writes the contributor stack and full environment evidence as JSON. The comparison exits non-zero only when rendered token colors differ; parser, query, plugin, LSP, TypeScript, or environment differences are reported separately so they can explain a mismatch without being mistaken for one.
+
+If a snapshot reports no query files and `readlink ~/.local/share/nvim/site/queries/tsx` targets an obsolete nvim-treesitter checkout, run `:TSInstall! html javascript tsx typescript` in Neovim. The forced install recreates the affected parser/query pairs and query-only dependencies; capture another snapshot afterward.
 
 Because the capture is headless, its original `headless_termguicolors` value does not prove what the TUI auto-detected. In a normal Neovim session on each machine, also run `:set termguicolors?` and record the result alongside the JSON snapshot. A false value there means the RGB-grid comparison does not represent the terminal's actual cterm rendering.
 

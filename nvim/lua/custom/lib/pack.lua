@@ -23,12 +23,14 @@ local function packadd_if_needed(name, active)
   return true
 end
 
-local function install_treesitter_parsers()
+local function sync_treesitter_artifacts(kind)
   local ok, treesitter = pcall(require, 'nvim-treesitter')
   if not ok then return end
 
-  local install = treesitter.install(require 'kickstart.parsers')
-  if install and install.wait then install:wait(60000) end
+  -- install() skips existing parsers; update() advances installed parser/query pairs together.
+  local operation = kind == 'update' and treesitter.update or treesitter.install
+  local task = operation(require 'kickstart.parsers')
+  if task and task.wait then task:wait(60000) end
 end
 
 local function install_fff_binary()
@@ -55,7 +57,7 @@ function M.setup()
       end
 
       if name == 'nvim-treesitter' then
-        if packadd_if_needed(name, ev.data.active) then install_treesitter_parsers() end
+        if packadd_if_needed(name, ev.data.active) then sync_treesitter_artifacts(kind) end
         return
       end
 
