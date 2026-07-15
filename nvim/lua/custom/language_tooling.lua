@@ -1,0 +1,66 @@
+local prettier = { 'prettierd', 'prettier', stop_after_first = true }
+
+return {
+  lsp_servers = {
+    'lua_ls',
+    'ts_ls',
+    'rust_analyzer',
+    'gopls',
+    'pyright',
+    'jsonls',
+    'yamlls',
+    'html',
+    'cssls',
+    'hls',
+    'jdtls',
+    'kotlin_lsp',
+  },
+
+  -- Keep install ownership explicit: an enabled LSP need not be Mason-managed.
+  mason_tools = {
+    'lua-language-server',
+    'stylua',
+    'typescript-language-server',
+    'prettier',
+    'prettierd',
+    'eslint_d',
+    'rust-analyzer',
+    'gopls',
+    'pyright',
+    'ruff',
+    'json-lsp',
+    'yaml-language-server',
+    'html-lsp',
+    'css-lsp',
+    'haskell-language-server',
+    'jdtls',
+    'google-java-format',
+    'kotlin-lsp',
+    'ktlint',
+  },
+
+  formatters_by_ft = {
+    lua = { 'stylua' },
+    javascript = prettier,
+    javascriptreact = prettier,
+    typescript = prettier,
+    typescriptreact = prettier,
+    json = prettier,
+    jsonc = prettier,
+    css = prettier,
+    scss = prettier,
+    html = prettier,
+    markdown = prettier,
+    python = { 'ruff_fix', 'ruff_format', 'ruff_organize_imports' },
+    java = { 'google-java-format' },
+    kotlin = { 'ktlint' },
+  },
+
+  linters_by_ft = {
+    javascript = { 'eslint_d' },
+    javascriptreact = { 'eslint_d' },
+    typescript = { 'eslint_d' },
+    typescriptreact = { 'eslint_d' },
+    python = { 'ruff' },
+  },
+}

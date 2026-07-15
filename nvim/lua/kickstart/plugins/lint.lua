@@ -10,7 +10,7 @@ local lint = require 'lint'
 
 -- Only enable declared linters when their executables are available.
 lint.linters_by_ft = {}
-for filetype, declared_linters in pairs(tooling.linters_by_ft()) do
+for filetype, declared_linters in pairs(tooling.linters_by_ft) do
   local available_linters = {}
   for _, linter in ipairs(declared_linters) do
     if vim.fn.executable(linter) == 1 then available_linters[#available_linters + 1] = linter end
@@ -40,8 +40,6 @@ vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
   group = lint_augroup,
   callback = function()
     debounce_timer:stop()
-    debounce_timer:start(100, 0, function()
-      vim.schedule(try_lint_if_modifiable)
-    end)
+    debounce_timer:start(100, 0, function() vim.schedule(try_lint_if_modifiable) end)
   end,
 })

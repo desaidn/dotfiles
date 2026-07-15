@@ -87,12 +87,15 @@ local capabilities = require('blink.cmp').get_lsp_capabilities()
 
 -- [[ Native LSP Configuration (Neovim 0.11+) ]]
 --
--- Three config layers, lowest to highest priority:
---   1. nvim-lspconfig defaults (cmd, filetypes, root_dir, commands) — no files needed
---   2. after/lsp/*.lua — servers with substantial custom logic (only lua_ls)
---   3. vim.lsp.config() below — small overrides (settings, init_options)
+-- Four config layers, lowest to highest priority:
+--   1. vim.lsp.config('*') — shared client capabilities
+--   2. nvim-lspconfig defaults (cmd, filetypes, root_dir, commands) — no files needed
+--   3. after/lsp/*.lua — servers with substantial custom logic (only lua_ls)
+--   4. vim.lsp.config() below — small server-specific overrides (settings, init_options)
 --
 -- See `:help lsp-config` for more information.
+
+vim.lsp.config('*', { capabilities = capabilities })
 
 -- Server-specific overrides (highest priority, merged on top of nvim-lspconfig defaults)
 vim.lsp.config('rust_analyzer', {
@@ -122,11 +125,7 @@ vim.lsp.config('jsonls', { init_options = { provideFormatter = false } })
 vim.lsp.config('cssls', { init_options = { provideFormatter = false } })
 vim.lsp.config('html', { init_options = { provideFormatter = false } })
 
--- Configure and enable each server with blink.cmp capabilities
-for _, name in ipairs(tooling.lsp_servers()) do
-  vim.lsp.config(name, { capabilities = capabilities })
-  vim.lsp.enable(name)
-end
+vim.lsp.enable(tooling.lsp_servers)
 
 -- Ensure declared language servers, formatters, and linters are installed via Mason.
 --
@@ -136,5 +135,5 @@ end
 --
 -- You can press `g?` for help in this menu.
 require('mason-tool-installer').setup {
-  ensure_installed = tooling.mason_tools(),
+  ensure_installed = tooling.mason_tools,
 }

@@ -21,16 +21,8 @@ The language-centered part of the Development Surface contract: source-language 
 _Avoid_: Tool config, plugin-specific language setup
 
 **Language Tooling Inventory**:
-The canonical catalogue of language capabilities shared across supporting tools; each Language Family should be declared through one entry point without repeating those shared facts elsewhere.
+The canonical read-only catalogue of enabled LSP configurations, Mason packages, Conform formatter mappings, and nvim-lint linter mappings shared across supporting tools; it stays in plugin-native data shapes so those tools can consume it directly.
 _Avoid_: LSP server list, formatter list, parser list
-
-**Language Tooling Model**:
-The rules and relationships that give structure and meaning to the Language Tooling Inventory, including how Language Families express coherent capabilities.
-_Avoid_: Inventory factory, tooling schema, validation layer
-
-**Language Family**:
-A source-language grouping in the Language Tooling Inventory that may cover multiple Neovim filetypes for one coherent Development Surface capability.
-_Avoid_: Filetype bucket, tool section
 
 **Review Surface**:
 A focused place for inspecting complete changesets before deciding what to keep, change, or commit.

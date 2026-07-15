@@ -22,7 +22,7 @@ require('conform').setup {
       }
     end
   end,
-  formatters_by_ft = tooling.formatters_by_ft(),
+  formatters_by_ft = tooling.formatters_by_ft,
 }
 
 vim.keymap.set({ 'n', 'v' }, '<leader>f', function() require('conform').format { async = true, lsp_format = 'fallback' } end, { desc = '[F]ormat buffer' })
