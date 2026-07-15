@@ -100,7 +100,7 @@ Use `:lua vim.pack.update(nil, { offline = true })` to inspect plugin state,
 and `:checkhealth` to diagnose issues.
 
 Shared LSP, Mason, formatter, and linter support is declared once in
-`lua/custom/language_tooling.lua`; the plugin configurations consume its tested plain
+`lua/custom/languages.lua`; the plugin configurations consume its tested plain
 tables directly.
 
 ## Reset

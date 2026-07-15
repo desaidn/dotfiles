@@ -2,7 +2,7 @@
 -- See `:help lsp` and `:help lsp-config`
 
 local gh = require('custom.lib.pack').gh
-local tooling = require 'custom.language_tooling'
+local languages = require 'custom.languages'
 
 vim.pack.add {
   gh 'neovim/nvim-lspconfig',
@@ -125,7 +125,7 @@ vim.lsp.config('jsonls', { init_options = { provideFormatter = false } })
 vim.lsp.config('cssls', { init_options = { provideFormatter = false } })
 vim.lsp.config('html', { init_options = { provideFormatter = false } })
 
-vim.lsp.enable(tooling.lsp_servers)
+vim.lsp.enable(languages.lsp_servers)
 
 -- Ensure declared language servers, formatters, and linters are installed via Mason.
 --
@@ -135,5 +135,5 @@ vim.lsp.enable(tooling.lsp_servers)
 --
 -- You can press `g?` for help in this menu.
 require('mason-tool-installer').setup {
-  ensure_installed = tooling.mason_tools,
+  ensure_installed = languages.mason_tools,
 }

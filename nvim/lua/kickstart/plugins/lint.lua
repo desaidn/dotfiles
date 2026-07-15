@@ -2,7 +2,7 @@
 -- https://github.com/mfussenegger/nvim-lint
 
 local gh = require('custom.lib.pack').gh
-local tooling = require 'custom.language_tooling'
+local languages = require 'custom.languages'
 
 vim.pack.add { gh 'mfussenegger/nvim-lint' }
 
@@ -10,7 +10,7 @@ local lint = require 'lint'
 
 -- Only enable declared linters when their executables are available.
 lint.linters_by_ft = {}
-for filetype, declared_linters in pairs(tooling.linters_by_ft) do
+for filetype, declared_linters in pairs(languages.linters_by_ft) do
   local available_linters = {}
   for _, linter in ipairs(declared_linters) do
     if vim.fn.executable(linter) == 1 then available_linters[#available_linters + 1] = linter end

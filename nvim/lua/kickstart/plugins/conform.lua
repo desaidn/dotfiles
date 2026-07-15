@@ -2,7 +2,7 @@
 -- See `:help conform`
 
 local gh = require('custom.lib.pack').gh
-local tooling = require 'custom.language_tooling'
+local languages = require 'custom.languages'
 
 vim.pack.add { gh 'stevearc/conform.nvim' }
 
@@ -22,7 +22,7 @@ require('conform').setup {
       }
     end
   end,
-  formatters_by_ft = tooling.formatters_by_ft,
+  formatters_by_ft = languages.formatters_by_ft,
 }
 
 vim.keymap.set({ 'n', 'v' }, '<leader>f', function() require('conform').format { async = true, lsp_format = 'fallback' } end, { desc = '[F]ormat buffer' })

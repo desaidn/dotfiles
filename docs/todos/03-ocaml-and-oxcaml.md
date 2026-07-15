@@ -6,7 +6,7 @@ Provide reliable OCaml and OxCaml editing in Neovim—LSP features, formatting, 
 
 ## Context / current state
 
-The canonical Language Tooling Inventory in [`lua/custom/language_tooling.lua`](../../nvim/lua/custom/language_tooling.lua) currently enables neither `ocamllsp` nor `ocamlformat`. [`parsers.lua`](../../nvim/lua/kickstart/parsers.lua) does not install OCaml parsers.
+The canonical Language Tooling Inventory in [`lua/custom/languages.lua`](../../nvim/lua/custom/languages.lua) currently enables neither `ocamllsp` nor `ocamlformat`. [`parsers.lua`](../../nvim/lua/kickstart/parsers.lua) does not install OCaml parsers.
 
 The Inventory keeps enabled LSP configuration names and Mason-managed package names in independent tables. It can therefore enable `ocamllsp` without adding it to `mason_tools`, which matches current OCaml guidance to install `ocaml-lsp-server` in the active opam switch because the language server is compiler-version-sensitive. `ocamlformat` is similarly expected to match the project toolchain and can be configured without making Mason its installer. At the time this brief was written, `opam`, `ocamllsp`, `ocamlformat`, and `dune` were not available on the investigating workstation's `PATH`.
 
@@ -58,7 +58,7 @@ OxCaml is a fast-moving extension of OCaml, not a separate Neovim filetype. Its 
 Run the pure inventory regression first:
 
 ```sh
-nvim --clean --headless -l nvim/tests/language_tooling_spec.lua
+nvim --clean --headless -l nvim/tests/languages_spec.lua
 ```
 
 For each of an upstream OCaml switch and an OxCaml switch, launch Neovim using the project environment recommended by the current upstream documentation and verify:
@@ -77,8 +77,8 @@ Upstream behavior is especially time-sensitive here. Before changing code, re-re
 
 ## Starting points / references
 
-- [`nvim/lua/custom/language_tooling.lua`](../../nvim/lua/custom/language_tooling.lua) — current Language Tooling Inventory, including independent LSP enablement and Mason installation tables.
-- [`nvim/tests/language_tooling_spec.lua`](../../nvim/tests/language_tooling_spec.lua) — exact production Inventory expectation.
+- [`nvim/lua/custom/languages.lua`](../../nvim/lua/custom/languages.lua) — current Language Tooling Inventory, including independent LSP enablement and Mason installation tables.
+- [`nvim/tests/languages_spec.lua`](../../nvim/tests/languages_spec.lua) — exact production Inventory expectation.
 - [`nvim/lua/kickstart/plugins/lsp.lua`](../../nvim/lua/kickstart/plugins/lsp.lua) — `nvim-lspconfig`, Mason, and LSP enablement adapter.
 - [`nvim/lua/kickstart/plugins/conform.lua`](../../nvim/lua/kickstart/plugins/conform.lua) — formatter adapter.
 - [`nvim/lua/kickstart/parsers.lua`](../../nvim/lua/kickstart/parsers.lua) — package-build parser set.

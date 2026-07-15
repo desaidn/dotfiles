@@ -24,7 +24,7 @@ local function assert_deep_equal(actual, expected, path)
   end
 end
 
-assert_deep_equal(require 'custom.language_tooling', {
+assert_deep_equal(require 'custom.languages', {
   lsp_servers = {
     'lua_ls',
     'ts_ls',
@@ -85,4 +85,4 @@ assert_deep_equal(require 'custom.language_tooling', {
   },
 })
 
-io.stdout:write 'language_tooling inventory regression passed\n'
+io.stdout:write 'language inventory regression passed\n'
