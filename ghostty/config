@@ -37,6 +37,7 @@ font-size = 14
 
 cursor-style = block
 cursor-style-blink = true
+adjust-cursor-thickness = 3
 cursor-color = #FFFFFF
 cursor-text = #000000
 shell-integration-features = no-cursor,ssh-terminfo,ssh-env
