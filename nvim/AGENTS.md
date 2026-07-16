@@ -40,7 +40,6 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/languages_spec.lua` - Exact production Language Tooling Inventory regression check
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
-- `tests/fixtures/web-colors/`, `scripts/web_color_snapshot.lua`, and `tests/web_color_snapshot_spec.lua` - Repository-safe web-language highlight fixture, cross-machine capture/compare command, and comparison regression checks
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab
 - `tests/lsp_hover_spec.lua` - Headless screen regression using an in-process LSP to prove native `K` hover documentation remains complete
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
@@ -102,12 +101,6 @@ Common language facts live as plain, read-only tables in the Language Tooling In
 Run `nvim -u NONE --headless -l nvim/tests/lsp_hover_spec.lua` to verify native `K` hover documentation renders without clipping.
 
 Run `nvim --clean --headless -l nvim/tests/languages_spec.lua` to verify the production Language Tooling Inventory.
-
-Run `nvim --headless -u nvim/init.lua -l nvim/scripts/web_color_snapshot.lua capture /tmp/web-colors.json ~/Projects/desaidn.dev` on each machine to print and capture resolved TS, JS, HTML, JSX, and TSX colors using that project's TypeScript installation. Compare captures with the same script's `compare <left.json> <right.json>` command.
-
-The capture forces an RGB screen grid, so its `headless_termguicolors` value does not prove what an interactive terminal detected. Also run `:set termguicolors?` in each normal Neovim session when investigating terminal-specific color drift.
-
-If a capture reports no web query files, inspect `readlink ~/.local/share/nvim/site/queries/tsx`. A link to an obsolete nvim-treesitter checkout is repaired with `:TSInstall! html javascript tsx typescript`; capture again after the forced parser/query installation completes.
 
 To add a new language server:
 
