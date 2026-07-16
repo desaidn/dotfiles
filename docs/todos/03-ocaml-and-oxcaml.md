@@ -19,7 +19,7 @@ OxCaml is a fast-moving extension of OCaml, not a separate Neovim filetype. Its 
 - Enable the current `ocamllsp` configuration without allowing Mason to shadow an active switch's incompatible binary.
 - Configure `ocamlformat` for the appropriate Neovim filetypes without making Mason the source of truth unless current upstream guidance has changed.
 - Add the minimum useful OCaml Treesitter parser set, including interface files where supported.
-- Update the exact production Inventory regression while preserving all existing entries.
+- Preserve all existing Inventory declarations when adding the OCaml entries.
 - Document required per-machine/project toolchain activation and how to confirm which binaries Neovim sees.
 - Smoke-test both an upstream OCaml project and a project using OxCaml-only syntax.
 
@@ -51,15 +51,9 @@ OxCaml is a fast-moving extension of OCaml, not a separate Neovim filetype. Its 
 - The Language Tooling Inventory enables `ocamllsp` and maps `ocamlformat` without adding either tool to `mason_tools`, while preserving all existing declarations.
 - OCaml implementation and interface files receive working Treesitter highlighting with no startup errors.
 - Toolchain prerequisites and switch-selection expectations are documented without machine-specific paths.
-- The existing language-tooling regression suite and a clean production Neovim startup remain green.
+- A clean production Neovim startup remains green.
 
 ## Verification
-
-Run the pure inventory regression first:
-
-```sh
-nvim --clean --headless -l nvim/tests/languages_spec.lua
-```
 
 For each of an upstream OCaml switch and an OxCaml switch, launch Neovim using the project environment recommended by the current upstream documentation and verify:
 
@@ -78,7 +72,6 @@ Upstream behavior is especially time-sensitive here. Before changing code, re-re
 ## Starting points / references
 
 - [`nvim/lua/custom/languages.lua`](../../nvim/lua/custom/languages.lua) — current Language Tooling Inventory, including independent LSP enablement and Mason installation tables.
-- [`nvim/tests/languages_spec.lua`](../../nvim/tests/languages_spec.lua) — exact production Inventory expectation.
 - [`nvim/lua/kickstart/plugins/lsp.lua`](../../nvim/lua/kickstart/plugins/lsp.lua) — `nvim-lspconfig`, Mason, and LSP enablement adapter.
 - [`nvim/lua/kickstart/plugins/conform.lua`](../../nvim/lua/kickstart/plugins/conform.lua) — formatter adapter.
 - [`nvim/lua/kickstart/parsers.lua`](../../nvim/lua/kickstart/parsers.lua) — package-build parser set.

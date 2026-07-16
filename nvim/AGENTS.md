@@ -38,7 +38,6 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
   - `render-markdown.lua` - In-editor Markdown rendering without Nerd Font dependencies (owns `<leader>tm`)
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, handoff, failure/race recovery, environment handling, and host tmux input routing
-- `tests/languages_spec.lua` - Exact production Language Tooling Inventory regression check
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab
 - `tests/lsp_hover_spec.lua` - Headless screen regression using an in-process LSP to prove native `K` hover documentation remains complete
@@ -100,15 +99,13 @@ Common language facts live as plain, read-only tables in the Language Tooling In
 
 Run `nvim -u NONE --headless -l nvim/tests/lsp_hover_spec.lua` to verify native `K` hover documentation renders without clipping.
 
-Run `nvim --clean --headless -l nvim/tests/languages_spec.lua` to verify the production Language Tooling Inventory.
-
 To add a new language server:
 
 1. Add the server's nvim-lspconfig name to `lsp_servers` in `lua/custom/languages.lua`; add its Mason package to `mason_tools` only when Mason owns its installation.
 2. Add native Conform or nvim-lint filetype mappings in the same Inventory when the language needs them.
 3. Add a `vim.lsp.config()` override in `lua/kickstart/plugins/lsp.lua` if plugin-native settings are needed.
 4. Only create `after/lsp/<server_name>.lua` if the server needs substantial logic such as `on_init`.
-5. Run the Language Tooling regression check, then use `:Mason` to inspect installation status.
+5. Restart Neovim, then use `:Mason` to inspect installation status.
 
 ### Terminal Integration
 
