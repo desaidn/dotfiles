@@ -34,7 +34,6 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `lazygit.lua` - Thin lazygit Git transaction launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gg`)
   - `hunk.lua` - Thin Hunk stacked working-tree review launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gd`)
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
-  - `render-markdown.lua` - In-editor Markdown rendering without Nerd Font dependencies (owns `<leader>tm`)
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab
@@ -59,7 +58,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 
 - Leader key: `<Space>`
 - Search operations: `<leader>s*` (files, grep, help, keymaps, diagnostics, etc.)
-- Toggle options: `<leader>t*` — `th` inlay hints, `tb` git blame line, `td` inline git diff, `tm` rendered Markdown, `ts` spell check
+- Toggle options: `<leader>t*` — `th` inlay hints, `tb` git blame line, `td` inline git diff, `ts` spell check
 - Git operations: `<leader>gg` (lazygit), `<leader>gd` (Hunk review), `<leader>g*` (hunk-local gitsigns actions), `]c`/`[c` (hunk navigation)
 - LSP operations: `gr*` prefix (Neovim 0.11 defaults for rename/code action, Telescope overrides for references/definitions)
 - Format: `<leader>f` (format buffer)

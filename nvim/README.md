@@ -71,10 +71,6 @@ Neovim-launched terminal tools use one shared flow in every environment: one per
 
 - `<leader>e` - Toggle neo-tree (right-side)
 
-### Markdown
-
-- `<leader>tm` - Toggle rendered Markdown for the current buffer
-
 ### LSP
 
 - `grd` - Go to definition
