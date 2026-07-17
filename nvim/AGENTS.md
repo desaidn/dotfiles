@@ -37,7 +37,6 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab
-- `tests/lsp_hover_spec.lua` - Headless screen regression using an in-process LSP to prove native `K` hover documentation remains complete
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
 ### Plugin Management
@@ -92,8 +91,6 @@ Configured with multiple language servers (TypeScript, Python, Rust, Go, Lua, JS
 3. **Named configurations in `lua/custom/languages.lua`** — server-specific settings and callbacks applied through `vim.lsp.config()`
 
 Common language facts live in the Language Tooling Inventory at `lua/custom/languages.lua`. Its fields use the native data shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, and nvim-lint. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes. LSP enablement and Mason installation stay explicit because runtime configuration names and package names differ, and some project-owned tools should not be installed by Mason. Plugin setup, event wiring, invocation, and other runtime behavior remain in the plugin modules.
-
-Run `nvim -u NONE --headless -l nvim/tests/lsp_hover_spec.lua` to verify native `K` hover documentation renders without clipping.
 
 To add a new language server:
 
