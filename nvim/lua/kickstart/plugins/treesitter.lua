@@ -2,6 +2,7 @@
 -- See `:help nvim-treesitter`
 
 local gh = require('custom.lib.pack').gh
+local languages = require 'custom.languages'
 
 vim.pack.add {
   { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' },
@@ -36,16 +37,18 @@ local function treesitter_try_attach(buf, language)
   if has_indent_query then vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()" end
 end
 
--- Languages with poor treesitter support
-local skip_langs = { ruby = true, smithy = true }
 local max_filesize = 100 * 1024 -- 100 KB
 local available_parsers = treesitter.get_available()
+local configured_parsers = {}
+for _, language in ipairs(languages.treesitter_parsers) do
+  configured_parsers[language] = true
+end
 
 vim.api.nvim_create_autocmd('FileType', {
   group = vim.api.nvim_create_augroup('treesitter-start', { clear = true }),
   callback = function(event)
     local lang = vim.treesitter.language.get_lang(event.match) or event.match
-    if skip_langs[lang] then return end
+    if not configured_parsers[lang] then return end
 
     local ok, stats = pcall(vim.uv.fs_stat, vim.api.nvim_buf_get_name(event.buf))
     if ok and stats and stats.size > max_filesize then return end

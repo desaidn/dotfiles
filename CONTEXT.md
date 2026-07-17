@@ -21,7 +21,7 @@ The language-centered part of the Development Surface contract: source-language 
 _Avoid_: Tool config, plugin-specific language setup
 
 **Language Tooling Inventory**:
-The canonical read-only catalogue of enabled LSP configurations, Mason packages, Conform formatter mappings, and nvim-lint linter mappings shared across supporting tools; it stays in plugin-native data shapes so those tools can consume it directly.
+The canonical read-only catalogue of enabled LSP configurations, Mason packages, Treesitter parsers, Conform formatting policy, and nvim-lint mappings shared across supporting tools; it stays in plugin-native data shapes so those tools can consume it directly.
 _Avoid_: LSP server list, formatter list, parser list
 
 **Review Surface**:

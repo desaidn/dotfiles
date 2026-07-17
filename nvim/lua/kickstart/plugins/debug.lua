@@ -7,8 +7,6 @@ vim.pack.add({
   gh 'mfussenegger/nvim-dap',
   gh 'rcarriga/nvim-dap-ui',
   gh 'nvim-neotest/nvim-nio',
-  gh 'mason-org/mason.nvim',
-  gh 'jay-babu/mason-nvim-dap.nvim',
   gh 'leoluz/nvim-dap-go',
   gh 'mfussenegger/nvim-dap-python',
 }, { load = function() end })
@@ -29,8 +27,6 @@ local function ensure_debug()
     'nvim-dap',
     'nvim-nio',
     'nvim-dap-ui',
-    'mason.nvim',
-    'mason-nvim-dap.nvim',
     'nvim-dap-go',
     'nvim-dap-python',
   } do
@@ -39,20 +35,6 @@ local function ensure_debug()
 
   local dap = require 'dap'
   local dapui = require 'dapui'
-
-  -- mason-nvim-dap auto-installs debug adapters. See mason-nvim-dap README for more.
-  require('mason-nvim-dap').setup {
-    -- Automatically set up debuggers with reasonable defaults
-    automatic_installation = true,
-
-    -- Custom handler overrides per adapter (see mason-nvim-dap README)
-    handlers = {},
-
-    ensure_installed = {
-      'delve',
-      'debugpy',
-    },
-  }
 
   -- Dap UI setup
   -- See `:help nvim-dap-ui`

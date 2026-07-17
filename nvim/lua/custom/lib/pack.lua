@@ -29,7 +29,7 @@ local function sync_treesitter_artifacts(kind)
 
   -- install() skips existing parsers; update() advances installed parser/query pairs together.
   local operation = kind == 'update' and treesitter.update or treesitter.install
-  local task = operation(require 'kickstart.parsers')
+  local task = operation(require('custom.languages').treesitter_parsers)
   if task and task.wait then task:wait(60000) end
 end
 

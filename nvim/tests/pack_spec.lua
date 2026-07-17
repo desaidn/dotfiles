@@ -53,7 +53,7 @@ end
 local function assert_treesitter_call(kind, expected_operation)
   local call = run_treesitter_hook(kind)
   assert(call.operation == expected_operation, string.format('expected %s(), got %s()', expected_operation, tostring(call.operation)))
-  assert(vim.deep_equal(call.languages, require 'kickstart.parsers'), expected_operation .. ' did not receive the configured parser set')
+  assert(vim.deep_equal(call.languages, require('custom.languages').treesitter_parsers), expected_operation .. ' did not receive the configured parser set')
   assert(call.wait_timeout == 60000, string.format('expected a 60000 ms wait, got %s', tostring(call.wait_timeout)))
 end
 

@@ -30,6 +30,7 @@ Required:
 Optional:
 
 - [fd-find](https://github.com/sharkdp/fd#installation) (Telescope uses it if available)
+- [uv](https://docs.astral.sh/uv/) (Python debugging launches debugpy through uv)
 - Language-specific tools (`npm`, `go`, etc. as needed)
 
 ### Post Installation
@@ -99,9 +100,9 @@ Use `:lua vim.pack.update(nil, { offline = true })` to inspect plugin state,
 `:lua vim.pack.update()` to update plugins, `:Mason` for LSP servers and tools,
 and `:checkhealth` to diagnose issues.
 
-Shared LSP, Mason, formatter, and linter support is declared once in
-`lua/custom/languages.lua`; the plugin configurations consume its tested plain
-tables directly.
+Shared LSP, Mason, Treesitter, formatter, format-on-save, and linter support is
+declared once in `lua/custom/languages.lua`; plugin configurations consume its
+native-shaped declarations directly.
 
 ## Reset
 

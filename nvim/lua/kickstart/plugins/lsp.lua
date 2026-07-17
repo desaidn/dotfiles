@@ -87,47 +87,21 @@ local capabilities = require('blink.cmp').get_lsp_capabilities()
 
 -- [[ Native LSP Configuration (Neovim 0.11+) ]]
 --
--- Four config layers, lowest to highest priority:
+-- Three config layers, lowest to highest priority:
 --   1. vim.lsp.config('*') — shared client capabilities
 --   2. nvim-lspconfig defaults (cmd, filetypes, root_dir, commands) — no files needed
---   3. after/lsp/*.lua — servers with substantial custom logic (only lua_ls)
---   4. vim.lsp.config() below — small server-specific overrides (settings, init_options)
+--   3. Language Tooling Inventory entries — server-specific settings and callbacks
 --
 -- See `:help lsp-config` for more information.
 
 vim.lsp.config('*', { capabilities = capabilities })
 
--- Server-specific overrides (highest priority, merged on top of nvim-lspconfig defaults)
-vim.lsp.config('rust_analyzer', {
-  settings = {
-    ['rust-analyzer'] = {
-      cargo = { allFeatures = true },
-      check = { command = 'clippy' },
-    },
-  },
-})
+for name, config in pairs(languages.lsp_servers) do
+  vim.lsp.config(name, config)
+end
+vim.lsp.enable(vim.tbl_keys(languages.lsp_servers))
 
-vim.lsp.config('gopls', {
-  settings = {
-    gopls = {
-      completeUnimported = true,
-      usePlaceholders = true,
-      analyses = { unusedparams = true },
-    },
-  },
-})
-
-vim.lsp.config('yamlls', { settings = { yaml = { keyOrdering = false } } })
-
-vim.lsp.config('jdtls', { init_options = { provideFormatter = false } })
-
-vim.lsp.config('jsonls', { init_options = { provideFormatter = false } })
-vim.lsp.config('cssls', { init_options = { provideFormatter = false } })
-vim.lsp.config('html', { init_options = { provideFormatter = false } })
-
-vim.lsp.enable(languages.lsp_servers)
-
--- Ensure declared language servers, formatters, and linters are installed via Mason.
+-- Ensure declared Mason-owned language tools are installed.
 --
 -- To check the current status of installed tools and/or manually install
 -- other tools, you can run
