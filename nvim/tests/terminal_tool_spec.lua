@@ -181,7 +181,7 @@ local function fake_vim(options)
         end
         error 'tab has no valid window'
       end,
-      nvim_tabpage_close = function(tab)
+      nvim_tabpage_close = function(tab, _)
         assert(fixture.tabs[tab] and fixture.tabs[tab].valid, 'cannot close an invalid tab')
         fixture.tabs[tab].valid = false
         for _, window in pairs(fixture.windows) do
@@ -363,7 +363,7 @@ end)
 check('terminal job persists when its Tool Tab is left and revisited', function()
   local fixture = setup()
   fixture.invoke('n', '<leader>gg')
-  local surface = assert(fixture.surface(), 'expected the first terminal surface')
+  assert(fixture.surface(), 'expected the first terminal surface')
   assert(#fixture.job_attempts == 1, 'expected one terminal job after opening the tool')
 
   fixture.invoke('n', '<leader>gg')
