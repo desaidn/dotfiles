@@ -1,24 +1,264 @@
-================================================================================
-INTRODUCTION                                                  *kickstart.nvim*
+*kickstart.txt*	desaidn/dotfiles Neovim workflow and configuration guide
 
-Kickstart.nvim is a project to help you get started on your neovim journey.
+==============================================================================
+DOTFILES NEOVIM                              *dotfiles-nvim* *kickstart.nvim*
 
-                                                            *kickstart-is-not*
-It is not:
-- Complete framework for every plugin under the sun
-- Place to add every plugin that could ever be useful
+This is the Neovim Development Surface for the `desaidn/dotfiles` repository.
+It began with kickstart.nvim, but it is now a personal, modular configuration
+with established editing, language, Git, review, and terminal-tool workflows.
 
-                                                                *kickstart-is*
-It is:
-- Somewhere that has a good start for the most common "IDE" type features:
-    - autocompletion
-    - goto-definition
-    - find references
-    - fuzzy finding
-    - and hinting at what more can be done :)
-- A place to _kickstart_ your journey.
-    - You should fork this project and use/modify it so that it matches your
-      style and preferences. If you don't want to do that, there are probably
-      other projects that would fit much better for you (and that's great!)!
+The configuration favors native Neovim capabilities, a small number of
+purposeful dependencies, text-based UI, and one clear owner for each workflow.
+Neovim remains the place where work starts and returns, independent of which
+agent harness is driving it.
 
- vim:tw=78:ts=8:ft=help:norl:
+Type |gO| to see this file's table of contents.
+
+1. Orientation                                  |dotfiles-nvim-orientation|
+2. Discovering the interface                    |dotfiles-nvim-discovery|
+3. Editing and search                           |dotfiles-nvim-editing|
+4. Language tooling                             |dotfiles-nvim-languages|
+5. Git and Tool Tabs                            |dotfiles-nvim-git|
+6. Customizing the configuration                |dotfiles-nvim-customizing|
+7. Maintenance and troubleshooting              |dotfiles-nvim-maintenance|
+
+==============================================================================
+ORIENTATION                                      *dotfiles-nvim-orientation*
+
+`<Space>` is both |mapleader| and `maplocalleader`. The configuration does not
+require a Nerd Font; plugin UI and the custom colorscheme intentionally use
+text and plain symbols.
+
+This revision requires exactly Neovim 0.12.4; startup stops on any other
+version so upstream baseline changes are adopted deliberately.
+
+The main workflow boundaries are:
+
+- Neovim owns editing, navigation, diagnostics, and language interaction.
+- fff.nvim owns file finding and live grep.
+- Telescope owns help, keymap, diagnostic, buffer, and LSP-symbol pickers.
+- gitsigns owns buffer-local Git hunk context and actions.
+- Hunk owns complete stacked working-tree review.
+- lazygit owns Git transactions: staging, commits, stashes, branches, history,
+  and object selection.
+- tmux owns terminal multiplexing; Neovim does not duplicate its navigation.
+
+The upstream Kickstart teaching comments remain useful context in `init.lua`.
+This help file documents the installed repo-specific interface.
+
+==============================================================================
+DISCOVERING THE INTERFACE                         *dotfiles-nvim-discovery*
+                                                    *dotfiles-nvim-keymaps*
+
+Prefer the live discovery surfaces over memorizing a static key list:
+
+Key             Action ~
+<leader>sh     Search all available help tags
+<leader>sk     Search currently active keymaps
+<leader>ss     Select a Telescope picker
+<leader>sn     Search the Neovim configuration files
+<leader>sc     Search available commands
+
+Press `<Space>` and pause to see the which-key groups immediately. Some
+mappings, such as LSP and gitsigns actions, are buffer-local and appear only
+after the corresponding client or plugin attaches.
+
+Use `:help {topic}` for a known subject, `<leader>sh` to browse help, and
+`<leader>sk` when the question is "which key is active here?". See |help| and
+|:helpgrep| for the native help interface.
+
+==============================================================================
+EDITING AND SEARCH                                *dotfiles-nvim-editing*
+
+Search and navigation ~
+<leader>sf     Find files with fff.nvim
+<leader>sg     Live grep with fff.nvim
+<leader>sw     Search for the word under the cursor
+<leader>s/     Live grep across open files
+<leader>s.     Search recently opened files
+<leader>sr     Resume the previous Telescope picker
+<leader><leader>
+               Find an existing buffer
+<leader>/      Fuzzy search within the current buffer
+
+Daily utilities ~
+<leader>e      Toggle neo-tree and reveal the current file
+<leader>u      Toggle the persistent undo tree
+<leader>ts     Toggle spell checking for the current buffer
+<leader>pa     Copy the absolute file path
+<leader>pr     Copy the path relative to the working directory
+<C-h/j/k/l>   Move between Neovim windows
+<C-d>/<C-u>   Move half a page and recenter the cursor
+<Esc>         Clear search highlighting in Normal mode
+<Esc><Esc>    Leave |terminal| mode
+
+Files changed by another process are checked and reloaded automatically.
+Yanks are highlighted, undo history is persistent, search is smart-case, and
+new splits open below or to the right.
+
+mini.ai provides additional text objects and mini.surround uses its standard
+`sa`, `sd`, and `sr` interface. Search their active mappings with `<leader>sk`
+or read `:help MiniAi` and `:help MiniSurround`.
+
+==============================================================================
+LANGUAGE TOOLING                                 *dotfiles-nvim-languages*
+                                           *dotfiles-nvim-language-tooling*
+
+The Language Tooling Inventory in `lua/custom/languages.lua` is the source of
+truth for enabled LSP configurations, Mason-owned packages, Treesitter
+parsers, formatters, format-on-save policy, and linters. The surrounding
+plugin modules consume that inventory; language intent is not duplicated in
+each plugin configuration.
+
+LSP navigation and actions ~
+K              Show hover documentation
+grd            Go to definition with Telescope
+grD            Go to declaration
+grr            Find references with Telescope
+gri            Find implementations with Telescope
+grt            Go to type definition with Telescope
+gO             Search document symbols
+gW             Search workspace symbols
+grn            Rename
+gra            Code action
+<leader>th     Toggle inlay hints when supported by the attached server
+
+Diagnostics and formatting ~
+[d / ]d       Move to the previous or next diagnostic
+<leader>sd     Search diagnostics
+<leader>q      Put buffer diagnostics in the location list
+<leader>f      Format the current buffer
+
+Formatting runs on save with LSP fallback except where the Inventory disables
+it. Linting runs on buffer and editing events when the declared executable is
+available. Use `:Mason` to inspect tool installation and
+`:checkhealth vim.lsp` to inspect attached language clients.
+
+Completion ~
+<C-Space>      Open completion or documentation
+<C-n>/<C-p>    Select the next or previous completion item
+<CR>           Accept the selected completion
+<Tab>/<S-Tab>  Move through snippet fields
+<C-k>          Show signature help
+
+Debugging is configured on demand for Go and Python. Go uses Mason's delve;
+Python runs debugpy through `uv` and requires `uv` on `PATH`. The first debug
+action loads the DAP plugins:
+
+<F5>           Start or continue
+<F1>/<F2>/<F3>
+               Step into, over, or out
+<leader>b      Toggle a breakpoint
+<leader>B      Set a conditional breakpoint
+<F7>           Toggle the debug UI or inspect the last session
+
+==============================================================================
+GIT AND TOOL TABS               *dotfiles-nvim-git* *dotfiles-nvim-tool-tabs*
+
+In-buffer Git context ~
+]c / [c       Move to the next or previous hunk
+<leader>ga     Stage the current or visually selected hunk
+<leader>gr     Reset the current or visually selected hunk
+<leader>gu     Undo staging the current hunk
+<leader>gp     Preview the current hunk
+<leader>tb     Toggle current-line blame
+<leader>td     Toggle deleted-line and word-diff display
+
+Complete workflow surfaces ~
+<leader>gd     Toggle Hunk's stacked working-tree Review Surface
+<leader>gg     Toggle lazygit's Git Transaction Surface
+
+Hunk and lazygit each run in one persistent Tool Tab. Invoking a tool selects
+its existing tab; invoking the same mapping from that tab returns to the most
+recent non-tool Host Window. Because the TUI starts in Terminal mode, press
+`<Esc><Esc>` before using its Normal-mode toggle.
+
+Each tool uses the Host Window's effective working directory and restarts its
+job when that directory changes. The two Tool Tabs remain independent, and
+host tmux prefix and pane navigation remain available while they run.
+Closing a Tool Tab hides its live session; the next invocation restores it.
+Process exit ends the session and removes its tab.
+
+The shell-owned Global Editor Contract sets `EDITOR`, `VISUAL`, and
+`GIT_EDITOR` to Neovim. flatten.nvim uses this contract for Editor Handoff:
+selected files return to the Host Window while the Tool Tab is preserved.
+
+==============================================================================
+CUSTOMIZING THE CONFIGURATION                    *dotfiles-nvim-customizing*
+
+The configuration is deliberately modular while retaining Kickstart's
+educational comments:
+
+`init.lua`
+    Core options, keymaps, autocommands, |vim.pack| build hooks, core UI, and
+    top-level module imports.
+
+`lua/kickstart/plugins/`
+    Upstream-inspired capability modules. Each module owns and configures its
+    packages directly with `vim.pack.add()`.
+
+`lua/custom/plugins/`
+    Repo-owned integrations. Add a sibling `*.lua` module here for a new
+    personal plugin capability; the sorted loader imports it automatically.
+
+`lua/custom/languages.lua`
+    The canonical Language Tooling Inventory. Add a language capability here
+    instead of scattering tool-specific declarations across plugin modules.
+
+`lua/custom/lib/terminal_tool.lua`
+    The shared launcher for a future Neovim-owned interactive terminal tool.
+    New integrations should be thin declarations of command, key, description,
+    and only genuinely exceptional environment or handoff policy.
+
+`nvim-pack-lock.json`
+    The committed |vim.pack-lockfile| for reproducible plugin revisions.
+
+Before adding a plugin, check whether native Neovim, an existing local helper,
+or a small purpose-built terminal tool already owns the capability. Keep one
+way to perform each workflow and preserve cross-platform paths.
+
+==============================================================================
+MAINTENANCE AND TROUBLESHOOTING                  *dotfiles-nvim-maintenance*
+
+Plugin and tool maintenance ~
+`:lua vim.pack.update(nil, { offline = true })`
+    Inspect package state and pending updates without fetching.
+
+`:lua vim.pack.update()`
+    Fetch package updates. In the resulting buffer, `:write` applies changes
+    and `:quit` cancels them.
+
+`:Mason`
+    Inspect language servers, formatters, linters, and debuggers owned by
+    Mason.
+
+Health and diagnosis ~
+`:checkhealth kickstart`
+    Run the inherited Kickstart baseline check. It accepts Neovim 0.12 or
+    newer and checks `git`, `make`, `unzip`, and `rg`. It is narrower than
+    this repo's current contract.
+
+`:checkhealth vim.lsp`
+    Inspect LSP configuration, attached clients, roots, and file watching.
+
+`:messages`
+    Review startup, package-build, formatter, linter, and tool notifications.
+
+Use the root `install.sh` prerequisite check together with the exact Neovim
+0.12.4 startup guard. This Neovim workflow also requires `tree-sitter`,
+`lazygit`, and `hunk`; Python debugging additionally requires `uv`. See the
+root `README.md` for environment setup. Implementation and test guidance lives
+in `nvim/AGENTS.md`; architectural rationale lives under `docs/adr/`, and
+domain language lives in `CONTEXT.md`.
+
+After editing this file, regenerate its committed tag index with:
+>
+    :helptags ~/.config/nvim/doc
+<
+The canonical entry is `:help dotfiles-nvim`; `:help kickstart.nvim` remains
+as a compatibility and provenance alias.
+
+This configuration continues to adopt useful patterns from kickstart.nvim:
+https://github.com/nvim-lua/kickstart.nvim
+
+ vim:tw=78:ts=8:noet:ft=help:norl:

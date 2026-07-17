@@ -1,3 +1,13 @@
-kickstart-is	kickstart.txt	/*kickstart-is*
-kickstart-is-not	kickstart.txt	/*kickstart-is-not*
+dotfiles-nvim	kickstart.txt	/*dotfiles-nvim*
+dotfiles-nvim-customizing	kickstart.txt	/*dotfiles-nvim-customizing*
+dotfiles-nvim-discovery	kickstart.txt	/*dotfiles-nvim-discovery*
+dotfiles-nvim-editing	kickstart.txt	/*dotfiles-nvim-editing*
+dotfiles-nvim-git	kickstart.txt	/*dotfiles-nvim-git*
+dotfiles-nvim-keymaps	kickstart.txt	/*dotfiles-nvim-keymaps*
+dotfiles-nvim-language-tooling	kickstart.txt	/*dotfiles-nvim-language-tooling*
+dotfiles-nvim-languages	kickstart.txt	/*dotfiles-nvim-languages*
+dotfiles-nvim-maintenance	kickstart.txt	/*dotfiles-nvim-maintenance*
+dotfiles-nvim-orientation	kickstart.txt	/*dotfiles-nvim-orientation*
+dotfiles-nvim-tool-tabs	kickstart.txt	/*dotfiles-nvim-tool-tabs*
 kickstart.nvim	kickstart.txt	/*kickstart.nvim*
+kickstart.txt	kickstart.txt	/*kickstart.txt*
