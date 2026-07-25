@@ -59,6 +59,8 @@ if [[ "$OS_NAME" == "Darwin" ]]; then
 else
     echo "  skipped:        $HOME/.config/ghostty (macOS-only)"
 fi
+mkdir -p "$HOME/.config/hunk"
+link hunk/config.toml .config/hunk/config.toml
 link lazygit     .config/lazygit
 link nvim        .config/nvim
 link tmux        .config/tmux

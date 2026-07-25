@@ -1,0 +1,5 @@
+# Hunk is the agent-authored changeset review surface, so show attached notes.
+agent_notes = true
+
+# Keep transient view toggles local to a session instead of rewriting dotfiles.
+prompt_save_view_preferences = false
