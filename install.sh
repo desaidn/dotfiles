@@ -71,6 +71,8 @@ if [[ ! -d "$herdr_config_dir" || -L "$herdr_config_dir" ]]; then
     mkdir -p "$herdr_config_dir"
 fi
 link herdr/config.toml .config/herdr/config.toml
+mkdir -p "$HOME/.config/hunk"
+link hunk/config.toml .config/hunk/config.toml
 link lazygit     .config/lazygit
 link nvim        .config/nvim
 link tmux        .config/tmux

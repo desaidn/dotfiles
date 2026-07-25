@@ -20,7 +20,7 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 
 - **Neovim** (`nvim/`) - Primary editor for most languages (see `nvim/AGENTS.md` for details)
 - **LazyGit** (`lazygit/config.yml`) - Git TUI with nvim integration, native staging UI, and custom theme
-- **Hunk** - Full stacked working-tree review surface from Neovim
+- **Hunk** (`hunk/config.toml`) - Full stacked working-tree review surface from Neovim; only durable preferences are tracked
 
 ### Per-machine prerequisites (not in this repo)
 
@@ -94,7 +94,7 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 
 ### File Organization
 
-- Each tool maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr links only `config.toml` so session data, logs, sockets, and downloaded state stay untracked
+- Each tool maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked
 - Individual tools may have their own AGENTS.md files (e.g., `herdr/AGENTS.md`, `nvim/AGENTS.md`, `tmux/AGENTS.md`)
 - Long-lived architecture review reports that the user chooses to retain live under `docs/`; generated reports should not remain at the repository root
 - Configurations are environment-specific and not intended for multi-user scenarios
