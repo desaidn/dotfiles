@@ -2,18 +2,19 @@
 
 Personal config monorepo. Clone anywhere, run `./install.sh`, and your system is wired up via symlinks into `~/.config/` and `~/`.
 
-The setup is designed around one uniform code interface: Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
+The setup is designed around one uniform code interface: Herdr is the daily workspace manager, Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. Tmux remains available as a deliberate fallback and compatibility multiplexer. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
 
 ## Layout
 
-| Directory    | Target               | Notes                                                     |
-| ------------ | -------------------- | --------------------------------------------------------- |
-| `fish/`      | `~/.config/fish/`    | Prompt + `nvim-reset` alias. Platform-agnostic.           |
-| `ghostty/`   | `~/.config/ghostty/` | macOS Ghostty terminal config.                            |
-| `lazygit/`   | `~/.config/lazygit/` | Git TUI with Neovim editor handoff and native staging UI. |
-| `nvim/`      | `~/.config/nvim/`    | kickstart-based config using native `vim.pack`.           |
-| `tmux/`      | `~/.config/tmux/`    | 1-indexed, vi copy mode, agent/build pane bindings.       |
-| `zsh/.zshrc` | `~/.zshrc`           | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
+| Source              | Target                       | Notes                                                     |
+| ------------------- | ---------------------------- | --------------------------------------------------------- |
+| `fish/`             | `~/.config/fish/`            | Prompt + `nvim-reset` alias. Platform-agnostic.           |
+| `ghostty/`          | `~/.config/ghostty/`         | macOS Ghostty terminal config.                            |
+| `herdr/config.toml` | `~/.config/herdr/config.toml` | Daily workspace config; mutable runtime state is local.   |
+| `lazygit/`          | `~/.config/lazygit/`         | Git TUI with Neovim editor handoff and native staging UI. |
+| `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack`.           |
+| `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer with 1-indexed windows and panes.    |
+| `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
 
 Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
 
@@ -22,6 +23,7 @@ Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
 This repo keeps the interface to code agent-harness agnostic:
 
 - Start and return to Neovim for editing.
+- Use Herdr as the normal top-level workspace manager; use tmux directly only for fallback or compatibility work rather than nesting it inside Herdr.
 - Prefer native Neovim features and Lua APIs when they can express the workflow clearly.
 - Keep external dependencies narrow, durable, and easy to replace; avoid plugin layers that only wrap behavior Neovim already owns.
 - Use self-made or locally-owned performant tools when a workflow needs more than native Neovim but should remain inspectable, fast, and independent of an agent harness.
@@ -50,11 +52,25 @@ cd ~/dotfiles
 - Re-running it after a successful install is a no-op.
 - Use `./uninstall.sh` to remove the symlinks (and optionally restore the most recent backup).
 
+## Daily workspace
+
+```bash
+# Normal daily workspace
+herdr
+
+# Deliberate fallback/compatibility session
+tmux new-session -A -s dev
+```
+
+These are top-level alternatives. Plain `herdr` starts or reattaches the daily workspace; tmux remains independently available when a tmux-specific workflow is required.
+
 ## Prerequisites
 
 `install.sh` checks for the binaries below on PATH and prints the install URL of anything missing.
 
-**Required tools this repo configures**: `git`, `fish`, `zsh`, `nvim`, `tmux`, `lazygit`
+**Required tools this repo configures**: `git`, `fish`, `zsh`, `nvim`, `herdr`, `tmux`, `lazygit`
+
+Install Herdr per machine with `mise use -g herdr`; `install.sh` checks for the binary but does not install or update it.
 
 **macOS-only tool config**: `ghostty` is required on macOS and skipped on non-macOS hosts. `install.sh` accepts either the `ghostty` CLI or `Ghostty.app` in `/Applications` or `~/Applications`.
 

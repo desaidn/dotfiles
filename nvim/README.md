@@ -2,7 +2,7 @@
 
 A lean Neovim configuration based on kickstart.nvim. Part of [dotfiles](../README.md).
 
-**Philosophy**: Text editing focused, native Neovim first, minimal external dependencies, tmux-integrated workflow. Prefer built-in Neovim APIs and small locally-owned tools over broad plugin layers when the native surface is enough.
+**Philosophy**: Text editing focused, native Neovim first, minimal external dependencies, and workspace-manager neutral. Herdr is the normal daily workspace; tmux remains a compatible fallback. Prefer built-in Neovim APIs and small locally-owned tools over broad plugin layers when the native surface is enough.
 
 ## Installation
 
@@ -65,7 +65,7 @@ nvim
 
 Lazygit and Hunk open files through the shell-owned `EDITOR=nvim` contract. flatten.nvim routes nested Neovim calls back into the host editor and hides the originating Git surface.
 
-Neovim-launched terminal tools use one shared flow in every environment: one persistent terminal job per tool, restarted when its effective working directory changes, shown in a Neovim float that follows the size of its launching window, leaves host tmux prefix and pane navigation available, and uses flatten.nvim for editor handoff. Add future flows through a declarative `terminal_tool.create { id, command, key, desc, env?, handoff? }` call; the module owns mappings, lifecycle state, error recovery, and source-agnostic handoff routing while leaving TUI input untouched.
+Neovim-launched terminal tools use one shared flow in every environment: one persistent terminal job and Tool Tab per tool, restarted when its effective working directory changes, with host tmux prefix and pane navigation left available when running in the tmux fallback and flatten.nvim handling editor handoff. Add future flows through a declarative `terminal_tool.create { id, command, key, desc, env?, handoff? }` call; the module owns mappings, lifecycle state, error recovery, and source-agnostic handoff routing while leaving TUI input untouched.
 
 ### File Explorer
 

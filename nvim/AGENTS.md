@@ -26,7 +26,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
 - `lua/custom/lib/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
 - `lua/custom/lib/plugins_loader.lua` - Shared sorted directory plugin module loader used by `kickstart.plugins` and `custom.plugins`
-- `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should run in a persistent Tool Tab while leaving host tmux navigation available
+- `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should run in a persistent Tool Tab while leaving host tmux navigation available when Neovim is running in the tmux fallback
 - `lua/custom/languages.lua` - Canonical read-only Language Tooling Inventory: native LSP configurations, Mason packages, the Treesitter parser whitelist, Conform formatting policy, and nvim-lint mappings
 - `lua/custom/plugins/` - Auto-imported by `lua/custom/plugins/init.lua`; every sibling `*.lua` file is required, following symlinks:
   - `init.lua` - Custom plugin loader
@@ -101,7 +101,7 @@ To add a new language server:
 
 ### Terminal Integration
 
-Minimal terminal integration (tmux handles primary terminal functionality):
+Minimal terminal integration: Herdr owns the daily top-level workspace, tmux remains the top-level fallback/compatibility multiplexer, and Neovim does not duplicate either manager's navigation:
 
 - `<Esc><Esc>` - Exit terminal mode when needed
 - `<C-h/j/k/l>` - Navigate between windows
@@ -124,7 +124,7 @@ require('custom.lib.terminal_tool').create {
 - Keep multiple Tool Tabs independent. Switching tools must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window.
 - Restart a tool job inside its existing Tool Tab when the Host Window's effective working directory changes. Native `:tabclose` only hides the live terminal buffer; the next invocation recreates its Tool Tab, while process exit removes the session.
 - Let the shared module install the normal-mode mapping; declarations do not receive or inspect mutable buffer, window, tab, or job state. Terminal input stays untouched, so use `<Esc><Esc>` before a normal-mode tool key.
-- Use ordinary full-tab windows inside and outside tmux. This keeps sizing native and the host tmux client upstream so its prefix, session picker, and pane navigation remain available while the tool is running.
+- Use ordinary full-tab windows inside and outside tmux. This keeps sizing native and, when using the tmux fallback, keeps the host tmux client upstream so its prefix, session picker, and pane navigation remain available while the tool is running.
 - Pass through shell-owned `EDITOR`, `VISUAL`, and `GIT_EDITOR`; do not override the editor contract in tool-specific config.
 - Keep tool-specific environment exceptions declarative in `env`; reserved editor and handoff variables are rejected so the source marker and shell-owned editor contract cannot be replaced.
 - Hunk sets `OPENTUI_GRAPHICS=false` because its OpenTUI renderer otherwise mistakes inherited `TMUX` for its immediate terminal and sends tmux-wrapped graphics probes through Neovim's intervening terminal emulator.
@@ -188,7 +188,7 @@ This configuration prioritizes:
 - **Minimal external dependencies**: Add plugins only for clear, durable capabilities; avoid wrapping native behavior in extra layers
 - **Local performant tools**: For workflows outside Neovim's core job, prefer thin integrations with self-made or locally-owned CLI tools over large in-editor plugin surfaces
 - **Readability and documentation**: Lean init.lua plus one file per plugin under `lua/kickstart/plugins/` and `lua/custom/plugins/`
-- **Integration with ecosystem**: Works seamlessly with tmux-based workflows
+- **Integration with ecosystem**: Works inside the Herdr daily workspace while preserving tmux-specific host routing when tmux is chosen as the fallback
 
 ## Coding Guidelines
 

@@ -4,13 +4,23 @@ Guidance for coding agents working on the tmux config. See [`../AGENTS.md`](../A
 
 ## Configuration Purpose
 
-A single `tmux.conf` file. Provides:
+Tmux is the retained top-level fallback and compatibility multiplexer; Herdr is
+the normal daily workspace manager. Start tmux directly when its compatibility
+surface is needed rather than nesting it inside Herdr for agent panes.
+
+A single `tmux.conf` file provides:
 
 - Window and pane indexing starting from 1 (instead of default 0)
 - Directory preservation when creating new windows and panes
 - Consistent working directory context across tmux operations
 
 ## Common Operations
+
+### Starting the fallback
+
+```bash
+tmux new-session -A -s dev
+```
 
 ### Testing Configuration Changes
 

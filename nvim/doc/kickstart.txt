@@ -41,7 +41,9 @@ The main workflow boundaries are:
 - Hunk owns complete stacked working-tree review.
 - lazygit owns Git transactions: staging, commits, stashes, branches, history,
   and object selection.
-- tmux owns terminal multiplexing; Neovim does not duplicate its navigation.
+- Herdr owns the daily top-level workspace; tmux remains the top-level
+  fallback and compatibility multiplexer. Neovim does not duplicate either
+  manager's navigation.
 
 The upstream Kickstart teaching comments remain useful context in `init.lua`.
 This help file documents the installed repo-specific interface.
@@ -174,10 +176,11 @@ recent non-tool Host Window. Because the TUI starts in Terminal mode, press
 `<Esc><Esc>` before using its Normal-mode toggle.
 
 Each tool uses the Host Window's effective working directory and restarts its
-job when that directory changes. The two Tool Tabs remain independent, and
-host tmux prefix and pane navigation remain available while they run.
-Closing a Tool Tab hides its live session; the next invocation restores it.
-Process exit ends the session and removes its tab.
+job when that directory changes. The two Tool Tabs remain independent. When
+Neovim is running in the tmux fallback, the host tmux prefix and pane
+navigation remain available while they run. Closing a Tool Tab hides its live
+session; the next invocation restores it. Process exit ends the session and
+removes its tab.
 
 The shell-owned Global Editor Contract sets `EDITOR`, `VISUAL`, and
 `GIT_EDITOR` to Neovim. flatten.nvim uses this contract for Editor Handoff:

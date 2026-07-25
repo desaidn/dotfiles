@@ -14,6 +14,7 @@ require git          https://git-scm.com
 require fish         https://fishshell.com
 require zsh          https://www.zsh.org
 require nvim         https://neovim.io
+require herdr        https://herdr.dev/docs/install/
 require tmux         https://github.com/tmux/tmux
 require lazygit      https://github.com/jesseduffield/lazygit
 require mise         https://mise.jdx.dev
@@ -39,16 +40,21 @@ if (( ${#missing[@]} > 0 )); then
     exit 1
 fi
 
+backup_existing() {
+    local target="$1"
+    if [[ -e "$target" || -L "$target" ]]; then
+        mv "$target" "${target}.bak.$(date +%s)"
+        echo "  backed up:      $target"
+    fi
+}
+
 link() {
     local src="$REPO_ROOT/$1" dst="$HOME/$2"
     if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
         echo "  already linked: $dst"
         return
     fi
-    if [[ -e "$dst" || -L "$dst" ]]; then
-        mv "$dst" "${dst}.bak.$(date +%s)"
-        echo "  backed up:      $dst"
-    fi
+    backup_existing "$dst"
     ln -s "$src" "$dst"
     echo "  linked:         $dst"
 }
@@ -59,11 +65,20 @@ if [[ "$OS_NAME" == "Darwin" ]]; then
 else
     echo "  skipped:        $HOME/.config/ghostty (macOS-only)"
 fi
+herdr_config_dir="$HOME/.config/herdr"
+if [[ ! -d "$herdr_config_dir" || -L "$herdr_config_dir" ]]; then
+    backup_existing "$herdr_config_dir"
+    mkdir -p "$herdr_config_dir"
+fi
+link herdr/config.toml .config/herdr/config.toml
 link lazygit     .config/lazygit
 link nvim        .config/nvim
 link tmux        .config/tmux
 link zsh/.zshrc  .zshrc
 
 mkdir -p "$LOCAL_DIR"
-cp -n "$REPO_ROOT/templates/local.fish" "$LOCAL_DIR/"
-cp -n "$REPO_ROOT/templates/local.zsh"  "$LOCAL_DIR/"
+for template in local.fish local.zsh; do
+    if [[ ! -e "$LOCAL_DIR/$template" && ! -L "$LOCAL_DIR/$template" ]]; then
+        cp "$REPO_ROOT/templates/$template" "$LOCAL_DIR/"
+    fi
+done

@@ -19,6 +19,7 @@ remove() {
 
 remove fish        .config/fish
 remove ghostty     .config/ghostty
+remove herdr/config.toml .config/herdr/config.toml
 remove lazygit     .config/lazygit
 remove nvim        .config/nvim
 remove tmux        .config/tmux
@@ -26,6 +27,17 @@ remove zsh/.zshrc  .zshrc
 
 echo
 echo "Backups (if any) remain at:"
-ls -d "$HOME"/.config/*.bak.* "$HOME"/.zshrc.bak.* 2>/dev/null || echo "  (none)"
+shopt -s nullglob
+backups=(
+    "$HOME"/.config/*.bak.*
+    "$HOME"/.config/herdr/config.toml.bak.*
+    "$HOME"/.zshrc.bak.*
+)
+shopt -u nullglob
+if (( ${#backups[@]} > 0 )); then
+    printf '  %s\n' "${backups[@]}"
+else
+    echo "  (none)"
+fi
 echo
 echo "Per-machine files at \$HOME/.local/share/dotfiles/ were left untouched."

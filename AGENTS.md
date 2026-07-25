@@ -4,7 +4,7 @@ This file provides guidance to coding agents working in this repository. Codex r
 
 ## Repository Overview
 
-This is a personal dotfiles monorepo. It contains configurations for the tools below; an `install.sh` symlinks each subdirectory into `~/.config/<tool>/` and `zsh/.zshrc` to `~/.zshrc`. Editing a file under this repo and editing the corresponding file under `~/.config/<tool>/` are the same write.
+This is a personal dotfiles monorepo. It contains configurations for the tools below; an `install.sh` symlinks tracked configurations into `~/.config/<tool>/` and `zsh/.zshrc` to `~/.zshrc`. Herdr is linked as a single durable config file so its mutable runtime state remains local. Editing a file under this repo and editing the corresponding linked file under `~/.config/<tool>/` are the same write.
 
 ## Core Applications
 
@@ -13,7 +13,8 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 - **Ghostty** (`ghostty/config`) - macOS terminal emulator config
 - **Fish** (`fish/`) - Primary shell, with custom λ prompt
 - **Zsh** (`zsh/.zshrc`) - Secondary shell, mirrored prompt and aliases
-- **Tmux** (`tmux/tmux.conf`) - Terminal multiplexer with directory preservation and 1-based indexing
+- **Herdr** (`herdr/config.toml`) - Primary daily workspace manager; only durable configuration is tracked
+- **Tmux** (`tmux/tmux.conf`) - Retained fallback and compatibility multiplexer with directory preservation and 1-based indexing
 
 ### Development Tools
 
@@ -39,7 +40,7 @@ All configurations follow these principles:
 - Only one way to do anything — no overlapping functionality between tools
 - Minimal, focused setups without unnecessary complexity
 - Consistent directory structure following XDG standards
-- Integration between tools (e.g., lazygit ↔ nvim, ghostty ↔ tmux)
+- Integration between tools (e.g., lazygit ↔ nvim, terminal tools ↔ editor handoff)
 - Prefer native platform and Neovim capabilities before adding third-party abstractions
 - Keep external dependencies few, purposeful, and replaceable; every dependency should justify its maintenance and portability cost
 - Prefer small self-made or locally-owned performant development tools when native capabilities are not enough and the workflow should stay inspectable
@@ -63,12 +64,17 @@ nvim                            # Start editor (see nvim/AGENTS.md for details)
 ### Terminal Usage
 
 ```bash
-# Start multiplexed session
-tmux new-session -s dev
+# Start or reattach the normal daily workspace
+herdr
 
-# Inside tmux: C-b c (new window), C-b " (vsplit), C-b % (hsplit)
+# Start a deliberate fallback/compatibility session directly
+tmux new-session -A -s dev
+
+# Inside fallback tmux: C-b c (new window), C-b " (vsplit), C-b % (hsplit)
 # All operations preserve current working directory
 ```
+
+Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside Herdr for normal agent work.
 
 ### Git Operations
 
@@ -88,8 +94,8 @@ tmux new-session -s dev
 
 ### File Organization
 
-- Each tool maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`
-- Individual tools may have their own AGENTS.md files (e.g., `nvim/AGENTS.md`, `tmux/AGENTS.md`)
+- Each tool maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr links only `config.toml` so session data, logs, sockets, and downloaded state stay untracked
+- Individual tools may have their own AGENTS.md files (e.g., `herdr/AGENTS.md`, `nvim/AGENTS.md`, `tmux/AGENTS.md`)
 - Long-lived architecture review reports that the user chooses to retain live under `docs/`; generated reports should not remain at the repository root
 - Configurations are environment-specific and not intended for multi-user scenarios
 
@@ -98,8 +104,8 @@ tmux new-session -s dev
 - **Editor ↔ Git**: Neovim integrates with both gitsigns and lazygit
 - **Shell ↔ Editor**: Fish and zsh own the global editor contract (`EDITOR`, `VISUAL`, and `GIT_EDITOR` all point to `nvim`)
 - **Terminal tool ↔ Editor**: flatten.nvim handles editor handoff from nested `nvim` calls back into the host Neovim; the shared terminal-tool module owns the opaque source marker and post-handoff policy while preserving the shell-owned `EDITOR` contract
-- **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent Tool Tab per tool, restarted when the Host Window's effective working directory changes, with host tmux prefix and pane navigation kept upstream and flatten.nvim for Editor Handoff
-- **Shell ↔ Terminal**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; tmux handles multiplexing
+- **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent Tool Tab per tool, restarted when the Host Window's effective working directory changes, with flatten.nvim for Editor Handoff and host tmux prefix and pane navigation kept upstream when using the fallback
+- **Shell ↔ Workspace manager**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; invoke Herdr for the daily workspace or tmux directly for fallback/compatibility
 - **Runtime Management**: Mise handles all language version requirements
 - **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty)
 
@@ -107,7 +113,7 @@ tmux new-session -s dev
 
 - macOS-first setup; configs aim to remain Linux-compatible where practical
 - Primary languages: TypeScript (Bun, Node.js, Browser), Kotlin/Java, Python, Rust
-- Terminal tooling: Ghostty, tmux, fish, zsh
+- Terminal tooling: Ghostty, Herdr, tmux, fish, zsh
 
 ## Agent skills
 
