@@ -1,7 +1,7 @@
 # Keep Hunk's review palette consistent across machines.
 theme = "github-dark-default"
 
-# Preserve horizontal code layout instead of wrapping long diff lines.
+# Wrap long diff lines so their full contents stay visible without horizontal scrolling.
 wrap_lines = true
 
 # Hunk is the agent-authored changeset review surface, so show attached notes.

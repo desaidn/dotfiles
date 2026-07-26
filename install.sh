@@ -59,19 +59,23 @@ link() {
     echo "  linked:         $dst"
 }
 
+prepare_local_config_dir() {
+    local target="$1"
+    if [[ ! -d "$target" || -L "$target" ]]; then
+        backup_existing "$target"
+        mkdir -p "$target"
+    fi
+}
+
 link fish        .config/fish
 if [[ "$OS_NAME" == "Darwin" ]]; then
     link ghostty     .config/ghostty
 else
     echo "  skipped:        $HOME/.config/ghostty (macOS-only)"
 fi
-herdr_config_dir="$HOME/.config/herdr"
-if [[ ! -d "$herdr_config_dir" || -L "$herdr_config_dir" ]]; then
-    backup_existing "$herdr_config_dir"
-    mkdir -p "$herdr_config_dir"
-fi
+prepare_local_config_dir "$HOME/.config/herdr"
 link herdr/config.toml .config/herdr/config.toml
-mkdir -p "$HOME/.config/hunk"
+prepare_local_config_dir "$HOME/.config/hunk"
 link hunk/config.toml .config/hunk/config.toml
 link lazygit     .config/lazygit
 link nvim        .config/nvim
