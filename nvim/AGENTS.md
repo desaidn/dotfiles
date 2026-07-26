@@ -173,11 +173,13 @@ Keep installation ownership aligned with the repository-level dependency
 inventory:
 
 - The host provides exactly stable Neovim 0.12.4, `git`, `curl`, `tar`,
-  `gzip`, `unzip`, a C compiler, `rg`, and tree-sitter CLI 0.26.1 or newer.
+  `gzip`, `unzip`, `diff`, a C compiler, `rg`, and tree-sitter CLI 0.26.1 or
+  newer.
 - The host also provides `lazygit` and `hunk` for their production Tool Tabs,
   plus a platform clipboard provider.
-- Mise owns Node.js/npm, Python, Rust with Cargo and Clippy, Go, and JDK 21+
-  runtimes. Python debugging additionally requires the standalone `uv` CLI.
+- Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, Go, and
+  JDK 21+ runtimes. Python debugging additionally requires the standalone
+  `uv` CLI.
 - Haskell is an explicit ownership exception: the current Mason HLS recipe
   invokes `ghcup`, so `ghcup` must be available before Mason performs a clean
   inventory install.

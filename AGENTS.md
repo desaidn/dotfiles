@@ -32,16 +32,17 @@ Keep provisioning ownership explicit:
   Neovim 0.12.4 stable, Herdr, tmux 3.7+, lazygit, Hunk, Mise, Atuin, `gh`,
   ripgrep, tree-sitter CLI 0.26.1+, and capability-specific tools such as
   `uv` and `ghcup`; on Linux it also owns `xclip` and `wl-clipboard`.
-- **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy, Go, and JDK 21+
+- **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy/rustfmt, Go, and JDK 21+
   runtimes. Do not install these runtimes through Homebrew.
 - **Neovim** owns its plugins, Treesitter parsers, and Mason packages. Do not
   duplicate Mason-managed LSPs, formatters, linters, or debuggers in the
   machine package list.
 
 Ghostty and JetBrains Mono are macOS-only Homebrew casks. Linux needs a
-session-appropriate clipboard provider. `make` is an optional Neovim build
-enhancement, and Expect is test-only. Do not turn gated per-machine paths for
-Bun, LM Studio, Claude, or JetBrains Toolbox into required dependencies.
+session-appropriate clipboard provider. Native development tools provide
+`make`, although Neovim uses it only for optional plugin enhancements. Expect
+is test-only. Do not turn gated per-machine paths for Bun, LM Studio, Claude,
+or JetBrains Toolbox into required dependencies.
 
 `install.sh` implements this policy through the root `Brewfile` and
 `mise/conf.d/00-dotfiles.toml`. The Mise file is linked as a low-precedence

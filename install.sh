@@ -6,8 +6,8 @@ BREWFILE="$REPO_ROOT/Brewfile"
 MISE_MANIFEST="$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
 HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 OS_NAME="$(uname -s)"
-SUDO_READY=0
 BREW_BIN=""
+LINUX_PACKAGE_MANAGER=""
 
 die() {
     printf 'error: %s\n' "$*" >&2
@@ -31,12 +31,8 @@ esac
 LOCAL_DIR="$HOME/.local/share/dotfiles"
 
 ensure_sudo() {
-    if (( SUDO_READY == 1 )); then
-        return 0
-    fi
     command -v sudo >/dev/null 2>&1 || die "sudo is required to install system prerequisites and Homebrew"
     sudo -v || die "sudo authentication failed; retry in a terminal or configure passwordless sudo for headless use"
-    SUDO_READY=1
 }
 
 has_linux_clipboard() {
@@ -54,28 +50,45 @@ collect_native_missing() {
     done
 }
 
+detect_linux_package_manager() {
+    if command -v apt-get >/dev/null 2>&1; then
+        LINUX_PACKAGE_MANAGER="apt-get"
+    elif command -v dnf >/dev/null 2>&1; then
+        LINUX_PACKAGE_MANAGER="dnf"
+    elif command -v pacman >/dev/null 2>&1; then
+        LINUX_PACKAGE_MANAGER="pacman"
+    else
+        die "unsupported Linux package manager; this installer supports apt-get, dnf, and pacman"
+    fi
+}
+
 install_linux_native_packages() {
     ensure_sudo
     section "Installing Linux system prerequisites"
 
-    if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update
-        sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential procps curl file git tar gzip unzip diffutils \
-            ca-certificates
-    elif command -v dnf >/dev/null 2>&1; then
-        if ! sudo dnf group install -y development-tools; then
-            sudo dnf group install -y "Development Tools"
-        fi
-        sudo dnf install -y \
-            procps-ng curl file git tar gzip unzip diffutils ca-certificates
-    elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -S --needed --noconfirm \
-            base-devel procps-ng curl file git tar gzip unzip diffutils \
-            ca-certificates
-    else
-        die "missing system prerequisites (${NATIVE_MISSING[*]}) and no supported package manager was found; install them with apt, dnf, or pacman and rerun"
-    fi
+    case "$LINUX_PACKAGE_MANAGER" in
+        apt-get)
+            sudo apt-get update
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                build-essential procps curl file git tar gzip unzip diffutils \
+                ca-certificates
+            ;;
+        dnf)
+            if ! sudo dnf group install -y development-tools; then
+                sudo dnf group install -y "Development Tools"
+            fi
+            sudo dnf install -y \
+                procps-ng curl file git tar gzip unzip diffutils ca-certificates
+            ;;
+        pacman)
+            sudo pacman -S --needed --noconfirm \
+                base-devel procps-ng curl file git tar gzip unzip diffutils \
+                ca-certificates
+            ;;
+        *)
+            die "internal error: Linux package manager was not detected"
+            ;;
+    esac
 }
 
 ensure_native_prerequisites() {
@@ -94,6 +107,7 @@ ensure_native_prerequisites() {
         return 0
     fi
 
+    detect_linux_package_manager
     collect_native_missing
     if (( ${#NATIVE_MISSING[@]} > 0 )); then
         printf 'Missing Linux system prerequisites: %s\n' "${NATIVE_MISSING[*]}"
@@ -338,11 +352,14 @@ validate_brew_dependencies() {
 }
 
 install_mise_runtimes() {
-    local activation previous_global_config had_global_config
+    local activation previous_global_config had_global_config original_working_directory
     local command_name output version
     local missing
 
     section "Installing Mise runtimes"
+    original_working_directory="$PWD"
+    cd -- "$REPO_ROOT"
+
     if MISE_GLOBAL_CONFIG_FILE="$MISE_MANIFEST" mise install --dry-run-code >/dev/null 2>&1; then
         echo "Mise runtimes are already installed."
     else
@@ -366,7 +383,7 @@ install_mise_runtimes() {
     hash -r
 
     missing=()
-    for command_name in node npm python rustc cargo go java javac; do
+    for command_name in node npm python rustc cargo rustfmt go java javac; do
         command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
     done
     if (( ${#missing[@]} > 0 )); then
@@ -380,6 +397,8 @@ install_mise_runtimes() {
     version="${output##* }"
     version_at_least "$version" "21.0.0" ||
         die "JDK 21+ is required (found '${version:-unknown}')"
+
+    cd -- "$original_working_directory"
 }
 
 backup_existing() {

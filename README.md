@@ -13,7 +13,7 @@ The setup is designed around one uniform code interface: Herdr is the daily work
 | `herdr/config.toml` | `~/.config/herdr/config.toml` | Daily workspace config; mutable runtime state is local.   |
 | `hunk/config.toml`  | `~/.config/hunk/config.toml`  | Review preferences; mutable runtime state remains local.  |
 | `lazygit/`          | `~/.config/lazygit/`         | Git TUI with Neovim editor handoff and native staging UI. |
-| `mise/conf.d/`      | `~/.config/mise/conf.d/`     | Global runtime defaults; user config can override them.   |
+| `mise/conf.d/00-dotfiles.toml` | `~/.config/mise/conf.d/00-dotfiles.toml` | Global runtime defaults; user config can override them. |
 | `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack`.           |
 | `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer with 1-indexed windows and panes.    |
 | `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
@@ -116,9 +116,10 @@ On macOS, the configured UI also uses the `ghostty` and
 ### Mise runtimes
 
 The enabled Neovim language capabilities require Node.js/npm, Python, Rust
-with Cargo and Clippy, Go, and a JDK 21 or newer. These runtimes belong to
-Mise; Mason installs the corresponding editor tooling. Haskell is the current
-exception: Mason's Haskell Language Server recipe invokes `ghcup` directly.
+with Cargo, Clippy, and rustfmt, Go, and a JDK 21 or newer. These runtimes
+belong to Mise; Mason installs the corresponding editor tooling. Haskell is
+the current exception: Mason's Haskell Language Server recipe invokes `ghcup`
+directly.
 
 The installer uses the tracked global defaults fragment
 [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml). Its channel

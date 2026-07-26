@@ -19,7 +19,8 @@ prerelease builds so plugin behavior stays tied to the tested baseline.
 
 Host requirements:
 
-- `git`, `curl`, `tar`, `gzip`, and `unzip` for plugins and Mason packages
+- `git`, `curl`, `tar`, `gzip`, `unzip`, and `diff` for plugins, Mason
+  packages, and Undotree
 - A C compiler for Treesitter parsers
 - [ripgrep](https://github.com/BurntSushi/ripgrep#installation) for Telescope grep
 - [tree-sitter-cli](https://github.com/tree-sitter/tree-sitter/blob/master/cli/README.md)
@@ -29,11 +30,11 @@ Host requirements:
   Linux
 
 Mise owns the language runtimes used by the enabled Language Tooling
-Inventory: Node.js/npm, Python, Rust with Cargo and Clippy, Go, and JDK 21 or
-newer. Mason owns the corresponding LSPs, formatters, linters, and debugger
-adapters. Python DAP additionally invokes the standalone `uv` CLI. Haskell
-support currently requires `ghcup` because Mason's HLS installer calls it
-directly.
+Inventory: Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, Go, and
+JDK 21 or newer. Mason owns the corresponding LSPs, formatters, linters, and
+debugger adapters. Python DAP additionally invokes the standalone `uv` CLI.
+Haskell support currently requires `ghcup` because Mason's HLS installer calls
+it directly.
 
 `make` is optional: when available, it enables telescope-fzf-native and
 LuaSnip's jsregexp build. `fd` is not a base dependency because fff.nvim owns

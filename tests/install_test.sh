@@ -150,9 +150,14 @@ SCRIPT
 
     cat >"$FIXTURE_MISE_TEMPLATE" <<'SCRIPT'
 #!/usr/bin/env bash
+if [[ "$PWD" != "$DOTFILES_TEST_REPO_ROOT" ]]; then
+    printf 'mise invoked from unexpected directory: %s\n' "$PWD" >&2
+    exit 4
+fi
+
 write_runtime_commands() {
     local command_name
-    for command_name in node npm python python3 rustc cargo clippy go java javac; do
+    for command_name in node npm python python3 rustc cargo clippy rustfmt go java javac; do
         cp "$DOTFILES_TEST_RUNTIME_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
         chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
     done
@@ -205,6 +210,9 @@ case "${0##*/}" in
         ;;
     clippy)
         printf 'clippy 0.1.88\n'
+        ;;
+    rustfmt)
+        printf 'rustfmt 1.8.0-stable\n'
         ;;
     go)
         printf 'go version go1.24.5 linux/amd64\n'
@@ -371,6 +379,7 @@ new_fixture() {
     FIXTURE_GENERIC_TEMPLATE="$FIXTURE_ROOT/generic-template"
     FIXTURE_MISE_TEMPLATE="$FIXTURE_ROOT/mise-template"
     FIXTURE_RUNTIME_TEMPLATE="$FIXTURE_ROOT/runtime-template"
+    FIXTURE_CALLER_DIR="$FIXTURE_ROOT/caller"
     FIXTURE_OS="$os_name"
     if [[ "$os_name" == "Linux" ]]; then
         FIXTURE_SYSTEM_PATH=""
@@ -382,33 +391,47 @@ new_fixture() {
         "$FIXTURE_HOME" \
         "$FIXTURE_FAKE_BIN" \
         "$FIXTURE_STATE" \
+        "$FIXTURE_CALLER_DIR" \
         "$FIXTURE_APPLICATION_DIR" \
         "$FIXTURE_FONT_DIR"
     : >"$FIXTURE_LOG"
+    printf '[tools]\n"core:java" = "temurin-8"\n' >"$FIXTURE_CALLER_DIR/mise.toml"
     write_fake_commands
 }
 
 run_installer() {
-    if env \
-        HOME="$FIXTURE_HOME" \
-        PATH="$FIXTURE_FAKE_BIN${FIXTURE_SYSTEM_PATH:+:$FIXTURE_SYSTEM_PATH}" \
-        DOTFILES_BREW_PATHS="$FIXTURE_FAKE_BIN/brew" \
-        DOTFILES_APPLICATION_DIRS="$FIXTURE_APPLICATION_DIR" \
-        DOTFILES_FONT_DIRS="$FIXTURE_FONT_DIR" \
-        DOTFILES_TEST_APPLICATION_DIR="$FIXTURE_APPLICATION_DIR" \
-        DOTFILES_TEST_BREW_TEMPLATE="$FIXTURE_BREW_TEMPLATE" \
-        DOTFILES_TEST_FAKE_BIN="$FIXTURE_FAKE_BIN" \
-        DOTFILES_TEST_FONT_DIR="$FIXTURE_FONT_DIR" \
-        DOTFILES_TEST_FORMULA_TEMPLATE="$FIXTURE_FORMULA_TEMPLATE" \
-        DOTFILES_TEST_GENERIC_TEMPLATE="$FIXTURE_GENERIC_TEMPLATE" \
-        DOTFILES_TEST_LOG="$FIXTURE_LOG" \
-        DOTFILES_TEST_MISE_TEMPLATE="$FIXTURE_MISE_TEMPLATE" \
-        DOTFILES_TEST_OS="$FIXTURE_OS" \
-        DOTFILES_TEST_RUNTIME_TEMPLATE="$FIXTURE_RUNTIME_TEMPLATE" \
-        DOTFILES_TEST_STATE="$FIXTURE_STATE" \
-        "$REPO_ROOT/install.sh" >"$FIXTURE_OUTPUT" 2>&1
+    local expected_result="${1:-success}"
+    if (
+        cd "$FIXTURE_CALLER_DIR"
+        env \
+            HOME="$FIXTURE_HOME" \
+            PATH="$FIXTURE_FAKE_BIN${FIXTURE_SYSTEM_PATH:+:$FIXTURE_SYSTEM_PATH}" \
+            DOTFILES_BREW_PATHS="$FIXTURE_FAKE_BIN/brew" \
+            DOTFILES_APPLICATION_DIRS="$FIXTURE_APPLICATION_DIR" \
+            DOTFILES_FONT_DIRS="$FIXTURE_FONT_DIR" \
+            DOTFILES_TEST_APPLICATION_DIR="$FIXTURE_APPLICATION_DIR" \
+            DOTFILES_TEST_BREW_TEMPLATE="$FIXTURE_BREW_TEMPLATE" \
+            DOTFILES_TEST_FAKE_BIN="$FIXTURE_FAKE_BIN" \
+            DOTFILES_TEST_FONT_DIR="$FIXTURE_FONT_DIR" \
+            DOTFILES_TEST_FORMULA_TEMPLATE="$FIXTURE_FORMULA_TEMPLATE" \
+            DOTFILES_TEST_GENERIC_TEMPLATE="$FIXTURE_GENERIC_TEMPLATE" \
+            DOTFILES_TEST_LOG="$FIXTURE_LOG" \
+            DOTFILES_TEST_MISE_TEMPLATE="$FIXTURE_MISE_TEMPLATE" \
+            DOTFILES_TEST_OS="$FIXTURE_OS" \
+            DOTFILES_TEST_REPO_ROOT="$REPO_ROOT" \
+            DOTFILES_TEST_RUNTIME_TEMPLATE="$FIXTURE_RUNTIME_TEMPLATE" \
+            DOTFILES_TEST_STATE="$FIXTURE_STATE" \
+            "$REPO_ROOT/install.sh"
+    ) >"$FIXTURE_OUTPUT" 2>&1
     then
-        return
+        if [[ "$expected_result" == "failure" ]]; then
+            fail "installer unexpectedly succeeded for the $FIXTURE_OS fixture"
+        fi
+        return 0
+    fi
+
+    if [[ "$expected_result" == "failure" ]]; then
+        return 0
     fi
 
     sed 's/^/  | /' "$FIXTURE_OUTPUT" >&2
@@ -501,6 +524,20 @@ test_debian_fresh_and_second_run() {
     pass "fresh Debian/apt provisioning and second-run no-op"
 }
 
+test_unsupported_linux_package_manager() {
+    new_fixture unsupported-linux Linux
+    mv "$FIXTURE_FAKE_BIN/apt-get" "$FIXTURE_STATE/apt-get.disabled"
+
+    run_installer failure
+
+    grep -Fq 'unsupported Linux package manager' "$FIXTURE_OUTPUT" ||
+        fail "unsupported Linux manager failure was not actionable"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "unsupported Linux package managers fail before mutations"
+}
+
 test_macos_fresh_and_second_run
 test_debian_fresh_and_second_run
+test_unsupported_linux_package_manager
 printf 'All install integration tests passed.\n'
