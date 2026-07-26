@@ -164,6 +164,9 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 - Re-running the script after a successful install is a no-op.
 - Reject an empty, relative, or root `HOME`, and reject root execution, before
   constructing or changing user paths.
+- Keep `install.sh` and `uninstall.sh` self-contained at the user-path safety
+  boundary; duplicate their small guards and ownership predicate rather than
+  introducing a sourced bootstrap helper.
 - Preflight the Brewfile, every tracked link/template source, and blocking
   parent paths before installing dependencies or changing link targets.
 - Perform all dependency installation and validation before changing link
