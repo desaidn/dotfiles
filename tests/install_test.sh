@@ -130,18 +130,54 @@ fi
 exec "$@"
 SCRIPT
 
-    cat >"$FIXTURE_FAKE_BIN/apt-get" <<'SCRIPT'
+    cat >"$FIXTURE_PACKAGE_TEMPLATE" <<'SCRIPT'
 #!/usr/bin/env bash
-printf 'apt-get %s\n' "$*" >>"$DOTFILES_TEST_LOG"
-case " $* " in
-    *" install "*)
-        for command_name in cc make ps file git tar gzip unzip diff; do
-            cp "$DOTFILES_TEST_GENERIC_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
-            chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
-        done
+install_native_commands() {
+    local command_name
+    for command_name in cc make ps file git tar gzip unzip diff; do
+        cp "$DOTFILES_TEST_GENERIC_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
+        chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
+    done
+}
+
+manager="${0##*/}"
+printf '%s %s\n' "$manager" "$*" >>"$DOTFILES_TEST_LOG"
+case "$manager" in
+    apt-get)
+        case " $* " in
+            *" install "*)
+                install_native_commands
+                ;;
+        esac
+        ;;
+    dnf)
+        case " $* " in
+            *" group install -y development-tools "*)
+                if [[ ! -e "$DOTFILES_TEST_STATE/dnf-lowercase-group-tried" ]]; then
+                    : >"$DOTFILES_TEST_STATE/dnf-lowercase-group-tried"
+                    exit 1
+                fi
+                install_native_commands
+                ;;
+            *" group install -y Development Tools "*|*" install "*)
+                install_native_commands
+                ;;
+        esac
+        ;;
+    pacman)
+        case " $* " in
+            *" -S --needed --noconfirm "*)
+                install_native_commands
+                ;;
+        esac
         ;;
 esac
 SCRIPT
+
+    if [[ "$FIXTURE_PACKAGE_MANAGER" != "none" ]]; then
+        cp "$FIXTURE_PACKAGE_TEMPLATE" "$FIXTURE_FAKE_BIN/$FIXTURE_PACKAGE_MANAGER"
+        chmod +x "$FIXTURE_FAKE_BIN/$FIXTURE_PACKAGE_MANAGER"
+    fi
 
     cat >"$FIXTURE_GENERIC_TEMPLATE" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -152,6 +188,10 @@ SCRIPT
 #!/usr/bin/env bash
 if [[ "$PWD" != "$DOTFILES_TEST_REPO_ROOT" ]]; then
     printf 'mise invoked from unexpected directory: %s\n' "$PWD" >&2
+    exit 4
+fi
+if [[ "${MISE_GLOBAL_CONFIG_FILE:-}" != "$DOTFILES_TEST_REPO_ROOT/mise/conf.d/00-dotfiles.toml" ]]; then
+    printf 'mise received unexpected global config: %s\n' "${MISE_GLOBAL_CONFIG_FILE:-unset}" >&2
     exit 4
 fi
 
@@ -227,7 +267,13 @@ SCRIPT
 #!/usr/bin/env bash
 case "${0##*/}" in
     fish)
-        printf 'fish, version 4.0.2\n'
+        if [[ "${1:-}" == "-l" ]]; then
+            [[ -L "$HOME/.config/fish" ]] || exit 5
+            [[ -f "$HOME/.local/share/dotfiles/local.fish" ]] || exit 5
+            printf 'fish login environment ready\n' >>"$DOTFILES_TEST_LOG"
+        else
+            printf 'fish, version 4.0.2\n'
+        fi
         ;;
     nvim)
         printf 'NVIM v0.12.4\n'
@@ -286,10 +332,10 @@ case "${1:-}" in
                 ;;
         esac
         case " $* " in
-            *" --file="*)
+            *" --file=$DOTFILES_TEST_REPO_ROOT/Brewfile "*|*" --file=$DOTFILES_TEST_REPO_ROOT/Brewfile")
                 ;;
             *)
-                printf 'brew bundle did not receive a Brewfile: %s\n' "$*" >&2
+                printf 'brew bundle did not receive the tracked Brewfile: %s\n' "$*" >&2
                 exit 3
                 ;;
         esac
@@ -343,7 +389,7 @@ case "${1:-}" in
         esac
         ;;
     --prefix)
-        printf '%s\n' "$DOTFILES_TEST_FAKE_BIN/.."
+        printf '%s\n' "$DOTFILES_TEST_BREW_PREFIX"
         ;;
     *)
         exit 0
@@ -352,7 +398,6 @@ esac
 SCRIPT
 
     chmod +x \
-        "$FIXTURE_FAKE_BIN/apt-get" \
         "$FIXTURE_FAKE_BIN/curl" \
         "$FIXTURE_FAKE_BIN/sudo" \
         "$FIXTURE_FAKE_BIN/uname" \
@@ -361,11 +406,12 @@ SCRIPT
         "$FIXTURE_FORMULA_TEMPLATE" \
         "$FIXTURE_GENERIC_TEMPLATE" \
         "$FIXTURE_MISE_TEMPLATE" \
+        "$FIXTURE_PACKAGE_TEMPLATE" \
         "$FIXTURE_RUNTIME_TEMPLATE"
 }
 
 new_fixture() {
-    local name="$1" os_name="$2"
+    local name="$1" os_name="$2" package_manager="${3:-}"
     FIXTURE_ROOT="$TEST_ROOT/$name"
     FIXTURE_HOME="$FIXTURE_ROOT/home"
     FIXTURE_FAKE_BIN="$FIXTURE_ROOT/bin"
@@ -379,8 +425,18 @@ new_fixture() {
     FIXTURE_GENERIC_TEMPLATE="$FIXTURE_ROOT/generic-template"
     FIXTURE_MISE_TEMPLATE="$FIXTURE_ROOT/mise-template"
     FIXTURE_RUNTIME_TEMPLATE="$FIXTURE_ROOT/runtime-template"
+    FIXTURE_PACKAGE_TEMPLATE="$FIXTURE_ROOT/package-template"
     FIXTURE_CALLER_DIR="$FIXTURE_ROOT/caller"
+    FIXTURE_INSTALL_REPO_ROOT="$REPO_ROOT"
+    FIXTURE_BREW_PREFIX="$FIXTURE_ROOT"
     FIXTURE_OS="$os_name"
+    if [[ -n "$package_manager" ]]; then
+        FIXTURE_PACKAGE_MANAGER="$package_manager"
+    elif [[ "$os_name" == "Linux" ]]; then
+        FIXTURE_PACKAGE_MANAGER="apt-get"
+    else
+        FIXTURE_PACKAGE_MANAGER="none"
+    fi
     if [[ "$os_name" == "Linux" ]]; then
         FIXTURE_SYSTEM_PATH=""
     else
@@ -401,16 +457,21 @@ new_fixture() {
 
 run_installer() {
     local expected_result="${1:-success}"
+    local run_home="$FIXTURE_HOME"
+    if (( $# > 1 )); then
+        run_home="$2"
+    fi
     if (
         cd "$FIXTURE_CALLER_DIR"
         env \
-            HOME="$FIXTURE_HOME" \
+            HOME="$run_home" \
             PATH="$FIXTURE_FAKE_BIN${FIXTURE_SYSTEM_PATH:+:$FIXTURE_SYSTEM_PATH}" \
             DOTFILES_BREW_PATHS="$FIXTURE_FAKE_BIN/brew" \
             DOTFILES_APPLICATION_DIRS="$FIXTURE_APPLICATION_DIR" \
             DOTFILES_FONT_DIRS="$FIXTURE_FONT_DIR" \
             DOTFILES_TEST_APPLICATION_DIR="$FIXTURE_APPLICATION_DIR" \
             DOTFILES_TEST_BREW_TEMPLATE="$FIXTURE_BREW_TEMPLATE" \
+            DOTFILES_TEST_BREW_PREFIX="$FIXTURE_BREW_PREFIX" \
             DOTFILES_TEST_FAKE_BIN="$FIXTURE_FAKE_BIN" \
             DOTFILES_TEST_FONT_DIR="$FIXTURE_FONT_DIR" \
             DOTFILES_TEST_FORMULA_TEMPLATE="$FIXTURE_FORMULA_TEMPLATE" \
@@ -418,10 +479,10 @@ run_installer() {
             DOTFILES_TEST_LOG="$FIXTURE_LOG" \
             DOTFILES_TEST_MISE_TEMPLATE="$FIXTURE_MISE_TEMPLATE" \
             DOTFILES_TEST_OS="$FIXTURE_OS" \
-            DOTFILES_TEST_REPO_ROOT="$REPO_ROOT" \
+            DOTFILES_TEST_REPO_ROOT="$FIXTURE_INSTALL_REPO_ROOT" \
             DOTFILES_TEST_RUNTIME_TEMPLATE="$FIXTURE_RUNTIME_TEMPLATE" \
             DOTFILES_TEST_STATE="$FIXTURE_STATE" \
-            "$REPO_ROOT/install.sh"
+            "$FIXTURE_INSTALL_REPO_ROOT/install.sh"
     ) >"$FIXTURE_OUTPUT" 2>&1
     then
         if [[ "$expected_result" == "failure" ]]; then
@@ -436,6 +497,21 @@ run_installer() {
 
     sed 's/^/  | /' "$FIXTURE_OUTPUT" >&2
     fail "installer failed for the $FIXTURE_OS fixture"
+}
+
+run_uninstaller() {
+    local expected_status="$1"
+    shift
+
+    if HOME="$FIXTURE_HOME" PATH="$FIXTURE_FAKE_BIN:/usr/bin:/bin" \
+        "$REPO_ROOT/uninstall.sh" "$@" >"$FIXTURE_ROOT/uninstall.out" 2>&1
+    then
+        actual_status=0
+    else
+        actual_status=$?
+    fi
+
+    assert_eq "$expected_status" "$actual_status" "unexpected uninstall exit status"
 }
 
 count_zsh_backups() {
@@ -459,6 +535,16 @@ assert_common_links() {
     assert_symlink "$FIXTURE_HOME/.zshrc" "$REPO_ROOT/zsh/.zshrc"
     assert_exists "$FIXTURE_HOME/.local/share/dotfiles/local.fish"
     assert_exists "$FIXTURE_HOME/.local/share/dotfiles/local.zsh"
+}
+
+assert_common_links_removed() {
+    assert_not_exists "$FIXTURE_HOME/.config/fish"
+    assert_not_exists "$FIXTURE_HOME/.config/herdr/config.toml"
+    assert_not_exists "$FIXTURE_HOME/.config/hunk/config.toml"
+    assert_not_exists "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml"
+    assert_not_exists "$FIXTURE_HOME/.config/nvim"
+    assert_not_exists "$FIXTURE_HOME/.config/tmux"
+    assert_not_exists "$FIXTURE_HOME/.zshrc"
 }
 
 test_macos_fresh_and_second_run() {
@@ -494,15 +580,40 @@ test_macos_fresh_and_second_run() {
     pass "fresh macOS provisioning, non-destructive linking, and second-run no-op"
 }
 
-test_debian_fresh_and_second_run() {
-    new_fixture debian Linux
+assert_linux_native_install_once() {
+    local manager="$1"
+
+    case "$manager" in
+        apt-get)
+            assert_log_count 1 "apt-get update" "$FIXTURE_LOG"
+            assert_log_count 1 \
+                "apt-get install -y build-essential procps curl file git tar gzip unzip diffutils ca-certificates" \
+                "$FIXTURE_LOG"
+            ;;
+        dnf)
+            assert_log_count 1 "dnf group install -y development-tools" "$FIXTURE_LOG"
+            assert_log_count 1 "dnf group install -y Development Tools" "$FIXTURE_LOG"
+            assert_log_count 1 \
+                "dnf install -y procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
+                "$FIXTURE_LOG"
+            ;;
+        pacman)
+            assert_log_count 1 \
+                "pacman -S --needed --noconfirm base-devel procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
+                "$FIXTURE_LOG"
+            ;;
+    esac
+}
+
+test_linux_manager_fresh_and_second_run() {
+    local manager="$1"
+    new_fixture "linux-$manager" Linux "$manager"
 
     run_installer
 
     assert_common_links
     assert_not_exists "$FIXTURE_HOME/.config/ghostty"
-    assert_log_count 1 "apt-get update" "$FIXTURE_LOG"
-    assert_log_prefix_count 1 "apt-get install " "$FIXTURE_LOG"
+    assert_linux_native_install_once "$manager"
     assert_log_count 1 "brew bootstrap" "$FIXTURE_LOG"
     assert_log_count 1 "brew bundle install" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
@@ -510,18 +621,23 @@ test_debian_fresh_and_second_run() {
     assert_log_count 0 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
     assert_exists "$FIXTURE_FAKE_BIN/wl-copy"
     assert_exists "$FIXTURE_FAKE_BIN/xclip"
+    grep -Fq "exec \"$FIXTURE_FAKE_BIN/fish\" -l" "$FIXTURE_OUTPUT" ||
+        fail "Linux install did not print an executable Fish handoff"
+    HOME="$FIXTURE_HOME" DOTFILES_TEST_LOG="$FIXTURE_LOG" \
+        "$FIXTURE_FAKE_BIN/fish" -l
+    assert_log_count 1 "fish login environment ready" "$FIXTURE_LOG"
 
     run_installer
 
-    assert_log_count 1 "apt-get update" "$FIXTURE_LOG"
-    assert_log_prefix_count 1 "apt-get install " "$FIXTURE_LOG"
+    assert_linux_native_install_once "$manager"
     assert_log_count 1 "brew bootstrap" "$FIXTURE_LOG"
     assert_log_count 1 "brew bundle install" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
+    assert_log_count 1 "fish login environment ready" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install ghostty" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
     assert_common_links
-    pass "fresh Debian/apt provisioning and second-run no-op"
+    pass "fresh Linux/$manager provisioning and second-run no-op"
 }
 
 test_unsupported_linux_package_manager() {
@@ -537,7 +653,352 @@ test_unsupported_linux_package_manager() {
     pass "unsupported Linux package managers fail before mutations"
 }
 
+test_linux_handoff_is_validated_before_linking() {
+    new_fixture invalid-linux-handoff Linux apt-get
+    FIXTURE_BREW_PREFIX="$FIXTURE_ROOT/unusable-brew"
+    printf 'original zsh config\n' >"$FIXTURE_HOME/.zshrc"
+
+    run_installer failure
+
+    grep -Fq 'Fish is installed, but its executable was not found' "$FIXTURE_OUTPUT" ||
+        fail "invalid Linux Fish handoff failure was not actionable"
+    grep -Fxq 'original zsh config' "$FIXTURE_HOME/.zshrc" ||
+        fail "Fish handoff validation changed zsh config"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    assert_not_exists "$FIXTURE_HOME/.local"
+    pass "Linux Fish handoff is validated before configuration mutations"
+}
+
+test_uninstall_cli_is_safe() {
+    new_fixture uninstall-cli Darwin
+    run_installer
+
+    run_uninstaller 0 --help
+    grep -Fq 'Usage:' "$FIXTURE_ROOT/uninstall.out" ||
+        fail "uninstall help did not print usage"
+    assert_common_links
+
+    run_uninstaller 2 --definitely-not-an-option
+    assert_common_links
+    pass "uninstall help and invalid options do not mutate configuration"
+}
+
+test_install_and_uninstall_reject_unsafe_homes() {
+    local actual_status
+
+    new_fixture unsafe-home Darwin
+    run_installer
+    ln -s / "$FIXTURE_ROOT/root-home-alias"
+
+    if (
+        unset HOME
+        PATH="$FIXTURE_FAKE_BIN:/usr/bin:/bin" "$REPO_ROOT/uninstall.sh" --help
+    ) >"$FIXTURE_ROOT/uninstall-help.out" 2>&1
+    then
+        actual_status=0
+    else
+        actual_status=$?
+    fi
+    assert_eq "0" "$actual_status" "uninstall help should not require HOME"
+
+    for unsafe_home in \
+        "" \
+        relative-home \
+        / \
+        /./ \
+        "$FIXTURE_ROOT/root-home-alias" \
+        "$FIXTURE_ROOT/missing-home"
+    do
+        if HOME="$unsafe_home" PATH="$FIXTURE_FAKE_BIN:/usr/bin:/bin" \
+            "$REPO_ROOT/uninstall.sh" >"$FIXTURE_ROOT/uninstall-unsafe.out" 2>&1
+        then
+            actual_status=0
+        else
+            actual_status=$?
+        fi
+        assert_eq "1" "$actual_status" "uninstall accepted unsafe HOME '$unsafe_home'"
+        assert_common_links
+
+        run_installer failure "$unsafe_home"
+        assert_common_links
+    done
+
+    pass "install and uninstall reject unsafe HOME values before mutation"
+}
+
+test_uninstall_removes_only_owned_links() {
+    local mise_parent_backup
+
+    new_fixture uninstall-remove Darwin
+    printf 'original zsh config\n' >"$FIXTURE_HOME/.zshrc"
+    mkdir -p "$FIXTURE_HOME/.config/mise" "$FIXTURE_HOME/user-mise" "$FIXTURE_HOME/user-lazygit"
+    printf 'user mise config\n' >"$FIXTURE_HOME/user-mise/99-user.toml"
+    ln -s "$FIXTURE_HOME/user-mise" "$FIXTURE_HOME/.config/mise/conf.d"
+    run_installer
+
+    mv "$FIXTURE_HOME/.config/lazygit" "$FIXTURE_STATE/installed-lazygit-link"
+    ln -s "$FIXTURE_HOME/user-lazygit" "$FIXTURE_HOME/.config/lazygit"
+    run_uninstaller 0
+
+    assert_common_links_removed
+    assert_not_exists "$FIXTURE_HOME/.config/ghostty"
+    assert_symlink "$FIXTURE_HOME/.config/lazygit" "$FIXTURE_HOME/user-lazygit"
+    assert_exists "$FIXTURE_HOME/.local/share/dotfiles/local.fish"
+    assert_exists "$FIXTURE_HOME/.local/share/dotfiles/local.zsh"
+    assert_exists "$FIXTURE_FAKE_BIN/fish"
+
+    mise_parent_backup=""
+    for candidate in "$FIXTURE_HOME"/.config/mise/conf.d.bak.*; do
+        if [[ -e "$candidate" || -L "$candidate" ]]; then
+            mise_parent_backup="$candidate"
+            break
+        fi
+    done
+    [[ -n "$mise_parent_backup" ]] || fail "Mise parent backup was not preserved"
+    grep -Fq "$mise_parent_backup" "$FIXTURE_ROOT/uninstall.out" ||
+        fail "uninstall did not report the Mise parent backup"
+
+    run_uninstaller 0
+    assert_symlink "$FIXTURE_HOME/.config/lazygit" "$FIXTURE_HOME/user-lazygit"
+    pass "uninstall removes only owned links and reports retained backups"
+}
+
+test_uninstall_restores_latest_backups() {
+    new_fixture uninstall-restore Darwin
+    mkdir -p \
+        "$FIXTURE_HOME/.config/fish" \
+        "$FIXTURE_HOME/.config/herdr" \
+        "$FIXTURE_HOME/.config/mise" \
+        "$FIXTURE_HOME/user-mise"
+    printf 'original fish config\n' >"$FIXTURE_HOME/.config/fish/user.fish"
+    printf 'original herdr config\n' >"$FIXTURE_HOME/.config/herdr/config.toml"
+    printf 'original zsh config\n' >"$FIXTURE_HOME/.zshrc"
+    printf 'older zsh config\n' >"$FIXTURE_HOME/.zshrc.bak.1"
+    printf 'older lazygit config\n' >"$FIXTURE_HOME/.config/lazygit.bak.0007"
+    printf 'newer lazygit config\n' >"$FIXTURE_HOME/.config/lazygit.bak.0008"
+    printf 'user mise fragment\n' >"$FIXTURE_HOME/user-mise/99-user.toml"
+    ln -s "$FIXTURE_HOME/user-mise" "$FIXTURE_HOME/.config/mise/conf.d"
+    run_installer
+
+    run_uninstaller 0 --restore
+
+    [[ -d "$FIXTURE_HOME/.config/fish" && ! -L "$FIXTURE_HOME/.config/fish" ]] ||
+        fail "Fish directory backup was not restored"
+    grep -Fxq 'original fish config' "$FIXTURE_HOME/.config/fish/user.fish" ||
+        fail "restored Fish directory lost its content"
+    grep -Fxq 'original herdr config' "$FIXTURE_HOME/.config/herdr/config.toml" ||
+        fail "Herdr config backup was not restored"
+    grep -Fxq 'original zsh config' "$FIXTURE_HOME/.zshrc" ||
+        fail "newest zsh backup was not restored"
+    grep -Fxq 'older zsh config' "$FIXTURE_HOME/.zshrc.bak.1" ||
+        fail "older zsh backup should remain available"
+    grep -Fxq 'newer lazygit config' "$FIXTURE_HOME/.config/lazygit" ||
+        fail "numeric backup ordering did not treat leading zeroes as decimal"
+    grep -Fxq 'older lazygit config' "$FIXTURE_HOME/.config/lazygit.bak.0007" ||
+        fail "older lazygit backup should remain available"
+    assert_symlink "$FIXTURE_HOME/.config/mise/conf.d" "$FIXTURE_HOME/user-mise"
+    grep -Fxq 'user mise fragment' "$FIXTURE_HOME/.config/mise/conf.d/99-user.toml" ||
+        fail "restored Mise parent lost its content"
+
+    ln -s "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" \
+        "$FIXTURE_HOME/user-mise/00-dotfiles.toml"
+    run_uninstaller 0 --restore
+    grep -Fxq 'original zsh config' "$FIXTURE_HOME/.zshrc" ||
+        fail "second restore changed restored user configuration"
+    assert_symlink "$FIXTURE_HOME/.config/mise/conf.d" "$FIXTURE_HOME/user-mise"
+    assert_symlink \
+        "$FIXTURE_HOME/user-mise/00-dotfiles.toml" \
+        "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+
+    run_uninstaller 0
+    assert_symlink "$FIXTURE_HOME/.config/mise/conf.d" "$FIXTURE_HOME/user-mise"
+    assert_symlink \
+        "$FIXTURE_HOME/user-mise/00-dotfiles.toml" \
+        "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+    pass "uninstall restores the newest safe backups without clobbering user state"
+}
+
+test_uninstall_blocks_unsafe_nested_restores_atomically() {
+    local parent_backup
+
+    new_fixture uninstall-blocked-restore Darwin
+    mkdir -p "$FIXTURE_HOME/.config/mise" "$FIXTURE_HOME/user-mise"
+    printf 'original mise fragment\n' >"$FIXTURE_HOME/user-mise/99-user.toml"
+    ln -s "$FIXTURE_HOME/user-mise" "$FIXTURE_HOME/.config/mise/conf.d"
+    run_installer
+
+    printf 'new local fragment\n' >"$FIXTURE_HOME/.config/mise/conf.d/50-local.toml"
+    ln -s "$REPO_ROOT/fish" "$FIXTURE_HOME/.config/fish.bak.1"
+    run_uninstaller 1 --restore
+
+    assert_symlink "$FIXTURE_HOME/.config/fish" "$REPO_ROOT/fish"
+    assert_symlink "$FIXTURE_HOME/.config/fish.bak.1" "$REPO_ROOT/fish"
+    assert_symlink \
+        "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml" \
+        "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+    grep -Fxq 'new local fragment' "$FIXTURE_HOME/.config/mise/conf.d/50-local.toml" ||
+        fail "blocked restore changed a user-owned sibling"
+    grep -Fq 'restore blocked:' "$FIXTURE_ROOT/uninstall.out" ||
+        fail "blocked restore did not explain why it stopped"
+    parent_backup=""
+    for candidate in "$FIXTURE_HOME"/.config/mise/conf.d.bak.*; do
+        if [[ -e "$candidate" || -L "$candidate" ]]; then
+            parent_backup="$candidate"
+            break
+        fi
+    done
+    [[ -n "$parent_backup" ]] || fail "blocked restore consumed the parent backup"
+
+    printf 'older leaf config\n' \
+        >"$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml.bak.1"
+    run_uninstaller 1 --restore
+    assert_symlink \
+        "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml" \
+        "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+    assert_exists "$parent_backup"
+    assert_exists "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml.bak.1"
+
+    pass "unsafe and ambiguous nested restores preserve the active group"
+}
+
+test_equivalent_relative_links_are_idempotent() {
+    new_fixture relative-link Darwin
+    mkdir -p "$FIXTURE_HOME/.config"
+    ln -s "$REPO_ROOT" "$FIXTURE_ROOT/repo-alias"
+    ln -s ../../repo-alias/fish "$FIXTURE_HOME/.config/fish"
+    ln -s "$REPO_ROOT/zsh/.zshrc" "$FIXTURE_ROOT/zsh-source-alias"
+    ln -s ../zsh-source-alias "$FIXTURE_HOME/.zshrc"
+
+    run_installer
+
+    assert_eq "../../repo-alias/fish" "$(readlink "$FIXTURE_HOME/.config/fish")" \
+        "installer replaced an equivalent relative link"
+    assert_eq "../zsh-source-alias" "$(readlink "$FIXTURE_HOME/.zshrc")" \
+        "installer replaced an equivalent file-source alias chain"
+    for candidate in "$FIXTURE_HOME"/.config/fish.bak.*; do
+        [[ ! -e "$candidate" && ! -L "$candidate" ]] ||
+            fail "installer backed up an equivalent relative link"
+    done
+    for candidate in "$FIXTURE_HOME"/.zshrc.bak.*; do
+        [[ ! -e "$candidate" && ! -L "$candidate" ]] ||
+            fail "installer backed up an equivalent file-source alias chain"
+    done
+
+    run_uninstaller 0
+    assert_not_exists "$FIXTURE_HOME/.config/fish"
+    assert_not_exists "$FIXTURE_HOME/.zshrc"
+    pass "equivalent directory and file links stay stable and uninstall as owned"
+}
+
+test_link_preflight_prevents_partial_configuration() {
+    local fixture_repo source_name
+
+    new_fixture missing-source Darwin
+    fixture_repo="$FIXTURE_ROOT/repo"
+    mkdir -p "$fixture_repo/mise/conf.d" "$fixture_repo/templates"
+    cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
+    cp "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" "$fixture_repo/mise/conf.d/"
+    cp "$REPO_ROOT/templates/local.fish" "$REPO_ROOT/templates/local.zsh" \
+        "$fixture_repo/templates/"
+    for source_name in fish ghostty herdr hunk lazygit tmux zsh; do
+        ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
+    done
+    FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
+    printf 'original zsh config\n' >"$FIXTURE_HOME/.zshrc"
+
+    run_installer failure
+
+    grep -Fq 'missing or invalid tracked configuration' "$FIXTURE_OUTPUT" ||
+        fail "missing source failure was not actionable"
+    grep -Fxq 'original zsh config' "$FIXTURE_HOME/.zshrc" ||
+        fail "missing source preflight changed zsh config"
+    for candidate in "$FIXTURE_HOME"/.zshrc.bak.*; do
+        [[ ! -e "$candidate" && ! -L "$candidate" ]] ||
+            fail "missing source preflight created a zsh backup"
+    done
+    assert_not_exists "$FIXTURE_HOME/.config"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_log_count 0 "brew bundle install" "$FIXTURE_LOG"
+    assert_log_count 0 "mise install" "$FIXTURE_LOG"
+
+    new_fixture blocked-parent Darwin
+    mkdir -p "$FIXTURE_HOME/.config"
+    printf 'user-owned mise path\n' >"$FIXTURE_HOME/.config/mise"
+    printf 'original zsh config\n' >"$FIXTURE_HOME/.zshrc"
+
+    run_installer failure
+
+    grep -Fq 'blocks required configuration directory' "$FIXTURE_OUTPUT" ||
+        fail "blocking parent failure was not actionable"
+    grep -Fxq 'user-owned mise path' "$FIXTURE_HOME/.config/mise" ||
+        fail "blocking parent was changed"
+    grep -Fxq 'original zsh config' "$FIXTURE_HOME/.zshrc" ||
+        fail "blocking parent preflight changed zsh config"
+    assert_not_exists "$FIXTURE_HOME/.config/fish"
+    pass "link preflight fails before changing home configuration"
+}
+
+test_dependency_manifests_match_the_install_contract() {
+    local expected_line
+    local brew_lines mise_lines
+
+    brew_lines=(
+        'brew "git"'
+        'brew "fish"'
+        'brew "zsh"'
+        'brew "neovim"'
+        'brew "herdr"'
+        'brew "tmux"'
+        'brew "lazygit"'
+        'brew "hunk"'
+        'brew "mise"'
+        'brew "atuin"'
+        'brew "gh"'
+        'brew "ripgrep"'
+        'brew "tree-sitter-cli"'
+        'brew "uv"'
+        'brew "ghcup"'
+        'brew "xclip" if OS.linux?'
+        'brew "wl-clipboard" if OS.linux?'
+    )
+    for expected_line in "${brew_lines[@]}"; do
+        grep -Fxq "$expected_line" "$REPO_ROOT/Brewfile" ||
+            fail "Brewfile is missing: $expected_line"
+    done
+    assert_eq "${#brew_lines[@]}" \
+        "$(grep -Evc '^[[:space:]]*(#|$)' "$REPO_ROOT/Brewfile")" \
+        "Brewfile contains an unreviewed declaration"
+
+    mise_lines=(
+        '"core:node" = "24.18.0"'
+        '"core:python" = "3.14.6"'
+        '"core:rust" = { version = "1.97.1", profile = "minimal", components = ["clippy", "rustfmt"] }'
+        '"core:go" = "1.26.5"'
+        '"core:java" = "temurin-21.0.11+10.0.LTS"'
+    )
+    for expected_line in "${mise_lines[@]}"; do
+        grep -Fxq "$expected_line" "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" ||
+            fail "Mise manifest is missing: $expected_line"
+    done
+    assert_log_count 1 '[tools]' "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+    assert_eq "$(( ${#mise_lines[@]} + 1 ))" \
+        "$(grep -Evc '^[[:space:]]*(#|$)' "$REPO_ROOT/mise/conf.d/00-dotfiles.toml")" \
+        "Mise manifest contains an unreviewed declaration"
+    pass "Brew and Mise manifests match the dependency ownership contract"
+}
+
 test_macos_fresh_and_second_run
-test_debian_fresh_and_second_run
+test_linux_manager_fresh_and_second_run apt-get
+test_linux_manager_fresh_and_second_run dnf
+test_linux_manager_fresh_and_second_run pacman
 test_unsupported_linux_package_manager
+test_linux_handoff_is_validated_before_linking
+test_uninstall_cli_is_safe
+test_install_and_uninstall_reject_unsafe_homes
+test_uninstall_removes_only_owned_links
+test_uninstall_restores_latest_backups
+test_uninstall_blocks_unsafe_nested_restores_atomically
+test_equivalent_relative_links_are_idempotent
+test_link_preflight_prevents_partial_configuration
+test_dependency_manifests_match_the_install_contract
 printf 'All install integration tests passed.\n'

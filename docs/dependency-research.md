@@ -6,7 +6,7 @@ Checked 2026-07-26 against [`install.sh`](../install.sh), the Neovim inventory a
 
 - **macOS:** A supported Homebrew install requires Apple silicon or 64-bit Intel, macOS Sonoma 14 or newer on supported hardware, current Xcode Command Line Tools (CLT) or Xcode, and `/bin/bash`. Homebrew documents `xcode-select --install` for CLT; Apple confirms that CLT supplies the macOS SDK and toolchain binaries including `clang` and `git`. The supported prefixes are `/opt/homebrew` on Apple silicon and `/usr/local` on Intel. ([Homebrew installation](https://docs.brew.sh/Installation), [Apple CLT](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/))
 - **Linux:** Homebrew must be bootstrapped with a working **system** C compiler and standard development tools; a later Homebrew `gcc` install does not replace that prerequisite. Homebrew's official examples are `build-essential procps curl file git` on Debian/Ubuntu, the development-tools group plus `procps-ng curl file` on Fedora/RHEL, and `base-devel procps-ng curl file git` on Arch. The supported prefix is `/home/linuxbrew/.linuxbrew`. Full Tier 1 additionally means supported Ubuntu (or a Homebrew image), system glibc 2.39+, kernel 3.2+, ARM64/AArch64 or x86_64 with SSSE3, and `sudo` access. ([Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux), [support tiers](https://docs.brew.sh/Support-Tiers))
-- The official installer is the same `/bin/bash -c "$(curl -fsSL …/install.sh)"` entry point on macOS and Linux; its printed `brew shellenv` step is required to put Homebrew on `PATH`. ([Homebrew](https://brew.sh/), [post-install step](https://docs.brew.sh/Installation#post-installation-steps))
+- The official installer is the same `/bin/bash -c "$(curl -fsSL …/install.sh)"` entry point on macOS and Linux; its printed `brew shellenv` step is required to put Homebrew on `PATH`. `install.sh` activates it for its own process, creates guarded per-machine Fish/Zsh activation files when absent, and prints an absolute Fish handoff on Linux so the newly installed environment is immediately reachable without modifying the login shell. ([Homebrew](https://brew.sh/), [post-install step](https://docs.brew.sh/Installation#post-installation-steps))
 
 This makes CLT/Xcode on macOS and distro development tools on Linux the correct home for the initial compiler, `make`, and bootstrap `git`; attempting to provision the compiler through Homebrew is circular on Linux.
 
@@ -55,6 +55,12 @@ One direct repository workflow is outside `install.sh`: [`docs/agents/issue-trac
 
 The inventory in [`nvim/lua/custom/languages.lua`](../nvim/lua/custom/languages.lua) is passed wholesale to Mason Tool Installer, so Mason attempts to install every listed tool. Mason installs editor tooling, but its own documentation says that it shells out to external package managers such as `npm`; language runtimes remain machine capabilities. In this repository, **mise should own versioned Node, Go, Python, Rust, and Java runtimes**, while Mason owns the LSP/formatter/linter/debugger executables. Mise has core backends for all five runtimes and deliberately does not replace system package management. ([Mason requirements](https://github.com/mason-org/mason.nvim#requirements), [mise core tools](https://mise.jdx.dev/core-tools.html), [mise ownership boundary](https://mise.jdx.dev/faq.html#mise-is-for-dev-tools-not-applications-or-system-packages))
 
+The tracked Mise fragment pins Node 24.18.0, Python 3.14.6, Rust 1.97.1,
+Go 1.26.5, and Temurin JDK 21.0.11+10.0.LTS. Exact selectors make a successful
+second install a stable no-op; advancing a runtime is an explicit manifest
+change rather than a side effect of resolving `latest`, `lts`, or a moving
+major-version channel.
+
 | Capability | Runtime prerequisite and evidence | Provisioning boundary |
 | --- | --- | --- |
 | JavaScript/TypeScript and npm-backed tools | `node` plus `npm`; current Mason entries such as [typescript-language-server](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/typescript-language-server/package.yaml), [Pyright](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/pyright/package.yaml), and [Prettier](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/prettier/package.yaml) declare npm sources. | **Capability runtime:** manage Node with mise. Homebrew's [`node`](https://formulae.brew.sh/formula/node) formula is available on both platforms if mise is not used. |
@@ -85,3 +91,9 @@ the Homebrew set at the platform-bootstrap layer, and do not add `fd` solely
 for an unused alternate finder path. Provision language runtimes through Mise
 before Mason's first full inventory install; treat clipboard provisioning as
 OS-specific and Expect as a development-test dependency.
+
+The Brewfile is applied with `brew bundle check --no-upgrade` followed, only
+when needed, by `brew bundle install --no-upgrade`. This avoids requesting a
+general upgrade pass, but Homebrew may still upgrade dependencies required to
+install a newly missing formula; the installer documentation should preserve
+that distinction.

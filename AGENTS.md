@@ -33,7 +33,9 @@ Keep provisioning ownership explicit:
   ripgrep, tree-sitter CLI 0.26.1+, and capability-specific tools such as
   `uv` and `ghcup`; on Linux it also owns `xclip` and `wl-clipboard`.
 - **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy/rustfmt, Go, and JDK 21+
-  runtimes. Do not install these runtimes through Homebrew.
+  runtimes. The tracked manifest uses exact versions so reruns do not silently
+  advance runtimes; update those pins deliberately. Do not install these
+  runtimes through Homebrew.
 - **Neovim** owns its plugins, Treesitter parsers, and Mason packages. Do not
   duplicate Mason-managed LSPs, formatters, linters, or debuggers in the
   machine package list.
@@ -74,6 +76,7 @@ All configurations follow these principles:
 ```bash
 git clone <this-repo> ~/dotfiles
 ~/dotfiles/install.sh           # Bootstrap dependencies, runtimes, and config links
+# Linux: run the exact `exec ".../fish" -l` command printed by install.sh
 nvim                            # Start editor (see nvim/AGENTS.md for details)
 ```
 
@@ -156,16 +159,38 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 
 - Never `rm` or `rm -rf` any user path.
 - If a target exists, rename it to `<target>.bak.$(date +%s)` and create the symlink.
-- If the target is already a symlink into this repo, skip silently.
+- If the target is already a path-equivalent symlink to its expected source in
+  this repo, skip silently.
 - Re-running the script after a successful install is a no-op.
+- Reject an empty, relative, or root `HOME`, and reject root execution, before
+  constructing or changing user paths.
+- Preflight the Brewfile, every tracked link/template source, and blocking
+  parent paths before installing dependencies or changing link targets.
 - Perform all dependency installation and validation before changing link
   targets, so a partial bootstrap can be resumed safely.
 - Use the official Homebrew installer only when Brew cannot be discovered;
-  use `brew bundle check --no-upgrade` before `install --no-upgrade`.
+  use `brew bundle check --no-upgrade` before `install --no-upgrade`. Do not
+  promise that Homebrew will never update a dependency needed by a new formula.
 - Keep native Linux bootstrap support explicit to `apt-get`, `dnf`, and
   `pacman`; fail with an actionable message for an unknown manager.
+- Keep Mise runtime selectors exact; floating channels break strict second-run
+  idempotence as their resolution changes.
 - Run `tests/install_test.sh` after installer, Brewfile, Mise manifest, or
   per-machine activation-template changes.
+
+## Uninstall Contract
+
+`uninstall.sh` is conservative and does not reverse package installation:
+
+- With no arguments, remove only path-equivalent symlinks owned by this
+  repository. Do not follow a symlink restored at a managed parent directory.
+- With `--restore`, restore only the newest numeric backup when its scope is
+  unambiguous and the destination has no unmanaged state.
+- If nested file and directory backups compete, or a directory backup cannot
+  replace a directory containing user-owned entries, preserve the active group
+  and every backup and exit nonzero.
+- Leave older backups, foreign links, installed packages and runtimes, and
+  `~/.local/share/dotfiles/` untouched. A successful second run is a no-op.
 
 ## Modification Guidelines
 

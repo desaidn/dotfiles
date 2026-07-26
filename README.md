@@ -48,6 +48,16 @@ cd ~/dotfiles
 ./install.sh
 ```
 
+Near the end on Linux, the script prints the absolute command that enters the
+configured Fish environment. Run that command after installation; at the
+standard Homebrew prefix it is:
+
+```bash
+exec "/home/linuxbrew/.linuxbrew/bin/fish" -l
+```
+
+The installer does not change the account's login shell.
+
 `install.sh` is **idempotent and non-destructive**:
 
 - It installs missing platform prerequisites, Homebrew, the tracked
@@ -59,10 +69,13 @@ cd ~/dotfiles
 - Run it as a normal user with sudo access. Homebrew and this dotfiles setup
   intentionally refuse a root-owned installation.
 - Existing files/dirs at link targets are renamed to `<path>.bak.<unix-timestamp>`, never deleted.
-- Re-running it with the same resolved dependency set performs checks and no
-  package or link mutations. It does not upgrade already-installed Brew
-  packages.
-- Use `./uninstall.sh` to remove the symlinks (and optionally restore the most recent backup).
+- Re-running it with the current manifests performs checks and no package or
+  link mutations. Brew is invoked with `--no-upgrade`, so the installer does
+  not request broad upgrades; Homebrew may still upgrade a dependency when a
+  newly installed formula requires it.
+- `./uninstall.sh` removes only symlinks owned by this repository.
+  `./uninstall.sh --restore` also restores the newest unambiguous backup where
+  that can be done without replacing user state.
 
 ## Daily workspace
 
@@ -122,9 +135,11 @@ the current exception: Mason's Haskell Language Server recipe invokes `ghcup`
 directly.
 
 The installer uses the tracked global defaults fragment
-[`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml). Its channel
-selectors express the runtime update policy, while a user's normal
-`~/.config/mise/config.toml` remains untouched and has higher precedence.
+[`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml). It pins exact
+Node.js, Python, Rust, Go, and Temurin JDK versions so a successful second run
+does not silently resolve a newer runtime. Runtime updates are deliberate
+manifest edits. A user's normal `~/.config/mise/config.toml` remains untouched
+and has higher precedence.
 
 ### Platform and development-only dependencies
 
@@ -166,16 +181,26 @@ The shared shell rc files set `EDITOR`, `VISUAL`, and `GIT_EDITOR` to `nvim`; pe
 ./tests/install_test.sh
 ```
 
-The test runs the real installer against isolated macOS and Debian fixtures
-with fake package managers. It verifies fresh provisioning, backup/link
-behavior, and a mutation-free second run without touching the network, sudo,
-Homebrew, or the caller's home directory.
+The test runs the real installer and uninstaller against isolated macOS and
+Linux fixtures with fake Homebrew, Mise, `apt-get`, DNF, and Pacman commands.
+It verifies fresh provisioning, manifest ownership, preflight failures,
+backup/link behavior, safe restoration, and a mutation-free second run without
+touching the network, sudo, package managers, or the caller's home directory.
 
 ## Rollback
 
-After `install.sh` runs, anything it moved aside is at `~/<original>.bak.<timestamp>` (or `~/.config/<name>.bak.<timestamp>`). To restore:
+After `install.sh` runs, anything it moved aside is at
+`<original>.bak.<timestamp>`. To remove managed links or safely restore the
+newest numeric backup:
 
 ```bash
-./uninstall.sh                    # removes symlinks
-mv ~/.zshrc.bak.<ts> ~/.zshrc     # restore by hand if you want the originals back
+./uninstall.sh             # remove repository-owned symlinks
+./uninstall.sh --restore   # remove links and restore safe, unambiguous backups
 ```
+
+Restoration never replaces an occupied path. If both a nested directory backup
+and a file backup exist, or a directory backup cannot replace its directory
+because that directory contains additional user files, the group is left
+untouched and the command exits nonzero for manual resolution.
+Older backups, installed packages and runtimes, and
+`~/.local/share/dotfiles/` remain untouched.

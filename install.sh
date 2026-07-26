@@ -8,6 +8,7 @@ HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/in
 OS_NAME="$(uname -s)"
 BREW_BIN=""
 LINUX_PACKAGE_MANAGER=""
+LINUX_FISH_PATH=""
 
 die() {
     printf 'error: %s\n' "$*" >&2
@@ -27,6 +28,12 @@ case "$OS_NAME" in
 esac
 
 [[ -n "${HOME:-}" ]] || die "HOME is not set"
+[[ "$HOME" == /* && -d "$HOME" ]] ||
+    die "HOME must be an absolute user directory"
+HOME_DIRECTORY="$(cd -P -- "$HOME" 2>/dev/null && pwd -P)" ||
+    die "HOME must be an accessible user directory"
+[[ "$HOME_DIRECTORY" != "/" ]] ||
+    die "HOME must not resolve to the filesystem root"
 (( EUID != 0 )) || die "do not run this installer as root; run it as the user whose dotfiles are being installed"
 LOCAL_DIR="$HOME/.local/share/dotfiles"
 
@@ -415,9 +422,13 @@ backup_existing() {
     fi
 }
 
+symlink_points_to() {
+    [[ -L "$1" && "$1" -ef "$2" ]]
+}
+
 link() {
     local src="$REPO_ROOT/$1" dst="$HOME/$2"
-    if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
+    if symlink_points_to "$dst" "$src"; then
         return 0
     fi
     mkdir -p "$(dirname "$dst")"
@@ -432,6 +443,54 @@ prepare_local_config_dir() {
         backup_existing "$target"
         mkdir -p "$target"
     fi
+}
+
+preflight_links() {
+    local source required_directory
+    local directory_sources file_sources
+
+    directory_sources=(
+        fish
+        lazygit
+        nvim
+        tmux
+    )
+    if [[ "$OS_NAME" == "Darwin" ]]; then
+        directory_sources+=("ghostty")
+    fi
+
+    file_sources=(
+        Brewfile
+        herdr/config.toml
+        hunk/config.toml
+        mise/conf.d/00-dotfiles.toml
+        zsh/.zshrc
+        templates/local.fish
+        templates/local.zsh
+    )
+
+    for source in "${directory_sources[@]}"; do
+        [[ -d "$REPO_ROOT/$source" ]] ||
+            die "missing or invalid tracked configuration directory: $REPO_ROOT/$source"
+    done
+    for source in "${file_sources[@]}"; do
+        [[ -f "$REPO_ROOT/$source" ]] ||
+            die "missing or invalid tracked configuration file: $REPO_ROOT/$source"
+    done
+
+    for required_directory in \
+        "$HOME/.config" \
+        "$HOME/.config/mise" \
+        "$HOME/.local" \
+        "$HOME/.local/share" \
+        "$LOCAL_DIR"
+    do
+        if [[ ( -e "$required_directory" || -L "$required_directory" ) &&
+            ! -d "$required_directory" ]]
+        then
+            die "'$required_directory' blocks required configuration directory"
+        fi
+    done
 }
 
 link_configs() {
@@ -461,12 +520,35 @@ link_configs() {
     done
 }
 
+resolve_linux_fish_path() {
+    local brew_prefix
+
+    if [[ "$OS_NAME" != "Linux" ]]; then
+        return 0
+    fi
+
+    brew_prefix="$("$BREW_BIN" --prefix)" ||
+        die "Homebrew is installed, but its prefix could not be determined"
+    LINUX_FISH_PATH="$brew_prefix/bin/fish"
+    [[ -x "$LINUX_FISH_PATH" ]] ||
+        die "Fish is installed, but its executable was not found at '$LINUX_FISH_PATH'"
+}
+
+print_next_steps() {
+    [[ "$OS_NAME" == "Linux" ]] || return 0
+    printf '\nLinux setup is complete. Enter the configured Fish environment with:\n'
+    printf '  exec "%s" -l\n' "$LINUX_FISH_PATH"
+}
+
+preflight_links
 ensure_native_prerequisites
 ensure_homebrew
 install_brew_dependencies
 install_macos_casks
 validate_brew_dependencies
+resolve_linux_fish_path
 install_mise_runtimes
 link_configs
+print_next_steps
 
 printf '\nDotfiles installation complete.\n'
