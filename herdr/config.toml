@@ -4,3 +4,6 @@ agent_panel_sort = "spaces"
 [theme]
 name = "terminal"
 auto_switch = false
+
+[keys]
+focus_agent = "prefix+shift+1..9"
