@@ -1,0 +1,6 @@
+[tools]
+"core:node" = "lts"
+"core:python" = "latest"
+"core:rust" = { version = "latest", profile = "minimal", components = ["clippy"] }
+"core:go" = "latest"
+"core:java" = "temurin-21"

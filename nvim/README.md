@@ -8,30 +8,37 @@ A lean Neovim configuration based on kickstart.nvim. Part of [dotfiles](../READM
 
 ### Install Neovim
 
-Kickstart.nvim targets _only_ the latest
-['stable'](https://github.com/neovim/neovim/releases/tag/stable) and latest
-['nightly'](https://github.com/neovim/neovim/releases/tag/nightly) of Neovim.
-If you are experiencing issues, please make sure you have the latest versions.
 This configuration follows the current kickstart.nvim mainline baseline and
-requires Neovim 0.12 or newer.
+requires exactly stable Neovim 0.12.4. Startup rejects older, newer, and
+prerelease builds so plugin behavior stays tied to the tested baseline.
 
 > For detailed installation methods (Homebrew, Bob, Flatpak, etc.), see the
 > [upstream kickstart.nvim documentation](https://github.com/nvim-lua/kickstart.nvim#install-neovim).
 
 ### Dependencies
 
-Required:
+Host requirements:
 
-- `git`, `make`, `unzip`, C Compiler (`gcc`)
-- [ripgrep](https://github.com/BurntSushi/ripgrep#installation)
-- [tree-sitter-cli](https://github.com/tree-sitter/tree-sitter/blob/master/cli/README.md) (`brew install tree-sitter-cli`)
-- Clipboard tool (`pbcopy` on macOS, `xclip`/`xsel` on Linux)
+- `git`, `curl`, `tar`, `gzip`, and `unzip` for plugins and Mason packages
+- A C compiler for Treesitter parsers
+- [ripgrep](https://github.com/BurntSushi/ripgrep#installation) for Telescope grep
+- [tree-sitter-cli](https://github.com/tree-sitter/tree-sitter/blob/master/cli/README.md)
+  0.26.1 or newer
+- `lazygit` and `hunk` for their production Tool Tab mappings
+- `pbcopy`/`pbpaste` on macOS or a working Wayland/X11 clipboard provider on
+  Linux
 
-Optional:
+Mise owns the language runtimes used by the enabled Language Tooling
+Inventory: Node.js/npm, Python, Rust with Cargo and Clippy, Go, and JDK 21 or
+newer. Mason owns the corresponding LSPs, formatters, linters, and debugger
+adapters. Python DAP additionally invokes the standalone `uv` CLI. Haskell
+support currently requires `ghcup` because Mason's HLS installer calls it
+directly.
 
-- [fd-find](https://github.com/sharkdp/fd#installation) (Telescope uses it if available)
-- [uv](https://docs.astral.sh/uv/) (Python debugging launches debugpy through uv)
-- Language-specific tools (`npm`, `go`, etc. as needed)
+`make` is optional: when available, it enables telescope-fzf-native and
+LuaSnip's jsregexp build. `fd` is not a base dependency because fff.nvim owns
+normal file finding. Expect is needed only for the real-PTY Hunk regression
+test.
 
 ### Post Installation
 

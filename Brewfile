@@ -1,0 +1,17 @@
+brew "git"
+brew "fish"
+brew "zsh"
+brew "neovim"
+brew "herdr"
+brew "tmux"
+brew "lazygit"
+brew "hunk"
+brew "mise"
+brew "atuin"
+brew "gh"
+brew "ripgrep"
+brew "tree-sitter-cli"
+brew "uv"
+brew "ghcup"
+brew "xclip" if OS.linux?
+brew "wl-clipboard" if OS.linux?

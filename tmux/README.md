@@ -2,6 +2,9 @@
 
 The retained fallback and compatibility multiplexer in [dotfiles](../README.md). Herdr is the normal daily workspace manager; start tmux directly when a tmux-specific workflow is needed rather than nesting it inside Herdr.
 
+Requires tmux 3.7 or newer. The configuration has no plugin manager or
+additional runtime dependencies.
+
 ## Usage
 
 ```bash

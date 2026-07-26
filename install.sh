@@ -2,48 +2,396 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-LOCAL_DIR="$HOME/.local/share/dotfiles"
+BREWFILE="$REPO_ROOT/Brewfile"
+MISE_MANIFEST="$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 OS_NAME="$(uname -s)"
+SUDO_READY=0
+BREW_BIN=""
 
-missing=()
-require() {
-    command -v "$1" >/dev/null || missing+=("$1: $2")
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
 }
 
-require git          https://git-scm.com
-require fish         https://fishshell.com
-require zsh          https://www.zsh.org
-require nvim         https://neovim.io
-require herdr        https://herdr.dev/docs/install/
-require tmux         https://github.com/tmux/tmux
-require lazygit      https://github.com/jesseduffield/lazygit
-require mise         https://mise.jdx.dev
-require atuin        https://atuin.sh
-require rg           https://github.com/BurntSushi/ripgrep
-require tree-sitter  https://tree-sitter.github.io
-require hunk         https://github.com/modem-dev/hunk
+section() {
+    printf '\n==> %s\n' "$1"
+}
+
+case "$OS_NAME" in
+    Darwin|Linux)
+        ;;
+    *)
+        die "unsupported operating system '$OS_NAME'; this installer supports macOS and Linux"
+        ;;
+esac
+
+[[ -n "${HOME:-}" ]] || die "HOME is not set"
+(( EUID != 0 )) || die "do not run this installer as root; run it as the user whose dotfiles are being installed"
+LOCAL_DIR="$HOME/.local/share/dotfiles"
+
+ensure_sudo() {
+    if (( SUDO_READY == 1 )); then
+        return 0
+    fi
+    command -v sudo >/dev/null 2>&1 || die "sudo is required to install system prerequisites and Homebrew"
+    sudo -v || die "sudo authentication failed; retry in a terminal or configure passwordless sudo for headless use"
+    SUDO_READY=1
+}
+
+has_linux_clipboard() {
+    command -v wl-copy >/dev/null 2>&1 ||
+        command -v xclip >/dev/null 2>&1 ||
+        command -v xsel >/dev/null 2>&1
+}
+
+collect_native_missing() {
+    local command_name
+    NATIVE_MISSING=()
+
+    for command_name in cc make ps curl file git tar gzip unzip diff; do
+        command -v "$command_name" >/dev/null 2>&1 || NATIVE_MISSING+=("$command_name")
+    done
+}
+
+install_linux_native_packages() {
+    ensure_sudo
+    section "Installing Linux system prerequisites"
+
+    if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential procps curl file git tar gzip unzip diffutils \
+            ca-certificates
+    elif command -v dnf >/dev/null 2>&1; then
+        if ! sudo dnf group install -y development-tools; then
+            sudo dnf group install -y "Development Tools"
+        fi
+        sudo dnf install -y \
+            procps-ng curl file git tar gzip unzip diffutils ca-certificates
+    elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --needed --noconfirm \
+            base-devel procps-ng curl file git tar gzip unzip diffutils \
+            ca-certificates
+    else
+        die "missing system prerequisites (${NATIVE_MISSING[*]}) and no supported package manager was found; install them with apt, dnf, or pacman and rerun"
+    fi
+}
+
+ensure_native_prerequisites() {
+    if [[ "$OS_NAME" == "Darwin" ]]; then
+        if ! command -v xcode-select >/dev/null 2>&1 || ! xcode-select -p >/dev/null 2>&1; then
+            if command -v xcode-select >/dev/null 2>&1; then
+                xcode-select --install >/dev/null 2>&1 || true
+            fi
+            die "Xcode Command Line Tools installation was requested; finish it, then rerun this installer"
+        fi
+
+        collect_native_missing
+        if (( ${#NATIVE_MISSING[@]} > 0 )); then
+            die "Xcode Command Line Tools are incomplete; missing: ${NATIVE_MISSING[*]}"
+        fi
+        return 0
+    fi
+
+    collect_native_missing
+    if (( ${#NATIVE_MISSING[@]} > 0 )); then
+        printf 'Missing Linux system prerequisites: %s\n' "${NATIVE_MISSING[*]}"
+        install_linux_native_packages
+        collect_native_missing
+    fi
+
+    if (( ${#NATIVE_MISSING[@]} > 0 )); then
+        die "system prerequisite installation completed but these capabilities are still missing: ${NATIVE_MISSING[*]}"
+    fi
+}
+
+brew_works() {
+    [[ -n "$1" && -x "$1" ]] && "$1" --version >/dev/null 2>&1
+}
+
+find_brew() {
+    local candidate candidates old_ifs
+
+    candidate="$(command -v brew 2>/dev/null || true)"
+    if brew_works "$candidate"; then
+        BREW_BIN="$candidate"
+        return 0
+    fi
+
+    if [[ -n "${DOTFILES_BREW_PATHS:-}" ]]; then
+        candidates="$DOTFILES_BREW_PATHS"
+    elif [[ "$OS_NAME" == "Linux" ]]; then
+        candidates="/home/linuxbrew/.linuxbrew/bin/brew:/opt/homebrew/bin/brew:/usr/local/bin/brew"
+    elif [[ "$(uname -m)" == "arm64" ]]; then
+        candidates="/opt/homebrew/bin/brew:/usr/local/bin/brew"
+    else
+        candidates="/usr/local/bin/brew:/opt/homebrew/bin/brew"
+    fi
+
+    old_ifs="$IFS"
+    IFS=:
+    for candidate in $candidates; do
+        if brew_works "$candidate"; then
+            BREW_BIN="$candidate"
+            IFS="$old_ifs"
+            return 0
+        fi
+    done
+    IFS="$old_ifs"
+    return 1
+}
+
+activate_brew() {
+    local shell_environment
+    shell_environment="$("$BREW_BIN" shellenv)" ||
+        die "Homebrew was found at '$BREW_BIN' but 'brew shellenv' failed"
+    eval "$shell_environment"
+    hash -r
+}
+
+ensure_homebrew() {
+    local installer
+
+    if find_brew; then
+        activate_brew
+        return 0
+    fi
+
+    ensure_sudo
+    section "Installing Homebrew"
+    if ! installer="$(curl -fsSL "$HOMEBREW_INSTALL_URL")"; then
+        die "failed to download the official Homebrew installer"
+    fi
+    [[ -n "$installer" ]] || die "the downloaded Homebrew installer was empty"
+
+    NONINTERACTIVE=1 /bin/bash -c "$installer"
+    find_brew || die "Homebrew installation finished but brew was not found in a supported prefix"
+    activate_brew
+}
+
+install_brew_dependencies() {
+    section "Installing Homebrew applications"
+    if "$BREW_BIN" bundle check --no-upgrade --file="$BREWFILE"; then
+        echo "Homebrew applications are already installed."
+    else
+        "$BREW_BIN" bundle install --no-upgrade --file="$BREWFILE"
+    fi
+}
+
+path_list_has_directory() {
+    local directory_list="$1" child="$2" candidate old_ifs
+    old_ifs="$IFS"
+    IFS=:
+    for candidate in $directory_list; do
+        if [[ -d "$candidate/$child" ]]; then
+            IFS="$old_ifs"
+            return 0
+        fi
+    done
+    IFS="$old_ifs"
+    return 1
+}
 
 has_ghostty() {
-    command -v ghostty >/dev/null && return 0
-    [[ "$OS_NAME" == "Darwin" ]] && {
-        [[ -d "/Applications/Ghostty.app" || -d "$HOME/Applications/Ghostty.app" ]]
-    }
+    local application_dirs
+    command -v ghostty >/dev/null 2>&1 && return 0
+    application_dirs="${DOTFILES_APPLICATION_DIRS:-/Applications:$HOME/Applications}"
+    path_list_has_directory "$application_dirs" "Ghostty.app"
 }
 
-if [[ "$OS_NAME" == "Darwin" ]] && ! has_ghostty; then
-    missing+=("ghostty: https://ghostty.org")
-fi
+has_jetbrains_mono_file() {
+    local font_dirs candidate font old_ifs
+    font_dirs="${DOTFILES_FONT_DIRS:-/Library/Fonts:$HOME/Library/Fonts}"
+    old_ifs="$IFS"
+    IFS=:
+    for candidate in $font_dirs; do
+        for font in "$candidate"/JetBrainsMono*; do
+            if [[ -e "$font" || -L "$font" ]]; then
+                IFS="$old_ifs"
+                return 0
+            fi
+        done
+    done
+    IFS="$old_ifs"
+    return 1
+}
 
-if (( ${#missing[@]} > 0 )); then
-    echo "Missing prerequisites:"
-    printf '  %s\n' "${missing[@]}"
-    exit 1
-fi
+brew_cask_installed() {
+    "$BREW_BIN" list --cask --versions "$1" >/dev/null 2>&1
+}
+
+install_macos_casks() {
+    if [[ "$OS_NAME" != "Darwin" ]]; then
+        return 0
+    fi
+
+    section "Installing macOS applications"
+    if ! has_ghostty; then
+        if brew_cask_installed ghostty; then
+            die "Homebrew records the Ghostty cask, but Ghostty.app is missing; repair the cask and rerun"
+        fi
+        "$BREW_BIN" install --cask ghostty
+    fi
+    has_ghostty || die "Ghostty installation completed but Ghostty.app could not be found"
+
+    if ! has_jetbrains_mono_file; then
+        if brew_cask_installed font-jetbrains-mono; then
+            die "Homebrew records the JetBrains Mono cask, but its font files are missing; repair the cask and rerun"
+        fi
+        "$BREW_BIN" install --cask font-jetbrains-mono
+    fi
+    has_jetbrains_mono_file ||
+        die "JetBrains Mono installation completed but the font could not be found"
+}
+
+numeric_prefix() {
+    local value="$1"
+    value="${value%%[!0-9]*}"
+    [[ -n "$value" ]] || value=0
+    while [[ ${#value} -gt 1 && "${value:0:1}" == "0" ]]; do
+        value="${value#0}"
+    done
+    NUMERIC_PREFIX="$value"
+}
+
+version_at_least() {
+    local actual_rest="$1" minimum_rest="$2"
+    local actual_component minimum_component index
+
+    for index in 1 2 3; do
+        actual_component="${actual_rest%%.*}"
+        minimum_component="${minimum_rest%%.*}"
+
+        if [[ "$actual_rest" == *.* ]]; then
+            actual_rest="${actual_rest#*.}"
+        else
+            actual_rest=""
+        fi
+        if [[ "$minimum_rest" == *.* ]]; then
+            minimum_rest="${minimum_rest#*.}"
+        else
+            minimum_rest=""
+        fi
+
+        numeric_prefix "$actual_component"
+        actual_component="$NUMERIC_PREFIX"
+        numeric_prefix "$minimum_component"
+        minimum_component="$NUMERIC_PREFIX"
+
+        if (( actual_component > minimum_component )); then
+            return 0
+        fi
+        if (( actual_component < minimum_component )); then
+            return 1
+        fi
+    done
+    return 0
+}
+
+validate_brew_dependencies() {
+    local command_name output version
+    local missing errors
+    missing=()
+    errors=()
+
+    for command_name in \
+        git fish zsh nvim herdr tmux lazygit hunk mise atuin gh rg \
+        tree-sitter uv ghcup
+    do
+        command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
+    done
+    if [[ "$OS_NAME" == "Linux" ]] && ! has_linux_clipboard; then
+        missing+=("Linux clipboard provider")
+    fi
+
+    if (( ${#missing[@]} > 0 )); then
+        die "Homebrew finished but required commands are not on PATH: ${missing[*]}"
+    fi
+
+    output="$(fish --version 2>/dev/null || true)"
+    version="${output##* }"
+    version_at_least "$version" "3.2.0" ||
+        errors+=("Fish 3.2+ is required (found '${version:-unknown}')")
+
+    output="$(tmux -V 2>/dev/null || true)"
+    version="${output##* }"
+    version_at_least "$version" "3.7.0" ||
+        errors+=("tmux 3.7+ is required (found '${version:-unknown}')")
+
+    output="$(tree-sitter --version 2>/dev/null || true)"
+    version="${output##* }"
+    version_at_least "$version" "0.26.1" ||
+        errors+=("tree-sitter CLI 0.26.1+ is required (found '${version:-unknown}')")
+
+    output="$(nvim --version 2>/dev/null || true)"
+    output="${output%%$'\n'*}"
+    if [[ "$output" != "NVIM v0.12.4" ]]; then
+        errors+=("stable Neovim 0.12.4 is required (found '${output:-unknown}')")
+    fi
+
+    if (( ${#errors[@]} > 0 )); then
+        printf 'Installed application versions do not satisfy this configuration:\n' >&2
+        printf '  %s\n' "${errors[@]}" >&2
+        exit 1
+    fi
+}
+
+install_mise_runtimes() {
+    local activation previous_global_config had_global_config
+    local command_name output version
+    local missing
+
+    section "Installing Mise runtimes"
+    if MISE_GLOBAL_CONFIG_FILE="$MISE_MANIFEST" mise install --dry-run-code >/dev/null 2>&1; then
+        echo "Mise runtimes are already installed."
+    else
+        MISE_GLOBAL_CONFIG_FILE="$MISE_MANIFEST" mise install --yes
+    fi
+
+    had_global_config=0
+    previous_global_config=""
+    if [[ -n "${MISE_GLOBAL_CONFIG_FILE+x}" ]]; then
+        had_global_config=1
+        previous_global_config="$MISE_GLOBAL_CONFIG_FILE"
+    fi
+    export MISE_GLOBAL_CONFIG_FILE="$MISE_MANIFEST"
+    activation="$(mise activate bash)" || die "Mise runtimes installed but shell activation failed"
+    eval "$activation"
+    if (( had_global_config == 1 )); then
+        export MISE_GLOBAL_CONFIG_FILE="$previous_global_config"
+    else
+        unset MISE_GLOBAL_CONFIG_FILE
+    fi
+    hash -r
+
+    missing=()
+    for command_name in node npm python rustc cargo go java javac; do
+        command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
+    done
+    if (( ${#missing[@]} > 0 )); then
+        die "Mise finished but required runtime commands are not on PATH: ${missing[*]}"
+    fi
+
+    cargo clippy --version >/dev/null 2>&1 ||
+        die "Mise's Rust toolchain is missing the configured Clippy component"
+
+    output="$(javac -version 2>&1 || true)"
+    version="${output##* }"
+    version_at_least "$version" "21.0.0" ||
+        die "JDK 21+ is required (found '${version:-unknown}')"
+}
 
 backup_existing() {
-    local target="$1"
+    local target="$1" timestamp backup
     if [[ -e "$target" || -L "$target" ]]; then
-        mv "$target" "${target}.bak.$(date +%s)"
+        timestamp="$(date +%s)"
+        backup="${target}.bak.${timestamp}"
+        while [[ -e "$backup" || -L "$backup" ]]; do
+            timestamp=$((timestamp + 1))
+            backup="${target}.bak.${timestamp}"
+        done
+        mv "$target" "$backup"
         echo "  backed up:      $target"
     fi
 }
@@ -51,9 +399,9 @@ backup_existing() {
 link() {
     local src="$REPO_ROOT/$1" dst="$HOME/$2"
     if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
-        echo "  already linked: $dst"
-        return
+        return 0
     fi
+    mkdir -p "$(dirname "$dst")"
     backup_existing "$dst"
     ln -s "$src" "$dst"
     echo "  linked:         $dst"
@@ -67,24 +415,39 @@ prepare_local_config_dir() {
     fi
 }
 
-link fish        .config/fish
-if [[ "$OS_NAME" == "Darwin" ]]; then
-    link ghostty     .config/ghostty
-else
-    echo "  skipped:        $HOME/.config/ghostty (macOS-only)"
-fi
-prepare_local_config_dir "$HOME/.config/herdr"
-link herdr/config.toml .config/herdr/config.toml
-prepare_local_config_dir "$HOME/.config/hunk"
-link hunk/config.toml .config/hunk/config.toml
-link lazygit     .config/lazygit
-link nvim        .config/nvim
-link tmux        .config/tmux
-link zsh/.zshrc  .zshrc
-
-mkdir -p "$LOCAL_DIR"
-for template in local.fish local.zsh; do
-    if [[ ! -e "$LOCAL_DIR/$template" && ! -L "$LOCAL_DIR/$template" ]]; then
-        cp "$REPO_ROOT/templates/$template" "$LOCAL_DIR/"
+link_configs() {
+    section "Linking configuration"
+    link fish        .config/fish
+    if [[ "$OS_NAME" == "Darwin" ]]; then
+        link ghostty     .config/ghostty
+    else
+        echo "  skipped:        $HOME/.config/ghostty (macOS-only)"
     fi
-done
+    prepare_local_config_dir "$HOME/.config/herdr"
+    link herdr/config.toml .config/herdr/config.toml
+    prepare_local_config_dir "$HOME/.config/hunk"
+    link hunk/config.toml .config/hunk/config.toml
+    link lazygit     .config/lazygit
+    prepare_local_config_dir "$HOME/.config/mise/conf.d"
+    link mise/conf.d/00-dotfiles.toml .config/mise/conf.d/00-dotfiles.toml
+    link nvim        .config/nvim
+    link tmux        .config/tmux
+    link zsh/.zshrc  .zshrc
+
+    mkdir -p "$LOCAL_DIR"
+    for template in local.fish local.zsh; do
+        if [[ ! -e "$LOCAL_DIR/$template" && ! -L "$LOCAL_DIR/$template" ]]; then
+            cp "$REPO_ROOT/templates/$template" "$LOCAL_DIR/"
+        fi
+    done
+}
+
+ensure_native_prerequisites
+ensure_homebrew
+install_brew_dependencies
+install_macos_casks
+validate_brew_dependencies
+install_mise_runtimes
+link_configs
+
+printf '\nDotfiles installation complete.\n'

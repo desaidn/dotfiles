@@ -13,6 +13,7 @@ The setup is designed around one uniform code interface: Herdr is the daily work
 | `herdr/config.toml` | `~/.config/herdr/config.toml` | Daily workspace config; mutable runtime state is local.   |
 | `hunk/config.toml`  | `~/.config/hunk/config.toml`  | Review preferences; mutable runtime state remains local.  |
 | `lazygit/`          | `~/.config/lazygit/`         | Git TUI with Neovim editor handoff and native staging UI. |
+| `mise/conf.d/`      | `~/.config/mise/conf.d/`     | Global runtime defaults; user config can override them.   |
 | `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack`.           |
 | `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer with 1-indexed windows and panes.    |
 | `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
@@ -49,8 +50,18 @@ cd ~/dotfiles
 
 `install.sh` is **idempotent and non-destructive**:
 
+- It installs missing platform prerequisites, Homebrew, the tracked
+  [`Brewfile`](Brewfile), and the runtimes in
+  [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml).
+- On macOS, a missing Xcode Command Line Tools install may require completing
+  Apple's system dialog and rerunning the script. On Linux, native bootstrap
+  packages are supported through `apt-get`, `dnf`, and `pacman`.
+- Run it as a normal user with sudo access. Homebrew and this dotfiles setup
+  intentionally refuse a root-owned installation.
 - Existing files/dirs at link targets are renamed to `<path>.bak.<unix-timestamp>`, never deleted.
-- Re-running it after a successful install is a no-op.
+- Re-running it with the same resolved dependency set performs checks and no
+  package or link mutations. It does not upgrade already-installed Brew
+  packages.
 - Use `./uninstall.sh` to remove the symlinks (and optionally restore the most recent backup).
 
 ## Daily workspace
@@ -65,27 +76,72 @@ tmux new-session -A -s dev
 
 These are top-level alternatives. Plain `herdr` starts or reattaches the daily workspace; tmux remains independently available when a tmux-specific workflow is required.
 
-## Prerequisites
+## Dependency ownership
 
-`install.sh` checks for the binaries below on PATH and prints the install URL of anything missing.
+`install.sh` provisions these dependencies according to one ownership rule per
+layer:
 
-**Required tools this repo configures**: `git`, `fish`, `zsh`, `nvim`, `herdr`, `tmux`, `lazygit`
+- The platform bootstraps Homebrew and the compiler/download/archive tools
+  that Homebrew and Neovim need. On macOS that means Xcode Command Line Tools;
+  on Linux it means the distribution's development-tools packages.
+- Homebrew owns applications and standalone CLIs.
+- Mise owns versioned language runtimes.
+- Neovim owns plugins, Treesitter parsers, and the LSP/formatter/linter/debugger
+  packages declared in its Language Tooling Inventory.
 
-Install Herdr per machine with `mise use -g herdr`; `install.sh` checks for the binary but does not install or update it.
+### Homebrew applications
 
-**macOS-only tool config**: `ghostty` is required on macOS and skipped on non-macOS hosts. `install.sh` accepts either the `ghostty` CLI or `Ghostty.app` in `/Applications` or `~/Applications`.
+| Package | Requirement in this repo |
+| --- | --- |
+| `git` | Plugin retrieval and all Git-facing tools |
+| `fish` | Primary shell; version 3.2 or newer |
+| `zsh` | Secondary/login-shell handoff |
+| `neovim` | `nvim`; exactly stable 0.12.4 |
+| `herdr` | Daily workspace manager |
+| `tmux` | Fallback multiplexer; version 3.7 or newer |
+| `lazygit` | Git transaction surface |
+| `hunk` | Stacked working-tree review surface |
+| `mise` | Language runtime manager |
+| `atuin` | Shell history integration |
+| `gh` | GitHub issue workflows described under `docs/agents/` |
+| `ripgrep` | `rg`; Neovim Telescope grep |
+| `tree-sitter-cli` | `tree-sitter` 0.26.1 or newer; parser management |
+| `uv` | Python debugging through nvim-dap-python |
+| `ghcup` | Haskell Language Server installation; capability-specific |
+| `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
 
-**Auxiliary deps**:
+On macOS, the configured UI also uses the `ghostty` and
+`font-jetbrains-mono` casks. Ghostty configuration is skipped on Linux.
 
-| Binary        | Required by                      |
-| ------------- | -------------------------------- |
-| `mise`        | shell rc (per-machine init)      |
-| `atuin`       | shell rc (per-machine init)      |
-| `rg`          | nvim Telescope / fff.nvim        |
-| `tree-sitter` | nvim treesitter parser mgmt      |
-| `hunk`        | nvim stacked working-tree review |
+### Mise runtimes
 
-**Not checked** (no portable `command -v` equivalent): JetBrains Mono font (used by Ghostty) — install from <https://www.jetbrains.com/lp/mono/>.
+The enabled Neovim language capabilities require Node.js/npm, Python, Rust
+with Cargo and Clippy, Go, and a JDK 21 or newer. These runtimes belong to
+Mise; Mason installs the corresponding editor tooling. Haskell is the current
+exception: Mason's Haskell Language Server recipe invokes `ghcup` directly.
+
+The installer uses the tracked global defaults fragment
+[`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml). Its channel
+selectors express the runtime update policy, while a user's normal
+`~/.config/mise/config.toml` remains untouched and has higher precedence.
+
+### Platform and development-only dependencies
+
+Neovim also needs `curl`, `tar`, `gzip`, `unzip`, `diff`, and a C compiler to
+populate plugins, parsers, and Undotree's diff view. macOS supplies its
+clipboard provider; the Linux Brewfile installs Wayland and X11 providers.
+`make` arrives with the native development tools and enables optional plugin
+enhancements. Expect is needed only for the real-PTY Hunk regression test.
+`fd` is not a base dependency: fff.nvim owns normal file finding and `rg` is
+already available to Telescope.
+
+The exact Neovim 0.12.4 requirement is deliberately validated after Brew
+installation. Because Homebrew formulae are rolling, a future Neovim formula
+that no longer supplies 0.12.4 will cause a clear validation failure rather
+than linking an incompatible editor configuration.
+
+See [the dependency research note](docs/dependency-research.md) for package
+mapping and primary-source evidence.
 
 ## Per-machine activation
 
@@ -94,9 +150,25 @@ The `fish` and `zsh` rc files source an optional per-machine file if it exists:
 - `~/.local/share/dotfiles/local.fish`
 - `~/.local/share/dotfiles/local.zsh`
 
-`install.sh` writes these for you. They contain `mise activate`, `mise completion`, `atuin init`, and `[ -d ]`/`[ -f ]`-gated PATH additions for optional tools (`bun`, `ghcup`, `lmstudio`, `claude/local`) — every line is a no-op on a machine that lacks the tool. Edit freely — these files live outside the repo.
+On first run, `install.sh` copies templates for files that do not already
+exist. They contain `mise activate`, `mise completion`, `atuin init`, and
+Homebrew activation for all three standard prefixes, plus gated PATH additions
+for per-machine tools (`bun`, `ghcup`, `lmstudio`, `claude/local`)—every line
+is a no-op on a machine that lacks the tool. Edit freely; these files live
+outside the repo.
 
 The shared shell rc files set `EDITOR`, `VISUAL`, and `GIT_EDITOR` to `nvim`; per-machine files should only override that when a machine genuinely needs a different editor contract.
+
+## Installer tests
+
+```bash
+./tests/install_test.sh
+```
+
+The test runs the real installer against isolated macOS and Debian fixtures
+with fake package managers. It verifies fresh provisioning, backup/link
+behavior, and a mutation-free second run without touching the network, sudo,
+Homebrew, or the caller's home directory.
 
 ## Rollback
 

@@ -5,6 +5,9 @@ Guidance for coding agents working on the Herdr configuration. See
 
 ## Configuration boundary
 
+Homebrew owns the Herdr binary; do not treat Herdr as a Mise-managed language
+runtime.
+
 `config.toml` is the only repository-owned Herdr file. Install it with a
 file-level symlink at `~/.config/herdr/config.toml`; never symlink the entire
 `herdr/` directory.

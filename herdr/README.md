@@ -8,14 +8,14 @@ the processes in its panes.
 
 ## Installation
 
-Install Herdr through the existing per-machine Mise toolchain:
+Herdr is an application rather than a language runtime, so Homebrew owns it:
 
 ```bash
-mise use -g herdr
+brew install herdr
 ```
 
-The dotfiles installer checks that `herdr` is on `PATH`; it does not install or
-update the binary.
+The dotfiles installer installs the formula when missing and validates that
+`herdr` is on `PATH`; successful reruns do not upgrade it.
 
 ## Configuration
 

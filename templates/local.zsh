@@ -1,7 +1,23 @@
 # Per-machine zsh init. Created by dotfiles install.sh; safe to edit.
 
-# Homebrew (macOS): puts /opt/homebrew/bin on PATH
-[ -x "/opt/homebrew/bin/brew" ] && eval "$(/opt/homebrew/bin/brew shellenv zsh)"
+# Homebrew: support the standard Apple silicon, Intel macOS, and Linux prefixes.
+_dotfiles_brew="$(command -v brew 2>/dev/null || true)"
+if [ -z "$_dotfiles_brew" ]; then
+    for _dotfiles_brew_candidate in \
+        /opt/homebrew/bin/brew \
+        /usr/local/bin/brew \
+        /home/linuxbrew/.linuxbrew/bin/brew
+    do
+        if [ -x "$_dotfiles_brew_candidate" ]; then
+            _dotfiles_brew="$_dotfiles_brew_candidate"
+            break
+        fi
+    done
+fi
+if [ -n "$_dotfiles_brew" ]; then
+    eval "$("$_dotfiles_brew" shellenv zsh)"
+fi
+unset _dotfiles_brew _dotfiles_brew_candidate
 
 # Put atuin on PATH if installed via the official installer
 [ -f "$HOME/.atuin/bin/env" ] && . "$HOME/.atuin/bin/env"

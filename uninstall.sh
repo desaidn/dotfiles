@@ -22,6 +22,7 @@ remove ghostty     .config/ghostty
 remove herdr/config.toml .config/herdr/config.toml
 remove hunk/config.toml .config/hunk/config.toml
 remove lazygit     .config/lazygit
+remove mise/conf.d/00-dotfiles.toml .config/mise/conf.d/00-dotfiles.toml
 remove nvim        .config/nvim
 remove tmux        .config/tmux
 remove zsh/.zshrc  .zshrc
@@ -33,6 +34,7 @@ backups=(
     "$HOME"/.config/*.bak.*
     "$HOME"/.config/herdr/config.toml.bak.*
     "$HOME"/.config/hunk/config.toml.bak.*
+    "$HOME"/.config/mise/conf.d/00-dotfiles.toml.bak.*
     "$HOME"/.zshrc.bak.*
 )
 shopt -u nullglob

@@ -169,14 +169,26 @@ Neo-tree file explorer is enabled with right-side positioning and minimal stylin
 
 ## Dependencies
 
-External tools required:
+Keep installation ownership aligned with the repository-level dependency
+inventory:
 
-- `git`, `make`, `unzip`, C compiler
-- `ripgrep` (rg) for searching
-- [`fd-find`](https://github.com/sharkdp/fd) for file finding (optional, Telescope uses it if available)
-- [`tree-sitter-cli`](https://github.com/tree-sitter/tree-sitter) for Treesitter parser management (`brew install tree-sitter-cli`)
-- Clipboard tool (`pbcopy` on macOS, `xclip`/`xsel` on Linux)
-- Language-specific tools (npm for TypeScript, go for Golang, etc.)
+- The host provides exactly stable Neovim 0.12.4, `git`, `curl`, `tar`,
+  `gzip`, `unzip`, a C compiler, `rg`, and tree-sitter CLI 0.26.1 or newer.
+- The host also provides `lazygit` and `hunk` for their production Tool Tabs,
+  plus a platform clipboard provider.
+- Mise owns Node.js/npm, Python, Rust with Cargo and Clippy, Go, and JDK 21+
+  runtimes. Python debugging additionally requires the standalone `uv` CLI.
+- Haskell is an explicit ownership exception: the current Mason HLS recipe
+  invokes `ghcup`, so `ghcup` must be available before Mason performs a clean
+  inventory install.
+- Neovim owns plugins and Treesitter parsers; Mason owns the packages listed in
+  `mason_tools`. Do not duplicate those tools as machine packages.
+
+`make` is optional and only enables telescope-fzf-native and LuaSnip's
+jsregexp build. `fd` is not a base dependency because fff.nvim owns normal file
+finding. `/usr/bin/expect` is required only by the real-PTY Hunk regression
+test. See `../docs/dependency-research.md` for package mappings and source
+evidence.
 
 ## Configuration Philosophy
 

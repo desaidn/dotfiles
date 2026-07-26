@@ -2,6 +2,12 @@
 
 Part of [dotfiles](../README.md).
 
-## Dependencies
+This configuration is installed only on macOS.
 
-- [JetBrains Mono](https://www.jetbrains.com/lp/mono/)
+## Installation
+
+The root installer provisions the `ghostty` and `font-jetbrains-mono`
+Homebrew casks when they are missing. A manually installed `Ghostty.app` or
+JetBrains Mono font is preserved and accepted.
+
+The `font-jetbrains-mono` cask supplies the font selected in `ghostty/config`.

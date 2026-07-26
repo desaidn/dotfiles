@@ -22,16 +22,32 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 - **LazyGit** (`lazygit/config.yml`) - Git TUI with nvim integration, native staging UI, and custom theme
 - **Hunk** (`hunk/config.toml`) - Full stacked working-tree review surface from Neovim; only durable preferences are tracked
 
-### Per-machine prerequisites (not in this repo)
+### Dependency ownership
 
-`install.sh` requires these on PATH and refuses to run otherwise:
+Keep provisioning ownership explicit:
 
-- **Mise** - Runtime version manager (Node.js, Python, Rust, Go, etc.)
-- **Atuin** - Shell history sync
+- **Platform bootstrap** owns Homebrew plus the compiler, download, and archive
+  utilities required to install Homebrew and populate Neovim.
+- **Homebrew** owns applications and standalone CLIs: Git, Fish 3.2+, Zsh,
+  Neovim 0.12.4 stable, Herdr, tmux 3.7+, lazygit, Hunk, Mise, Atuin, `gh`,
+  ripgrep, tree-sitter CLI 0.26.1+, and capability-specific tools such as
+  `uv` and `ghcup`; on Linux it also owns `xclip` and `wl-clipboard`.
+- **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy, Go, and JDK 21+
+  runtimes. Do not install these runtimes through Homebrew.
+- **Neovim** owns its plugins, Treesitter parsers, and Mason packages. Do not
+  duplicate Mason-managed LSPs, formatters, linters, or debuggers in the
+  machine package list.
 
-Per-machine activation lines (`mise activate`, `atuin init`) are written to `~/.local/share/dotfiles/local.{fish,zsh}` by `install.sh`.
+Ghostty and JetBrains Mono are macOS-only Homebrew casks. Linux needs a
+session-appropriate clipboard provider. `make` is an optional Neovim build
+enhancement, and Expect is test-only. Do not turn gated per-machine paths for
+Bun, LM Studio, Claude, or JetBrains Toolbox into required dependencies.
 
-Ghostty is macOS-only for install: `install.sh` skips the Ghostty config symlink on non-macOS hosts, but requires Ghostty on macOS.
+`install.sh` implements this policy through the root `Brewfile` and
+`mise/conf.d/00-dotfiles.toml`. The Mise file is linked as a low-precedence
+global defaults fragment; never replace a user's main
+`~/.config/mise/config.toml`. See `docs/dependency-research.md` for the
+evidence behind this inventory.
 
 ## Configuration Philosophy
 
@@ -56,8 +72,7 @@ All configurations follow these principles:
 
 ```bash
 git clone <this-repo> ~/dotfiles
-~/dotfiles/install.sh           # Symlink configs, write per-machine activation files
-mise install                    # Install language runtimes
+~/dotfiles/install.sh           # Bootstrap dependencies, runtimes, and config links
 nvim                            # Start editor (see nvim/AGENTS.md for details)
 ```
 
@@ -106,7 +121,7 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 - **Terminal tool ↔ Editor**: flatten.nvim handles editor handoff from nested `nvim` calls back into the host Neovim; the shared terminal-tool module owns the opaque source marker and post-handoff policy while preserving the shell-owned `EDITOR` contract
 - **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent Tool Tab per tool, restarted when the Host Window's effective working directory changes, with flatten.nvim for Editor Handoff and host tmux prefix and pane navigation kept upstream when using the fallback
 - **Shell ↔ Workspace manager**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; invoke Herdr for the daily workspace or tmux directly for fallback/compatibility
-- **Runtime Management**: Mise handles all language version requirements
+- **Runtime Management**: Mise owns language runtimes; Mason owns editor tooling
 - **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty)
 
 ### Dependencies
@@ -114,6 +129,7 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 - macOS-first setup; configs aim to remain Linux-compatible where practical
 - Primary languages: TypeScript (Bun, Node.js, Browser), Kotlin/Java, Python, Rust
 - Terminal tooling: Ghostty, Herdr, tmux, fish, zsh
+- Dependency package mappings and version floors are documented in `README.md`; keep this section and that inventory aligned
 
 ## Agent skills
 
@@ -141,6 +157,14 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 - If a target exists, rename it to `<target>.bak.$(date +%s)` and create the symlink.
 - If the target is already a symlink into this repo, skip silently.
 - Re-running the script after a successful install is a no-op.
+- Perform all dependency installation and validation before changing link
+  targets, so a partial bootstrap can be resumed safely.
+- Use the official Homebrew installer only when Brew cannot be discovered;
+  use `brew bundle check --no-upgrade` before `install --no-upgrade`.
+- Keep native Linux bootstrap support explicit to `apt-get`, `dnf`, and
+  `pacman`; fail with an actionable message for an unknown manager.
+- Run `tests/install_test.sh` after installer, Brewfile, Mise manifest, or
+  per-machine activation-template changes.
 
 ## Modification Guidelines
 
