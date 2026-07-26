@@ -818,7 +818,7 @@ test_uninstall_restores_latest_backups() {
     pass "uninstall restores the newest safe backups without clobbering user state"
 }
 
-test_uninstall_blocks_unsafe_nested_restores_atomically() {
+test_uninstall_blocks_unsafe_or_ambiguous_restores() {
     local parent_backup
 
     new_fixture uninstall-blocked-restore Darwin
@@ -829,10 +829,17 @@ test_uninstall_blocks_unsafe_nested_restores_atomically() {
 
     printf 'new local fragment\n' >"$FIXTURE_HOME/.config/mise/conf.d/50-local.toml"
     ln -s "$REPO_ROOT/fish" "$FIXTURE_HOME/.config/fish.bak.1"
+    printf 'first equal-timestamp backup\n' \
+        >"$FIXTURE_HOME/.config/lazygit.bak.8"
+    printf 'second equal-timestamp backup\n' \
+        >"$FIXTURE_HOME/.config/lazygit.bak.0008"
     run_uninstaller 1 --restore
 
     assert_symlink "$FIXTURE_HOME/.config/fish" "$REPO_ROOT/fish"
     assert_symlink "$FIXTURE_HOME/.config/fish.bak.1" "$REPO_ROOT/fish"
+    assert_symlink "$FIXTURE_HOME/.config/lazygit" "$REPO_ROOT/lazygit"
+    assert_exists "$FIXTURE_HOME/.config/lazygit.bak.8"
+    assert_exists "$FIXTURE_HOME/.config/lazygit.bak.0008"
     assert_symlink \
         "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml" \
         "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
@@ -858,7 +865,7 @@ test_uninstall_blocks_unsafe_nested_restores_atomically() {
     assert_exists "$parent_backup"
     assert_exists "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml.bak.1"
 
-    pass "unsafe and ambiguous nested restores preserve the active group"
+    pass "unsafe and ambiguous restores preserve the active group"
 }
 
 test_equivalent_relative_links_are_idempotent() {
@@ -868,6 +875,9 @@ test_equivalent_relative_links_are_idempotent() {
     ln -s ../../repo-alias/fish "$FIXTURE_HOME/.config/fish"
     ln -s "$REPO_ROOT/zsh/.zshrc" "$FIXTURE_ROOT/zsh-source-alias"
     ln -s ../zsh-source-alias "$FIXTURE_HOME/.zshrc"
+    mkdir -p "$FIXTURE_HOME/user-herdr"
+    ln -s "$REPO_ROOT/herdr/config.toml" "$FIXTURE_HOME/user-herdr/config.toml"
+    ln -s "$FIXTURE_HOME/user-herdr" "$FIXTURE_HOME/.config/herdr"
 
     run_installer
 
@@ -875,6 +885,10 @@ test_equivalent_relative_links_are_idempotent() {
         "installer replaced an equivalent relative link"
     assert_eq "../zsh-source-alias" "$(readlink "$FIXTURE_HOME/.zshrc")" \
         "installer replaced an equivalent file-source alias chain"
+    assert_symlink "$FIXTURE_HOME/.config/herdr" "$FIXTURE_HOME/user-herdr"
+    assert_symlink \
+        "$FIXTURE_HOME/.config/herdr/config.toml" \
+        "$REPO_ROOT/herdr/config.toml"
     for candidate in "$FIXTURE_HOME"/.config/fish.bak.*; do
         [[ ! -e "$candidate" && ! -L "$candidate" ]] ||
             fail "installer backed up an equivalent relative link"
@@ -883,11 +897,19 @@ test_equivalent_relative_links_are_idempotent() {
         [[ ! -e "$candidate" && ! -L "$candidate" ]] ||
             fail "installer backed up an equivalent file-source alias chain"
     done
+    for candidate in "$FIXTURE_HOME"/.config/herdr.bak.*; do
+        [[ ! -e "$candidate" && ! -L "$candidate" ]] ||
+            fail "installer backed up a parent containing an equivalent nested link"
+    done
 
     run_uninstaller 0
     assert_not_exists "$FIXTURE_HOME/.config/fish"
     assert_not_exists "$FIXTURE_HOME/.zshrc"
-    pass "equivalent directory and file links stay stable and uninstall as owned"
+    assert_symlink "$FIXTURE_HOME/.config/herdr" "$FIXTURE_HOME/user-herdr"
+    assert_symlink \
+        "$FIXTURE_HOME/.config/herdr/config.toml" \
+        "$REPO_ROOT/herdr/config.toml"
+    pass "equivalent direct and nested links remain untouched"
 }
 
 test_link_preflight_prevents_partial_configuration() {
@@ -997,7 +1019,7 @@ test_uninstall_cli_is_safe
 test_install_and_uninstall_reject_unsafe_homes
 test_uninstall_removes_only_owned_links
 test_uninstall_restores_latest_backups
-test_uninstall_blocks_unsafe_nested_restores_atomically
+test_uninstall_blocks_unsafe_or_ambiguous_restores
 test_equivalent_relative_links_are_idempotent
 test_link_preflight_prevents_partial_configuration
 test_dependency_manifests_match_the_install_contract

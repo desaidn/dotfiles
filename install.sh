@@ -445,6 +445,16 @@ prepare_local_config_dir() {
     fi
 }
 
+link_nested() {
+    local source_rel="$1" target_rel="$2" container_rel="$3"
+
+    if symlink_points_to "$HOME/$target_rel" "$REPO_ROOT/$source_rel"; then
+        return 0
+    fi
+    prepare_local_config_dir "$HOME/$container_rel"
+    link "$source_rel" "$target_rel"
+}
+
 preflight_links() {
     local source required_directory
     local directory_sources file_sources
@@ -501,13 +511,13 @@ link_configs() {
     else
         echo "  skipped:        $HOME/.config/ghostty (macOS-only)"
     fi
-    prepare_local_config_dir "$HOME/.config/herdr"
-    link herdr/config.toml .config/herdr/config.toml
-    prepare_local_config_dir "$HOME/.config/hunk"
-    link hunk/config.toml .config/hunk/config.toml
+    link_nested herdr/config.toml .config/herdr/config.toml .config/herdr
+    link_nested hunk/config.toml .config/hunk/config.toml .config/hunk
     link lazygit     .config/lazygit
-    prepare_local_config_dir "$HOME/.config/mise/conf.d"
-    link mise/conf.d/00-dotfiles.toml .config/mise/conf.d/00-dotfiles.toml
+    link_nested \
+        mise/conf.d/00-dotfiles.toml \
+        .config/mise/conf.d/00-dotfiles.toml \
+        .config/mise/conf.d
     link nvim        .config/nvim
     link tmux        .config/tmux
     link zsh/.zshrc  .zshrc

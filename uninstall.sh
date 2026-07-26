@@ -74,6 +74,7 @@ remove_owned() {
 find_latest_backup() {
     local original="$1" candidate timestamp
     LATEST_BACKUP=""
+    LATEST_BACKUP_AMBIGUOUS=0
     LATEST_TIMESTAMP=0
 
     for candidate in "$original".bak.*; do
@@ -90,6 +91,9 @@ find_latest_backup() {
         if [[ -z "$LATEST_BACKUP" ]] || (( timestamp > LATEST_TIMESTAMP )); then
             LATEST_BACKUP="$candidate"
             LATEST_TIMESTAMP="$timestamp"
+            LATEST_BACKUP_AMBIGUOUS=0
+        elif (( timestamp == LATEST_TIMESTAMP )); then
+            LATEST_BACKUP_AMBIGUOUS=1
         fi
     done
 }
@@ -117,6 +121,10 @@ restore_direct() {
 
     find_latest_backup "$target"
     backup="$LATEST_BACKUP"
+    if (( LATEST_BACKUP_AMBIGUOUS == 1 )); then
+        mark_restore_blocked "$target has multiple newest numeric backups"
+        return
+    fi
 
     if [[ -e "$target" || -L "$target" ]]; then
         if ! symlink_points_to "$target" "$source"; then
@@ -267,6 +275,10 @@ restore_nested() {
 
     find_latest_backup "$container"
     container_backup="$LATEST_BACKUP"
+    if (( LATEST_BACKUP_AMBIGUOUS == 1 )); then
+        mark_restore_blocked "$container has multiple newest numeric backups"
+        return
+    fi
 
     if [[ -L "$container" ]]; then
         echo "  parent is a symlink: $container (skipping)"
@@ -275,6 +287,10 @@ restore_nested() {
 
     find_latest_backup "$target"
     leaf_backup="$LATEST_BACKUP"
+    if (( LATEST_BACKUP_AMBIGUOUS == 1 )); then
+        mark_restore_blocked "$target has multiple newest numeric backups"
+        return
+    fi
 
     if [[ -n "$leaf_backup" && -n "$container_backup" ]]; then
         mark_restore_blocked "$target has both leaf and container backups"
