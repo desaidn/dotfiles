@@ -76,6 +76,8 @@ All configurations follow these principles:
 ```bash
 git clone <this-repo> ~/dotfiles
 ~/dotfiles/install.sh           # Bootstrap dependencies, runtimes, and config links
+# Or, on hosts that cannot install the pinned runtimes:
+~/dotfiles/install.sh --skip-mise-runtimes
 # Linux: run the exact `exec ".../fish" -l` command printed by install.sh
 nvim                            # Start editor (see nvim/AGENTS.md for details)
 ```
@@ -180,6 +182,10 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
   the dnf path.
 - Keep Mise runtime selectors exact; floating channels break strict second-run
   idempotence as their resolution changes.
+- `--skip-mise-runtimes` is the only supported degraded install mode. It skips
+  runtime installation and validation and does not create or update the
+  tracked Mise fragment link. Never remove an existing managed or user-owned
+  Mise fragment in this mode.
 - Run `tests/install_test.sh` after installer, Brewfile, Mise manifest, or
   per-machine activation-template changes.
 

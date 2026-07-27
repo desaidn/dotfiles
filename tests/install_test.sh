@@ -537,9 +537,17 @@ new_fixture() {
 run_installer() {
     local expected_result="${1:-success}"
     local run_home="$FIXTURE_HOME"
-    if (( $# > 1 )); then
-        run_home="$2"
+    local installer_args=()
+
+    if (( $# > 0 )); then
+        shift
     fi
+    if (( $# > 0 )) && [[ "$1" != --* ]]; then
+        run_home="$1"
+        shift
+    fi
+    installer_args=("$@")
+
     if (
         cd "$FIXTURE_CALLER_DIR"
         env \
@@ -561,7 +569,7 @@ run_installer() {
             DOTFILES_TEST_REPO_ROOT="$FIXTURE_INSTALL_REPO_ROOT" \
             DOTFILES_TEST_RUNTIME_TEMPLATE="$FIXTURE_RUNTIME_TEMPLATE" \
             DOTFILES_TEST_STATE="$FIXTURE_STATE" \
-            "$FIXTURE_INSTALL_REPO_ROOT/install.sh"
+            "$FIXTURE_INSTALL_REPO_ROOT/install.sh" "${installer_args[@]}"
     ) >"$FIXTURE_OUTPUT" 2>&1
     then
         if [[ "$expected_result" == "failure" ]]; then
@@ -603,17 +611,21 @@ count_zsh_backups() {
     printf '%s\n' "$count"
 }
 
-assert_common_links() {
+assert_non_mise_links() {
     assert_symlink "$FIXTURE_HOME/.config/fish" "$REPO_ROOT/fish"
     assert_symlink "$FIXTURE_HOME/.config/herdr/config.toml" "$REPO_ROOT/herdr/config.toml"
     assert_symlink "$FIXTURE_HOME/.config/hunk/config.toml" "$REPO_ROOT/hunk/config.toml"
     assert_symlink "$FIXTURE_HOME/.config/lazygit" "$REPO_ROOT/lazygit"
-    assert_symlink "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml" "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
     assert_symlink "$FIXTURE_HOME/.config/nvim" "$REPO_ROOT/nvim"
     assert_symlink "$FIXTURE_HOME/.config/tmux" "$REPO_ROOT/tmux"
     assert_symlink "$FIXTURE_HOME/.zshrc" "$REPO_ROOT/zsh/.zshrc"
     assert_exists "$FIXTURE_HOME/.local/share/dotfiles/local.fish"
     assert_exists "$FIXTURE_HOME/.local/share/dotfiles/local.zsh"
+}
+
+assert_common_links() {
+    assert_non_mise_links
+    assert_symlink "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml" "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
 }
 
 assert_common_links_removed() {
@@ -824,6 +836,65 @@ test_mise_runtime_version_mismatch_is_rejected_before_linking() {
         fail "runtime version mismatch failure was not actionable"
     assert_not_exists "$FIXTURE_HOME/.config"
     pass "runtime versions outside the tracked Mise manifest are rejected before linking"
+}
+
+test_install_cli_is_safe() {
+    new_fixture install-cli Darwin
+
+    run_installer success --help
+    grep -Fq 'Usage:' "$FIXTURE_OUTPUT" ||
+        fail "install help did not print usage"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+
+    run_installer failure --definitely-not-an-option
+    grep -Fq 'Usage:' "$FIXTURE_OUTPUT" ||
+        fail "invalid install option did not print usage"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "install help and invalid options do not mutate configuration"
+}
+
+test_skip_mise_runtimes_completes_yum_setup() {
+    new_fixture skip-mise-yum Linux yum
+    mkdir -p "$FIXTURE_HOME/.config/mise"
+    printf 'user mise config\n' >"$FIXTURE_HOME/.config/mise/config.toml"
+
+    run_installer success --skip-mise-runtimes
+
+    assert_non_mise_links
+    assert_not_exists "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml"
+    grep -Fxq 'user mise config' "$FIXTURE_HOME/.config/mise/config.toml" ||
+        fail "skip mode changed the user's main Mise config"
+    assert_linux_native_install_once yum
+    assert_log_count 0 "mise dry-run" "$FIXTURE_LOG"
+    assert_log_count 0 "mise install" "$FIXTURE_LOG"
+    assert_log_count 0 "mise activate" "$FIXTURE_LOG"
+    grep -Fq 'Mise runtime installation and validation skipped by request.' "$FIXTURE_OUTPUT" ||
+        fail "skip mode did not report its degraded runtime state"
+    grep -Fq 'Dotfiles installation complete with Mise runtime provisioning skipped.' "$FIXTURE_OUTPUT" ||
+        fail "skip mode did not report degraded completion"
+
+    run_installer success --skip-mise-runtimes
+
+    assert_non_mise_links
+    assert_not_exists "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml"
+    assert_linux_native_install_once yum
+    assert_log_count 0 "mise dry-run" "$FIXTURE_LOG"
+    assert_log_count 0 "mise install" "$FIXTURE_LOG"
+    assert_log_count 0 "mise activate" "$FIXTURE_LOG"
+    pass "yum setup can skip Mise runtimes and remains idempotent"
+}
+
+test_skip_mise_runtimes_retains_existing_manifest() {
+    new_fixture skip-mise-existing Darwin
+    run_installer
+
+    run_installer success --skip-mise-runtimes
+
+    assert_common_links
+    assert_log_count 1 "mise install" "$FIXTURE_LOG"
+    pass "skip mode retains an existing managed Mise fragment"
 }
 
 test_uninstall_cli_is_safe() {
@@ -1076,19 +1147,20 @@ test_link_preflight_prevents_partial_configuration() {
     fixture_repo="$FIXTURE_ROOT/repo"
     mkdir -p "$fixture_repo/mise/conf.d" "$fixture_repo/templates"
     cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
-    cp "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" "$fixture_repo/mise/conf.d/"
     cp "$REPO_ROOT/templates/local.fish" "$REPO_ROOT/templates/local.zsh" \
         "$fixture_repo/templates/"
-    for source_name in fish ghostty herdr hunk lazygit tmux zsh; do
+    for source_name in fish ghostty herdr hunk lazygit nvim tmux zsh; do
         ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
     done
     FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
     printf 'original zsh config\n' >"$FIXTURE_HOME/.zshrc"
 
-    run_installer failure
+    run_installer failure --skip-mise-runtimes
 
-    grep -Fq 'missing or invalid tracked configuration' "$FIXTURE_OUTPUT" ||
-        fail "missing source failure was not actionable"
+    grep -Fq \
+        "missing or invalid tracked configuration file: $FIXTURE_INSTALL_REPO_ROOT/mise/conf.d/00-dotfiles.toml" \
+        "$FIXTURE_OUTPUT" ||
+        fail "skip mode did not preflight the tracked Mise manifest"
     grep -Fxq 'original zsh config' "$FIXTURE_HOME/.zshrc" ||
         fail "missing source preflight changed zsh config"
     for candidate in "$FIXTURE_HOME"/.zshrc.bak.*; do
@@ -1169,6 +1241,9 @@ test_user_mise_config_does_not_override_bootstrap_manifest
 test_mise_environment_cannot_override_bootstrap_manifest
 test_non_mise_runtime_command_is_rejected_before_linking
 test_mise_runtime_version_mismatch_is_rejected_before_linking
+test_install_cli_is_safe
+test_skip_mise_runtimes_completes_yum_setup
+test_skip_mise_runtimes_retains_existing_manifest
 test_macos_fresh_and_second_run
 test_linux_manager_fresh_and_second_run apt-get
 test_linux_manager_fresh_and_second_run dnf

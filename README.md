@@ -58,6 +58,13 @@ exec "/home/linuxbrew/.linuxbrew/bin/fish" -l
 
 The installer does not change the account's login shell.
 
+On a host that cannot install the pinned Mise runtimes, complete the remaining
+setup explicitly in degraded mode:
+
+```bash
+./install.sh --skip-mise-runtimes
+```
+
 `install.sh` is **idempotent and non-destructive**:
 
 - It installs missing platform prerequisites, Homebrew, the tracked
@@ -73,6 +80,9 @@ The installer does not change the account's login shell.
   link mutations. Brew is invoked with `--no-upgrade`, so the installer does
   not request broad upgrades; Homebrew may still upgrade a dependency when a
   newly installed formula requires it.
+- `--skip-mise-runtimes` skips runtime installation and validation and does
+  not create or update the tracked Mise fragment link. It never removes an
+  existing fragment. Mise itself remains a Homebrew-managed application.
 - `./uninstall.sh` removes only symlinks owned by this repository.
   `./uninstall.sh --restore` also restores the newest unambiguous backup where
   that can be done without replacing user state.
@@ -144,6 +154,12 @@ overrides cannot mask missing pinned runtimes. A user's normal
 `~/.config/mise/config.toml` remains untouched and has higher precedence in
 interactive shells.
 
+`--skip-mise-runtimes` is an explicit degraded setup for hosts that cannot run
+the pinned versions. Other dependencies and configurations are installed, but
+runtime-dependent language tooling may remain unavailable. On a fresh setup,
+the tracked defaults fragment is not linked; an existing managed or
+user-owned fragment is left untouched.
+
 ### Platform and development-only dependencies
 
 Neovim also needs `curl`, `tar`, `gzip`, `unzip`, `diff`, and a C compiler to
@@ -188,8 +204,9 @@ The test runs the real installer and uninstaller against isolated macOS and
 Linux fixtures with fake Homebrew, Mise, `apt-get`, DNF, YUM, and Pacman
 commands.
 It verifies fresh provisioning, manifest ownership, preflight failures,
-backup/link behavior, safe restoration, and a mutation-free second run without
-touching the network, sudo, package managers, or the caller's home directory.
+backup/link behavior, explicit runtime-skip setup, safe restoration, and a
+mutation-free second run without touching the network, sudo, package managers,
+or the caller's home directory.
 
 ## Rollback
 

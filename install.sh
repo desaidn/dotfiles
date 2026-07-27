@@ -6,10 +6,41 @@ BREWFILE="$REPO_ROOT/Brewfile"
 MISE_BOOTSTRAP_CONFIG_DIR="$REPO_ROOT/mise"
 MISE_MANIFEST="$MISE_BOOTSTRAP_CONFIG_DIR/conf.d/00-dotfiles.toml"
 HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
-OS_NAME="$(uname -s)"
 BREW_BIN=""
 LINUX_PACKAGE_MANAGER=""
 LINUX_FISH_PATH=""
+SKIP_MISE_RUNTIMES=0
+
+usage() {
+    printf 'Usage: %s [--skip-mise-runtimes]\n' "${0##*/}"
+    printf '       %s --help\n' "${0##*/}"
+}
+
+case "$#" in
+    0)
+        ;;
+    1)
+        case "$1" in
+            --skip-mise-runtimes)
+                SKIP_MISE_RUNTIMES=1
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                usage >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac
+
+OS_NAME="$(uname -s)"
 
 die() {
     printf 'error: %s\n' "$*" >&2
@@ -501,7 +532,7 @@ link_nested() {
 
 preflight_links() {
     local source required_directory
-    local directory_sources file_sources
+    local directory_sources file_sources required_directories
 
     directory_sources=(
         fish
@@ -532,13 +563,17 @@ preflight_links() {
             die "missing or invalid tracked configuration file: $REPO_ROOT/$source"
     done
 
-    for required_directory in \
-        "$HOME/.config" \
-        "$HOME/.config/mise" \
-        "$HOME/.local" \
-        "$HOME/.local/share" \
+    required_directories=(
+        "$HOME/.config"
+        "$HOME/.local"
+        "$HOME/.local/share"
         "$LOCAL_DIR"
-    do
+    )
+    if (( SKIP_MISE_RUNTIMES == 0 )); then
+        required_directories+=("$HOME/.config/mise")
+    fi
+
+    for required_directory in "${required_directories[@]}"; do
         if [[ ( -e "$required_directory" || -L "$required_directory" ) &&
             ! -d "$required_directory" ]]
         then
@@ -558,10 +593,14 @@ link_configs() {
     link_nested herdr/config.toml .config/herdr/config.toml .config/herdr
     link_nested hunk/config.toml .config/hunk/config.toml .config/hunk
     link lazygit     .config/lazygit
-    link_nested \
-        mise/conf.d/00-dotfiles.toml \
-        .config/mise/conf.d/00-dotfiles.toml \
-        .config/mise/conf.d
+    if (( SKIP_MISE_RUNTIMES == 0 )); then
+        link_nested \
+            mise/conf.d/00-dotfiles.toml \
+            .config/mise/conf.d/00-dotfiles.toml \
+            .config/mise/conf.d
+    else
+        echo "  skipped:        $HOME/.config/mise/conf.d/00-dotfiles.toml (--skip-mise-runtimes)"
+    fi
     link nvim        .config/nvim
     link tmux        .config/tmux
     link zsh/.zshrc  .zshrc
@@ -601,8 +640,17 @@ install_brew_dependencies
 install_macos_casks
 validate_brew_dependencies
 resolve_linux_fish_path
-install_mise_runtimes
+if (( SKIP_MISE_RUNTIMES == 1 )); then
+    section "Installing Mise runtimes"
+    echo "Mise runtime installation and validation skipped by request."
+else
+    install_mise_runtimes
+fi
 link_configs
 print_next_steps
 
-printf '\nDotfiles installation complete.\n'
+if (( SKIP_MISE_RUNTIMES == 1 )); then
+    printf '\nDotfiles installation complete with Mise runtime provisioning skipped.\n'
+else
+    printf '\nDotfiles installation complete.\n'
+fi
