@@ -63,10 +63,12 @@ detect_linux_package_manager() {
         LINUX_PACKAGE_MANAGER="apt-get"
     elif command -v dnf >/dev/null 2>&1; then
         LINUX_PACKAGE_MANAGER="dnf"
+    elif command -v yum >/dev/null 2>&1; then
+        LINUX_PACKAGE_MANAGER="yum"
     elif command -v pacman >/dev/null 2>&1; then
         LINUX_PACKAGE_MANAGER="pacman"
     else
-        die "unsupported Linux package manager; this installer supports apt-get, dnf, and pacman"
+        die "unsupported Linux package manager; this installer supports apt-get, dnf, yum, and pacman"
     fi
 }
 
@@ -86,6 +88,11 @@ install_linux_native_packages() {
                 sudo dnf group install -y "Development Tools"
             fi
             sudo dnf install -y \
+                procps-ng curl file git tar gzip unzip diffutils ca-certificates
+            ;;
+        yum)
+            sudo yum groupinstall -y "Development Tools"
+            sudo yum install -y \
                 procps-ng curl file git tar gzip unzip diffutils ca-certificates
             ;;
         pacman)

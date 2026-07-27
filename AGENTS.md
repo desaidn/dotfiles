@@ -174,8 +174,10 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 - Use the official Homebrew installer only when Brew cannot be discovered;
   use `brew bundle check --no-upgrade` before `install --no-upgrade`. Do not
   promise that Homebrew will never update a dependency needed by a new formula.
-- Keep native Linux bootstrap support explicit to `apt-get`, `dnf`, and
-  `pacman`; fail with an actionable message for an unknown manager.
+- Keep native Linux bootstrap support explicit to `apt-get`, `dnf`, `yum`, and
+  `pacman`; fail with an actionable message for an unknown manager. Detect
+  `dnf` before `yum` so dnf-based systems with a yum compatibility symlink use
+  the dnf path.
 - Keep Mise runtime selectors exact; floating channels break strict second-run
   idempotence as their resolution changes.
 - Run `tests/install_test.sh` after installer, Brewfile, Mise manifest, or

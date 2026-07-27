@@ -65,7 +65,7 @@ The installer does not change the account's login shell.
   [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml).
 - On macOS, a missing Xcode Command Line Tools install may require completing
   Apple's system dialog and rerunning the script. On Linux, native bootstrap
-  packages are supported through `apt-get`, `dnf`, and `pacman`.
+  packages are supported through `apt-get`, `dnf`, `yum`, and `pacman`.
 - Run it as a normal user with sudo access. Homebrew and this dotfiles setup
   intentionally refuse a root-owned installation.
 - Existing files/dirs at link targets are renamed to `<path>.bak.<unix-timestamp>`, never deleted.
@@ -185,7 +185,8 @@ The shared shell rc files set `EDITOR`, `VISUAL`, and `GIT_EDITOR` to `nvim`; pe
 ```
 
 The test runs the real installer and uninstaller against isolated macOS and
-Linux fixtures with fake Homebrew, Mise, `apt-get`, DNF, and Pacman commands.
+Linux fixtures with fake Homebrew, Mise, `apt-get`, DNF, YUM, and Pacman
+commands.
 It verifies fresh provisioning, manifest ownership, preflight failures,
 backup/link behavior, safe restoration, and a mutation-free second run without
 touching the network, sudo, package managers, or the caller's home directory.

@@ -164,6 +164,13 @@ case "$manager" in
                 ;;
         esac
         ;;
+    yum)
+        case " $* " in
+            *" groupinstall "*|*" install "*)
+                install_native_commands
+                ;;
+        esac
+        ;;
     pacman)
         case " $* " in
             *" -S --needed --noconfirm "*)
@@ -669,6 +676,12 @@ assert_linux_native_install_once() {
                 "dnf install -y procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
                 "$FIXTURE_LOG"
             ;;
+        yum)
+            assert_log_count 1 "yum groupinstall -y Development Tools" "$FIXTURE_LOG"
+            assert_log_count 1 \
+                "yum install -y procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
+                "$FIXTURE_LOG"
+            ;;
         pacman)
             assert_log_count 1 \
                 "pacman -S --needed --noconfirm base-devel procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
@@ -1159,6 +1172,7 @@ test_mise_runtime_version_mismatch_is_rejected_before_linking
 test_macos_fresh_and_second_run
 test_linux_manager_fresh_and_second_run apt-get
 test_linux_manager_fresh_and_second_run dnf
+test_linux_manager_fresh_and_second_run yum
 test_linux_manager_fresh_and_second_run pacman
 test_unsupported_linux_package_manager
 test_linux_handoff_is_validated_before_linking
