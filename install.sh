@@ -390,7 +390,7 @@ install_mise_runtimes() {
     hash -r
 
     missing=()
-    for command_name in node npm python rustc cargo rustfmt go java javac; do
+    for command_name in node npm python rustc cargo rustfmt java javac; do
         command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
     done
     if (( ${#missing[@]} > 0 )); then
@@ -399,6 +399,11 @@ install_mise_runtimes() {
 
     cargo clippy --version >/dev/null 2>&1 ||
         die "Mise's Rust toolchain is missing the configured Clippy component"
+
+    output="$(java -version 2>&1 || true)"
+    if [[ "$output" != *"Corretto-21."* ]]; then
+        die "Amazon Corretto JDK 21 is required (java -version did not report Corretto 21)"
+    fi
 
     output="$(javac -version 2>&1 || true)"
     version="${output##* }"

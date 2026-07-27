@@ -2,5 +2,4 @@
 "core:node" = "24.18.0"
 "core:python" = "3.14.6"
 "core:rust" = { version = "1.97.1", profile = "minimal", components = ["clippy", "rustfmt"] }
-"core:go" = "1.26.5"
-"core:java" = "temurin-21.0.11+10.0.LTS"
+"core:java" = "corretto-21.0.12.8.1"

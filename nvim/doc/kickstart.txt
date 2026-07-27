@@ -143,9 +143,8 @@ Completion ~
 <Tab>/<S-Tab>  Move through snippet fields
 <C-k>          Show signature help
 
-Debugging is configured on demand for Go and Python. Go uses Mason's delve;
-Python runs debugpy through `uv` and requires `uv` on `PATH`. The first debug
-action loads the DAP plugins:
+Debugging is configured on demand for Python. It runs debugpy through `uv` and
+requires `uv` on `PATH`. The first debug action loads the DAP plugins:
 
 <F5>           Start or continue
 <F1>/<F2>/<F3>

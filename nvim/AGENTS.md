@@ -20,7 +20,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `treesitter.lua` - nvim-treesitter and treesitter-context, restricted to the Inventory's parser whitelist
   - `gitsigns.lua` - Git signs, blame, and hunk navigation keymaps
   - `neo-tree.lua` - File explorer (right-side, text-based icons)
-  - `debug.lua` - DAP debugger keymaps plus on-demand setup (Go via Inventory-installed delve, Python via debugpy/uv); DAP plugins load on first debug action, not normal startup
+  - `debug.lua` - DAP debugger keymaps plus on-demand Python setup via debugpy/uv; DAP plugins load on first debug action, not normal startup
   - `lint.lua` - nvim-lint with eslint_d and ruff
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
@@ -50,7 +50,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
 - **Formatting**: conform.nvim for auto-formatting
 - **Linting**: nvim-lint with eslint_d, ruff
-- **Debugging**: nvim-dap with Go (delve installed through the Language Tooling Inventory) and Python (debugpy via uv)
+- **Debugging**: nvim-dap with Python (debugpy via uv)
 - **UI**: which-key, mini.nvim (statusline, surround, text objects), undotree, todo-comments
 
 ### Key Bindings Structure
@@ -84,7 +84,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 
 ### LSP and Language Support
 
-Configured with multiple language servers (TypeScript, Python, Rust, Go, Lua, JSON, YAML, HTML, CSS, Haskell, Java, Kotlin). Three config layers (lowest to highest priority):
+Configured with multiple language servers (TypeScript, Python, Rust, Lua, JSON, YAML, HTML, CSS, Haskell, Java, Kotlin). Three config layers (lowest to highest priority):
 
 1. **`vim.lsp.config('*')` in `lua/kickstart/plugins/lsp.lua`** — shared client capabilities
 2. **nvim-lspconfig defaults** — cmd, filetypes, root_dir, commands (no files needed)
@@ -177,9 +177,9 @@ inventory:
   newer.
 - The host also provides `lazygit` and `hunk` for their production Tool Tabs,
   plus a platform clipboard provider.
-- Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, Go, and
-  JDK 21+ runtimes. Python debugging additionally requires the standalone
-  `uv` CLI.
+- Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and
+  Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Python debugging
+  additionally requires the standalone `uv` CLI.
 - Haskell is an explicit ownership exception: the current Mason HLS recipe
   invokes `ghcup`, so `ghcup` must be available before Mason performs a clean
   inventory install.

@@ -33,7 +33,6 @@ return {
     'dockerfile',
     'gitcommit',
     'gitignore',
-    'go',
     'haskell',
     'html',
     'java',
@@ -78,15 +77,6 @@ return {
         },
       },
     },
-    gopls = {
-      settings = {
-        gopls = {
-          completeUnimported = true,
-          usePlaceholders = true,
-          analyses = { unusedparams = true },
-        },
-      },
-    },
     pyright = {},
     jsonls = { init_options = { provideFormatter = false } },
     yamlls = { settings = { yaml = { keyOrdering = false } } },
@@ -106,8 +96,6 @@ return {
     'prettierd',
     'eslint_d',
     'rust-analyzer',
-    'gopls',
-    'delve',
     'pyright',
     'ruff',
     'json-lsp',

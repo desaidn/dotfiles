@@ -197,7 +197,7 @@ fi
 
 write_runtime_commands() {
     local command_name
-    for command_name in node npm python python3 rustc cargo clippy rustfmt go java javac; do
+    for command_name in node npm python python3 rustc cargo clippy rustfmt java javac; do
         cp "$DOTFILES_TEST_RUNTIME_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
         chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
     done
@@ -232,6 +232,11 @@ SCRIPT
 case "${0##*/}" in
     java)
         printf 'openjdk version "21.0.8"\n' >&2
+        if [[ -e "$DOTFILES_TEST_STATE/non-corretto-java" ]]; then
+            printf 'OpenJDK Runtime Environment Temurin-21.0.8+9\n' >&2
+        else
+            printf 'OpenJDK Runtime Environment Corretto-21.0.8.9.1\n' >&2
+        fi
         ;;
     node)
         printf 'v24.4.1\n'
@@ -253,9 +258,6 @@ case "${0##*/}" in
         ;;
     rustfmt)
         printf 'rustfmt 1.8.0-stable\n'
-        ;;
-    go)
-        printf 'go version go1.24.5 linux/amd64\n'
         ;;
     javac)
         printf 'javac 21.0.8\n'
@@ -451,7 +453,7 @@ new_fixture() {
         "$FIXTURE_APPLICATION_DIR" \
         "$FIXTURE_FONT_DIR"
     : >"$FIXTURE_LOG"
-    printf '[tools]\n"core:java" = "temurin-8"\n' >"$FIXTURE_CALLER_DIR/mise.toml"
+    printf '[tools]\n"core:java" = "corretto-8"\n' >"$FIXTURE_CALLER_DIR/mise.toml"
     write_fake_commands
 }
 
@@ -667,6 +669,18 @@ test_linux_handoff_is_validated_before_linking() {
     assert_not_exists "$FIXTURE_HOME/.config"
     assert_not_exists "$FIXTURE_HOME/.local"
     pass "Linux Fish handoff is validated before configuration mutations"
+}
+
+test_non_corretto_jdk_is_rejected_before_linking() {
+    new_fixture non-corretto-jdk Darwin
+    : >"$FIXTURE_STATE/non-corretto-java"
+
+    run_installer failure
+
+    grep -Fq 'Amazon Corretto JDK 21 is required' "$FIXTURE_OUTPUT" ||
+        fail "non-Corretto JDK failure was not actionable"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "non-Corretto JDKs are rejected before configuration mutations"
 }
 
 test_uninstall_cli_is_safe() {
@@ -995,8 +1009,7 @@ test_dependency_manifests_match_the_install_contract() {
         '"core:node" = "24.18.0"'
         '"core:python" = "3.14.6"'
         '"core:rust" = { version = "1.97.1", profile = "minimal", components = ["clippy", "rustfmt"] }'
-        '"core:go" = "1.26.5"'
-        '"core:java" = "temurin-21.0.11+10.0.LTS"'
+        '"core:java" = "corretto-21.0.12.8.1"'
     )
     for expected_line in "${mise_lines[@]}"; do
         grep -Fxq "$expected_line" "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" ||
@@ -1015,6 +1028,7 @@ test_linux_manager_fresh_and_second_run dnf
 test_linux_manager_fresh_and_second_run pacman
 test_unsupported_linux_package_manager
 test_linux_handoff_is_validated_before_linking
+test_non_corretto_jdk_is_rejected_before_linking
 test_uninstall_cli_is_safe
 test_install_and_uninstall_reject_unsafe_homes
 test_uninstall_removes_only_owned_links

@@ -129,17 +129,17 @@ On macOS, the configured UI also uses the `ghostty` and
 ### Mise runtimes
 
 The enabled Neovim language capabilities require Node.js/npm, Python, Rust
-with Cargo, Clippy, and rustfmt, Go, and a JDK 21 or newer. These runtimes
+with Cargo, Clippy, and rustfmt, and Amazon Corretto JDK 21. These runtimes
 belong to Mise; Mason installs the corresponding editor tooling. Haskell is
 the current exception: Mason's Haskell Language Server recipe invokes `ghcup`
 directly.
 
 The installer uses the tracked global defaults fragment
 [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml). It pins exact
-Node.js, Python, Rust, Go, and Temurin JDK versions so a successful second run
-does not silently resolve a newer runtime. Runtime updates are deliberate
-manifest edits. A user's normal `~/.config/mise/config.toml` remains untouched
-and has higher precedence.
+Node.js, Python, and Rust versions plus Amazon Corretto JDK 21 at
+`corretto-21.0.12.8.1`, so a successful second run does not silently resolve a
+newer runtime. Runtime updates are deliberate manifest edits. A user's normal
+`~/.config/mise/config.toml` remains untouched and has higher precedence.
 
 ### Platform and development-only dependencies
 

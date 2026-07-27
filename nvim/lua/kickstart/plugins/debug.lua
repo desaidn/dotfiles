@@ -1,4 +1,4 @@
--- DAP (Debug Adapter Protocol) setup for Go and Python.
+-- DAP (Debug Adapter Protocol) setup for Python.
 -- Can be extended to other languages — see https://github.com/mfussenegger/nvim-dap
 
 local gh = require('custom.lib.pack').gh
@@ -7,7 +7,6 @@ vim.pack.add({
   gh 'mfussenegger/nvim-dap',
   gh 'rcarriga/nvim-dap-ui',
   gh 'nvim-neotest/nvim-nio',
-  gh 'leoluz/nvim-dap-go',
   gh 'mfussenegger/nvim-dap-python',
 }, { load = function() end })
 
@@ -27,7 +26,6 @@ local function ensure_debug()
     'nvim-dap',
     'nvim-nio',
     'nvim-dap-ui',
-    'nvim-dap-go',
     'nvim-dap-python',
   } do
     packadd(name)
@@ -59,15 +57,6 @@ local function ensure_debug()
   dap.listeners.after.event_initialized['dapui_config'] = dapui.open
   dap.listeners.before.event_terminated['dapui_config'] = dapui.close
   dap.listeners.before.event_exited['dapui_config'] = dapui.close
-
-  -- Go debugger (delve)
-  require('dap-go').setup {
-    delve = {
-      -- On Windows delve must be run attached or it crashes.
-      -- See https://github.com/leoluz/nvim-dap-go/blob/main/README.md#configuring
-      detached = vim.fn.has 'win32' == 0,
-    },
-  }
 
   -- Python debugger (debugpy via uv)
   require('dap-python').setup 'uv'
