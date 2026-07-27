@@ -190,8 +190,22 @@ if [[ "$PWD" != "$DOTFILES_TEST_REPO_ROOT" ]]; then
     printf 'mise invoked from unexpected directory: %s\n' "$PWD" >&2
     exit 4
 fi
-if [[ "${MISE_GLOBAL_CONFIG_FILE:-}" != "$DOTFILES_TEST_REPO_ROOT/mise/conf.d/00-dotfiles.toml" ]]; then
-    printf 'mise received unexpected global config: %s\n' "${MISE_GLOBAL_CONFIG_FILE:-unset}" >&2
+if [[ "${MISE_CONFIG_DIR:-}" != "$DOTFILES_TEST_REPO_ROOT/mise" ]]; then
+    printf 'mise received unexpected config directory: %s\n' "${MISE_CONFIG_DIR:-unset}" >&2
+    exit 4
+fi
+if [[ -n "${MISE_CONFIG_FILE:-}" ||
+    -n "${MISE_GLOBAL_CONFIG_FILE:-}" ||
+    -n "${MISE_GLOBAL_CONFIG_ROOT:-}" ||
+    -n "${MISE_IGNORED_CONFIG_PATHS:-}" ||
+    -n "${MISE_NO_CONFIG:-}" ||
+    -n "${MISE_DISABLE_TOOLS:-}" ||
+    -n "${MISE_NODE_VERSION:-}" ||
+    -n "${MISE_PYTHON_VERSION:-}" ||
+    -n "${MISE_RUST_VERSION:-}" ||
+    -n "${MISE_JAVA_VERSION:-}" ]]
+then
+    printf 'mise received an external config or tool override\n' >&2
     exit 4
 fi
 
@@ -204,6 +218,55 @@ write_runtime_commands() {
 }
 
 case "${1:-}" in
+    config)
+        if [[ "${2:-}" != "get" || "${3:-}" != "-f" ||
+            "${4:-}" != "$DOTFILES_TEST_REPO_ROOT/mise/conf.d/00-dotfiles.toml" ]]
+        then
+            exit 2
+        fi
+        case "${5:-}" in
+            "tools.core:node")
+                printf '24.18.0\n'
+                ;;
+            "tools.core:python")
+                printf '3.14.6\n'
+                ;;
+            "tools.core:rust.version")
+                printf '1.97.1\n'
+                ;;
+            "tools.core:java")
+                printf 'corretto-21.0.12.8.1\n'
+                ;;
+            *)
+                exit 2
+                ;;
+        esac
+        ;;
+    current)
+        if [[ -e "$DOTFILES_TEST_STATE/mise-version-mismatch" &&
+            "${2:-}" == "node" ]]
+        then
+            printf '18.20.2\n'
+        else
+            case "${2:-}" in
+                node)
+                    printf '24.18.0\n'
+                    ;;
+                python)
+                    printf '3.14.6\n'
+                    ;;
+                rust)
+                    printf '1.97.1\n'
+                    ;;
+                java)
+                    printf 'corretto-21.0.12.8.1\n'
+                    ;;
+                *)
+                    exit 2
+                    ;;
+            esac
+        fi
+        ;;
     install)
         case " $* " in
             *" --dry-run-code "*|*" --dry-run "*)
@@ -221,6 +284,13 @@ case "${1:-}" in
         printf 'mise activate\n' >>"$DOTFILES_TEST_LOG"
         printf 'export PATH="%s:$PATH"\n' "$DOTFILES_TEST_FAKE_BIN"
         ;;
+    which)
+        if [[ -e "$DOTFILES_TEST_STATE/mise-which-mismatch" ]]; then
+            printf '%s/not-selected/%s\n' "$DOTFILES_TEST_STATE" "${2:-unknown}"
+        else
+            printf '%s/%s\n' "$DOTFILES_TEST_FAKE_BIN" "${2:-unknown}"
+        fi
+        ;;
     *)
         exit 0
         ;;
@@ -231,36 +301,36 @@ SCRIPT
 #!/usr/bin/env bash
 case "${0##*/}" in
     java)
-        printf 'openjdk version "21.0.8"\n' >&2
+        printf 'openjdk version "21.0.12"\n' >&2
         if [[ -e "$DOTFILES_TEST_STATE/non-corretto-java" ]]; then
-            printf 'OpenJDK Runtime Environment Temurin-21.0.8+9\n' >&2
+            printf 'OpenJDK Runtime Environment Temurin-21.0.12+8\n' >&2
         else
-            printf 'OpenJDK Runtime Environment Corretto-21.0.8.9.1\n' >&2
+            printf 'OpenJDK Runtime Environment Corretto-21.0.12.8.1\n' >&2
         fi
         ;;
     node)
-        printf 'v24.4.1\n'
+        printf 'v24.18.0\n'
         ;;
     npm)
         printf '11.4.2\n'
         ;;
     python|python3)
-        printf 'Python 3.13.5\n'
+        printf 'Python 3.14.6\n'
         ;;
     rustc)
-        printf 'rustc 1.88.0\n'
+        printf 'rustc 1.97.1\n'
         ;;
     cargo)
-        printf 'cargo 1.88.0\n'
+        printf 'cargo 1.97.1\n'
         ;;
     clippy)
-        printf 'clippy 0.1.88\n'
+        printf 'clippy 0.1.97\n'
         ;;
     rustfmt)
         printf 'rustfmt 1.8.0-stable\n'
         ;;
     javac)
-        printf 'javac 21.0.8\n'
+        printf 'javac 21.0.12\n'
         ;;
 esac
 SCRIPT
@@ -683,6 +753,66 @@ test_non_corretto_jdk_is_rejected_before_linking() {
     pass "non-Corretto JDKs are rejected before configuration mutations"
 }
 
+test_user_mise_config_does_not_override_bootstrap_manifest() {
+    new_fixture mise-user-override Darwin
+    mkdir -p "$FIXTURE_HOME/.config/mise"
+    printf '[tools]\njava = "21"\n' >"$FIXTURE_HOME/.config/mise/config.toml"
+
+    run_installer
+
+    grep -Fxq 'java = "21"' "$FIXTURE_HOME/.config/mise/config.toml" ||
+        fail "installer changed the user's main Mise config"
+    assert_symlink \
+        "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml" \
+        "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+    pass "user Mise config cannot override bootstrap runtime provisioning"
+}
+
+test_mise_environment_cannot_override_bootstrap_manifest() {
+    new_fixture mise-environment-override Darwin
+
+    (
+        export MISE_CONFIG_FILE="$FIXTURE_ROOT/foreign-config.toml"
+        export MISE_GLOBAL_CONFIG_FILE="$FIXTURE_ROOT/foreign-global.toml"
+        export MISE_GLOBAL_CONFIG_ROOT="$FIXTURE_ROOT/foreign-root"
+        export MISE_IGNORED_CONFIG_PATHS="$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+        export MISE_NO_CONFIG=1
+        export MISE_DISABLE_TOOLS=java
+        export MISE_NODE_VERSION=18
+        export MISE_PYTHON_VERSION=3.10
+        export MISE_RUST_VERSION=1.93.0
+        export MISE_JAVA_VERSION=21
+        run_installer
+    )
+
+    assert_common_links
+    pass "Mise environment cannot override bootstrap runtime provisioning"
+}
+
+test_non_mise_runtime_command_is_rejected_before_linking() {
+    new_fixture non-mise-runtime-command Darwin
+    : >"$FIXTURE_STATE/mise-which-mismatch"
+
+    run_installer failure
+
+    grep -Fq 'Mise activation did not select configured runtime commands' "$FIXTURE_OUTPUT" ||
+        fail "runtime command mismatch failure was not actionable"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "runtime commands outside the configured Mise toolset are rejected before linking"
+}
+
+test_mise_runtime_version_mismatch_is_rejected_before_linking() {
+    new_fixture mise-runtime-version-mismatch Darwin
+    : >"$FIXTURE_STATE/mise-version-mismatch"
+
+    run_installer failure
+
+    grep -Fq 'Mise runtime versions do not match the tracked manifest' "$FIXTURE_OUTPUT" ||
+        fail "runtime version mismatch failure was not actionable"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "runtime versions outside the tracked Mise manifest are rejected before linking"
+}
+
 test_uninstall_cli_is_safe() {
     new_fixture uninstall-cli Darwin
     run_installer
@@ -1022,6 +1152,10 @@ test_dependency_manifests_match_the_install_contract() {
     pass "Brew and Mise manifests match the dependency ownership contract"
 }
 
+test_user_mise_config_does_not_override_bootstrap_manifest
+test_mise_environment_cannot_override_bootstrap_manifest
+test_non_mise_runtime_command_is_rejected_before_linking
+test_mise_runtime_version_mismatch_is_rejected_before_linking
 test_macos_fresh_and_second_run
 test_linux_manager_fresh_and_second_run apt-get
 test_linux_manager_fresh_and_second_run dnf

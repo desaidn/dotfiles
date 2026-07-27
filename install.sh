@@ -3,7 +3,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BREWFILE="$REPO_ROOT/Brewfile"
-MISE_MANIFEST="$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+MISE_BOOTSTRAP_CONFIG_DIR="$REPO_ROOT/mise"
+MISE_MANIFEST="$MISE_BOOTSTRAP_CONFIG_DIR/conf.d/00-dotfiles.toml"
 HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 OS_NAME="$(uname -s)"
 BREW_BIN=""
@@ -358,43 +359,76 @@ validate_brew_dependencies() {
     fi
 }
 
-install_mise_runtimes() {
-    local activation previous_global_config had_global_config original_working_directory
-    local command_name output version
-    local missing
+install_mise_runtimes() (
+    local activation
+    local active_version command_name command_path expected_version
+    local manifest_key mise_command_path output tool_name version
+    local mismatched missing version_mismatches
 
     section "Installing Mise runtimes"
-    original_working_directory="$PWD"
     cd -- "$REPO_ROOT"
+    export MISE_CONFIG_DIR="$MISE_BOOTSTRAP_CONFIG_DIR"
+    unset \
+        MISE_CONFIG_FILE \
+        MISE_GLOBAL_CONFIG_FILE \
+        MISE_GLOBAL_CONFIG_ROOT \
+        MISE_IGNORED_CONFIG_PATHS \
+        MISE_NO_CONFIG \
+        MISE_DISABLE_TOOLS \
+        MISE_NODE_VERSION \
+        MISE_PYTHON_VERSION \
+        MISE_RUST_VERSION \
+        MISE_JAVA_VERSION
 
-    if MISE_GLOBAL_CONFIG_FILE="$MISE_MANIFEST" mise install --dry-run-code >/dev/null 2>&1; then
+    if mise install --dry-run-code >/dev/null 2>&1; then
         echo "Mise runtimes are already installed."
     else
-        MISE_GLOBAL_CONFIG_FILE="$MISE_MANIFEST" mise install --yes
+        mise install --yes
     fi
 
-    had_global_config=0
-    previous_global_config=""
-    if [[ -n "${MISE_GLOBAL_CONFIG_FILE+x}" ]]; then
-        had_global_config=1
-        previous_global_config="$MISE_GLOBAL_CONFIG_FILE"
-    fi
-    export MISE_GLOBAL_CONFIG_FILE="$MISE_MANIFEST"
     activation="$(mise activate bash)" || die "Mise runtimes installed but shell activation failed"
     eval "$activation"
-    if (( had_global_config == 1 )); then
-        export MISE_GLOBAL_CONFIG_FILE="$previous_global_config"
-    else
-        unset MISE_GLOBAL_CONFIG_FILE
-    fi
     hash -r
 
     missing=()
+    mismatched=()
     for command_name in node npm python rustc cargo rustfmt java javac; do
-        command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
+        command_path="$(command -v "$command_name" 2>/dev/null || true)"
+        if [[ -z "$command_path" ]]; then
+            missing+=("$command_name")
+            continue
+        fi
+
+        mise_command_path="$(mise which "$command_name" 2>/dev/null || true)"
+        if [[ -z "$mise_command_path" || "$command_path" != "$mise_command_path" ]]; then
+            mismatched+=("$command_name")
+        fi
     done
     if (( ${#missing[@]} > 0 )); then
         die "Mise finished but required runtime commands are not on PATH: ${missing[*]}"
+    fi
+    if (( ${#mismatched[@]} > 0 )); then
+        die "Mise activation did not select configured runtime commands: ${mismatched[*]}"
+    fi
+
+    version_mismatches=()
+    for tool_name in node python rust java; do
+        if [[ "$tool_name" == "rust" ]]; then
+            manifest_key="tools.core:rust.version"
+        else
+            manifest_key="tools.core:$tool_name"
+        fi
+        expected_version="$(mise config get -f "$MISE_MANIFEST" "$manifest_key")" ||
+            die "Mise could not read '$manifest_key' from the tracked manifest"
+        active_version="$(mise current "$tool_name" 2>/dev/null || true)"
+        if [[ "$active_version" != "$expected_version" ]]; then
+            version_mismatches+=(
+                "$tool_name=$active_version (expected $expected_version)"
+            )
+        fi
+    done
+    if (( ${#version_mismatches[@]} > 0 )); then
+        die "Mise runtime versions do not match the tracked manifest: ${version_mismatches[*]}"
     fi
 
     cargo clippy --version >/dev/null 2>&1 ||
@@ -409,9 +443,7 @@ install_mise_runtimes() {
     version="${output##* }"
     version_at_least "$version" "21.0.0" ||
         die "JDK 21+ is required (found '${version:-unknown}')"
-
-    cd -- "$original_working_directory"
-}
+)
 
 backup_existing() {
     local target="$1" timestamp backup

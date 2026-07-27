@@ -138,8 +138,11 @@ The installer uses the tracked global defaults fragment
 [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml). It pins exact
 Node.js, Python, and Rust versions plus Amazon Corretto JDK 21 at
 `corretto-21.0.12.8.1`, so a successful second run does not silently resolve a
-newer runtime. Runtime updates are deliberate manifest edits. A user's normal
-`~/.config/mise/config.toml` remains untouched and has higher precedence.
+newer runtime. Runtime updates are deliberate manifest edits. Bootstrap
+evaluates the tracked fragment in an isolated Mise config directory so user
+overrides cannot mask missing pinned runtimes. A user's normal
+`~/.config/mise/config.toml` remains untouched and has higher precedence in
+interactive shells.
 
 ### Platform and development-only dependencies
 
