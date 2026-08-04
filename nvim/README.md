@@ -27,7 +27,10 @@ Host requirements:
   0.26.1 or newer
 - `lazygit` and `hunk` for their production Tool Tab mappings
 - `pbcopy`/`pbpaste` on macOS or a working Wayland/X11 clipboard provider on
-  Linux
+  Linux. A remote session with no display and no tmux falls back to OSC 52 so
+  the host terminal receives copies; OSC 52 clipboard *read* is not used because
+  it blocks waiting on the terminal, so pastes replay Neovim's own yanks.
+  `:checkhealth vim.provider` reports the active provider
 
 Mise owns the language runtimes used by the enabled Language Tooling
 Inventory: Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and

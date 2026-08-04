@@ -178,7 +178,8 @@ Neo-tree file explorer is enabled with right-side positioning and minimal stylin
 
 - Leader key is Space (`vim.g.mapleader = ' '`)
 - Auto-formatting on save enabled (can be disabled per filetype)
-- Clipboard integration with system clipboard enabled
+- Clipboard integration with system clipboard enabled. Remote sessions with no
+  display and no tmux fall back to a copy-only OSC 52 provider (`init.lua`)
 - Icons disabled - clean text-based interface without Nerd Font requirements
 
 ## Dependencies
@@ -190,7 +191,8 @@ inventory:
   `gzip`, `unzip`, `diff`, a C compiler, `rg`, and tree-sitter CLI 0.26.1 or
   newer.
 - The host also provides `lazygit` and `hunk` for their production Tool Tabs,
-  plus a platform clipboard provider.
+  plus a platform clipboard provider where a display is available; remote
+  sessions rely on the OSC 52 fallback instead.
 - Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and
   Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Python debugging
   additionally requires the standalone `uv` CLI.

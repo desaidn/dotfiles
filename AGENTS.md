@@ -41,7 +41,8 @@ Keep provisioning ownership explicit:
   machine package list.
 
 Ghostty and JetBrains Mono are macOS-only Homebrew casks. Linux needs a
-session-appropriate clipboard provider. Native development tools provide
+session-appropriate clipboard provider when a display is present; remote
+sessions fall back to OSC 52 copy inside Neovim. Native development tools provide
 `make`, although Neovim uses it only for optional plugin enhancements. Expect
 is test-only. Do not turn gated per-machine paths for Bun, LM Studio, Claude,
 or JetBrains Toolbox into required dependencies.

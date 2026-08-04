@@ -165,6 +165,7 @@ user-owned fragment is left untouched.
 Neovim also needs `curl`, `tar`, `gzip`, `unzip`, `diff`, and a C compiler to
 populate plugins, parsers, and Undotree's diff view. macOS supplies its
 clipboard provider; the Linux Brewfile installs Wayland and X11 providers.
+Remote sessions without a display fall back to OSC 52 copy inside Neovim.
 `make` arrives with the native development tools and enables optional plugin
 enhancements. Expect is needed only for the real-PTY Hunk regression test.
 `fd` is not a base dependency: fff.nvim owns normal file finding and `rg` is
