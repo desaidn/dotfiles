@@ -20,7 +20,7 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 
 - **Neovim** (`nvim/`) - Primary editor for most languages (see `nvim/AGENTS.md` for details)
 - **LazyGit** (`lazygit/config.yml`) - Git TUI with nvim integration, native staging UI, and custom theme
-- **Hunk** (`hunk/config.toml`) - Full stacked working-tree review surface from Neovim; only durable preferences are tracked
+- **Hunk** (`hunk/config.toml`) - Full stacked review surface from Neovim for the working tree and the index; only durable preferences are tracked
 
 ### Dependency ownership
 
@@ -101,7 +101,7 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 
 - Use `lazygit` for TUI operations (integrated with nvim via `<leader>gg`)
 - Configured with custom theme matching development environment
-- Use direct Hunk from Neovim only for full stacked working-tree review (`<leader>gd` → `hunk diff --watch --mode stack`).
+- Use direct Hunk from Neovim only for full stacked review: `<leader>gd` → `hunk diff --watch --mode stack` for the working tree, `<leader>gD` → the same review with `--staged`. Both inputs share one Tool Tab and one process, so exactly one session matches the repository and the `--repo .` selector on `hunk session` subcommands stays unambiguous.
 - Keep gitsigns keymaps hunk-local; buffer-wide stage/reset operations belong in lazygit.
 
 ### Agent Harnesses
@@ -109,7 +109,7 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 - Treat the user-facing code interface as Neovim plus terminal tools, regardless of which agent harness is active.
 - Keep harness-specific instructions as thin adapters into shared repo guidance.
 - Do not add Codex-only or Claude-only workflows when a shared command, file, or review surface can express the same behavior.
-- Hunk is the direct full working-tree review surface from Neovim; lazygit remains the Git transaction surface and uses its native diff/staging UI.
+- Hunk is the direct full review surface from Neovim for both the working tree and the index; lazygit remains the Git transaction surface and uses its native diff/staging UI.
 
 ## Architecture Notes
 

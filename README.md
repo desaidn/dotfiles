@@ -30,7 +30,7 @@ This repo keeps the interface to code agent-harness agnostic:
 - Keep external dependencies narrow, durable, and easy to replace; avoid plugin layers that only wrap behavior Neovim already owns.
 - Use self-made or locally-owned performant tools when a workflow needs more than native Neovim but should remain inspectable, fast, and independent of an agent harness.
 - Use gitsigns for local in-buffer hunk operations.
-- Use Hunk directly from Neovim for full stacked working-tree review.
+- Use Hunk directly from Neovim for full stacked review of the working tree (`<leader>gd`) or staged changes (`<leader>gD`).
 - Use lazygit for Git state, staging, stashes, history, branches, and commits.
 - Let shell configuration declare Neovim as the global editor through `EDITOR`, `VISUAL`, and `GIT_EDITOR`.
 - Use flatten.nvim for editor handoff from terminal tools back into the host Neovim instance.
@@ -123,7 +123,7 @@ layer:
 | `herdr` | Daily workspace manager |
 | `tmux` | Fallback multiplexer; version 3.7 or newer |
 | `lazygit` | Git transaction surface |
-| `hunk` | Stacked working-tree review surface |
+| `hunk` | Stacked working-tree and staged review surface |
 | `mise` | Language runtime manager |
 | `atuin` | Shell history integration |
 | `gh` | GitHub issue workflows described under `docs/agents/` |

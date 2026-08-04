@@ -41,7 +41,12 @@ local function job_env(id, generation, extra_env)
   return env
 end
 
-local function notify(tool, message, level) vim.notify(string.format('%s: %s', tool.spec.desc, message), level, { title = 'Terminal tool' }) end
+-- Failures about a requested input pass their own variant, because rollback
+-- clears the running one before the message is built.
+local function notify(tool, message, level, variant)
+  local named = variant or tool.state.variant
+  vim.notify(string.format('%s: %s', named and named.desc or tool.spec.desc, message), level, { title = 'Terminal tool' })
+end
 
 local function valid_window(win) return win ~= nil and vim.api.nvim_win_is_valid(win) end
 
@@ -141,6 +146,7 @@ local function clear_generation(tool, generation, buf, retried)
   state.buf = nil
   state.job = nil
   state.cwd = nil
+  state.variant = nil
   return true
 end
 
@@ -191,23 +197,25 @@ local function stop_generation(tool, preserve_tab)
   state.buf = nil
   state.job = nil
   state.cwd = nil
+  state.variant = nil
   return true
 end
 
-local function start_tool(tool, cwd, return_win)
+local function start_tool(tool, variant, cwd, return_win)
   local state = tool.state
   state.generation = state.generation + 1
   local generation = state.generation
 
   local ok, buf_or_error = pcall(vim.api.nvim_create_buf, false, true)
   if not ok then
-    notify(tool, 'could not create its terminal buffer: ' .. tostring(buf_or_error), vim.log.levels.ERROR)
+    notify(tool, 'could not create its terminal buffer: ' .. tostring(buf_or_error), vim.log.levels.ERROR, variant)
     return false
   end
 
   local buf = buf_or_error
   state.buf = buf
   state.cwd = cwd
+  state.variant = variant
   if not open_tool_tab(tool) then
     clear_generation(tool, generation, buf)
     restore_window(return_win)
@@ -215,7 +223,7 @@ local function start_tool(tool, cwd, return_win)
   end
 
   local started, job = pcall(vim.api.nvim_win_call, state.win, function()
-    return vim.fn.jobstart(vim.deepcopy(tool.spec.command), {
+    return vim.fn.jobstart(vim.deepcopy(variant.command), {
       term = true,
       cwd = cwd,
       env = job_env(tool.spec.id, generation, tool.spec.env),
@@ -232,9 +240,9 @@ local function start_tool(tool, cwd, return_win)
     if not started then
       reason = 'could not start its job: ' .. tostring(job)
     else
-      reason = job == -1 and ('executable not found: ' .. tool.spec.command[1]) or 'Neovim could not start the job'
+      reason = job == -1 and ('executable not found: ' .. variant.command[1]) or 'Neovim could not start the job'
     end
-    notify(tool, reason, vim.log.levels.ERROR)
+    notify(tool, reason, vim.log.levels.ERROR, variant)
     return false
   end
 
@@ -250,40 +258,43 @@ local function start_tool(tool, cwd, return_win)
     pcall(vim.fn.jobstop, job)
     clear_generation(tool, generation, buf)
     restore_window(return_win)
-    notify(tool, 'could not focus its Tool Tab: ' .. tostring(focus_error), vim.log.levels.ERROR)
+    notify(tool, 'could not focus its Tool Tab: ' .. tostring(focus_error), vim.log.levels.ERROR, variant)
     return false
   end
   return true
 end
 
-local function toggle(tool)
+local function toggle(tool, variant)
   local state = tool.state
   forget_stale_tab(state)
   local current_win = vim.api.nvim_get_current_win()
+  local selects_running_variant = state.variant == variant
 
-  if state.tab and vim.api.nvim_get_current_tabpage() == state.tab then return focus_host_window() end
+  -- Only the running variant's own key hides the Tool Tab. Another variant's key
+  -- selects a different input for the same tool instead of toggling it closed.
+  if selects_running_variant and state.tab and vim.api.nvim_get_current_tabpage() == state.tab then return focus_host_window() end
   if not current_tab_is_tool() then host_win = current_win end
 
   local cwd = host_cwd()
   if not cwd then
-    notify(tool, 'could not determine the Host Window working directory', vim.log.levels.ERROR)
+    notify(tool, 'could not determine the Host Window working directory', vim.log.levels.ERROR, variant)
     return false
   end
 
   if state.buf and not vim.api.nvim_buf_is_valid(state.buf) and not stop_generation(tool, false) then return false end
-  if state.buf and state.cwd ~= cwd and not stop_generation(tool, true) then return false end
+  if state.buf and (state.cwd ~= cwd or not selects_running_variant) and not stop_generation(tool, true) then return false end
 
   if state.buf then
     local focused, focus_error = focus_terminal(tool)
     if not focused then
-      notify(tool, 'could not focus its Tool Tab: ' .. tostring(focus_error), vim.log.levels.ERROR)
+      notify(tool, 'could not focus its Tool Tab: ' .. tostring(focus_error), vim.log.levels.ERROR, variant)
       restore_window(current_win)
       return false
     end
     return true
   end
 
-  return start_tool(tool, cwd, current_win)
+  return start_tool(tool, variant, cwd, current_win)
 end
 
 local function acknowledge_editor_return(tool)
@@ -313,6 +324,25 @@ local function assert_nonempty_string(value, message)
   return value
 end
 
+local function normalize_variant(variant, declared_keys)
+  local key = assert_nonempty_string(variant.key, 'terminal tool key is required')
+  assert(tool_keys[key] == nil, string.format('terminal tool key %s is already registered by %s', key, tool_keys[key] or ''))
+  assert(not declared_keys[key], 'terminal tool declares key more than once: ' .. key)
+  declared_keys[key] = true
+
+  local command = variant.command
+  assert(type(command) == 'table' and #command > 0, 'terminal tool command must be a non-empty argv table')
+  for index, value in ipairs(command) do
+    assert_nonempty_string(value, string.format('terminal tool command argument %d must be a non-empty string', index))
+  end
+
+  return {
+    key = key,
+    desc = assert_nonempty_string(variant.desc, 'terminal tool desc is required'),
+    command = vim.deepcopy(command),
+  }
+end
+
 local function normalize_config(config)
   assert(type(config) == 'table', 'terminal tool config must be a table')
 
@@ -320,13 +350,37 @@ local function normalize_config(config)
   assert(id:match '^[%w_-]+$', 'terminal tool id may contain only letters, numbers, underscores, and hyphens')
   assert(tools[id] == nil, 'terminal tool id is already registered: ' .. id)
 
-  local key = assert_nonempty_string(config.key, 'terminal tool key is required')
-  assert(tool_keys[key] == nil, string.format('terminal tool key %s is already registered by %s', key, tool_keys[key] or ''))
+  -- A tool declares either one command or several input variants that share its
+  -- single Tool Tab, process slot, and handoff policy.
+  local declared_variants = config.variants
+  if declared_variants == nil then
+    assert(config.command ~= nil, 'terminal tool requires a command or a variants list')
+    declared_variants = { { key = config.key, desc = config.desc, command = config.command } }
+  else
+    assert(type(declared_variants) == 'table', 'terminal tool variants must be a list')
+    assert(
+      config.key == nil and config.command == nil and config.desc == nil,
+      'terminal tool variants own key, command, and desc; do not also declare them at the top level'
+    )
+    -- A gap or string key would make ipairs stop early and silently drop an input.
+    local counted = 0
+    for _ in pairs(declared_variants) do
+      counted = counted + 1
+    end
+    assert(counted == #declared_variants, 'terminal tool variants must be a gapless list without named entries')
+    assert(#declared_variants > 1, 'declare a single input with a top-level command instead of a one-element variants list')
+  end
 
-  local command = config.command
-  assert(type(command) == 'table' and #command > 0, 'terminal tool command must be a non-empty argv table')
-  for index, value in ipairs(command) do
-    assert_nonempty_string(value, string.format('terminal tool command argument %d must be a non-empty string', index))
+  local declared_keys = {}
+  local declared_commands = {}
+  local variants = {}
+  for _, variant in ipairs(declared_variants) do
+    assert(type(variant) == 'table', 'each terminal tool variant must be a table')
+    local normalized = normalize_variant(variant, declared_keys)
+    local argv = table.concat(normalized.command, '\0')
+    assert(not declared_commands[argv], 'terminal tool declares the same command more than once: ' .. table.concat(normalized.command, ' '))
+    declared_commands[argv] = true
+    variants[#variants + 1] = normalized
   end
 
   local handoff = config.handoff or 'return'
@@ -349,19 +403,24 @@ local function normalize_config(config)
 
   return {
     id = id,
-    key = key,
-    desc = assert_nonempty_string(config.desc, 'terminal tool desc is required'),
-    command = vim.deepcopy(command),
+    desc = variants[1].desc,
+    variants = variants,
     env = vim.deepcopy(env),
     handoff = handoff,
   }
 end
 
----@class custom.TerminalToolConfig
----@field id string
+---@class custom.TerminalToolVariant
 ---@field command string[]
 ---@field key string
 ---@field desc string
+
+---@class custom.TerminalToolConfig
+---@field id string
+---@field command? string[] single-command shape; mutually exclusive with variants
+---@field key? string
+---@field desc? string
+---@field variants? custom.TerminalToolVariant[] input variants sharing one Tool Tab
 ---@field env? table<string, string>
 ---@field handoff? 'return'|'return-and-acknowledge'
 
@@ -376,13 +435,19 @@ function M.create(config)
       tab = nil,
       job = nil,
       cwd = nil,
+      variant = nil,
     },
   }
-  tool.toggle = function() return toggle(tool) end
 
-  vim.keymap.set('n', tool.spec.key, tool.toggle, { desc = tool.spec.desc })
+  -- Install every mapping before claiming any key, so a failure partway cannot
+  -- leave keys reserved by a tool that was never registered.
+  for _, variant in ipairs(tool.spec.variants) do
+    vim.keymap.set('n', variant.key, function() return toggle(tool, variant) end, { desc = variant.desc })
+  end
+  for _, variant in ipairs(tool.spec.variants) do
+    tool_keys[variant.key] = tool.spec.id
+  end
   tools[tool.spec.id] = tool
-  tool_keys[tool.spec.key] = tool.spec.id
 end
 
 ---@return table

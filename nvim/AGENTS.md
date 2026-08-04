@@ -32,7 +32,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `init.lua` - Custom plugin loader
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
   - `lazygit.lua` - Thin lazygit Git transaction launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gg`)
-  - `hunk.lua` - Thin Hunk stacked working-tree review launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gd`)
+  - `hunk.lua` - Thin Hunk stacked review launcher over `lua/custom/lib/terminal_tool.lua`; declares its working-tree and staged input variants (owns `<leader>gd` and `<leader>gD`)
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
@@ -46,7 +46,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ server configuration lives in the Language Tooling Inventory and is applied by `lua/kickstart/plugins/lsp.lua`
 - **Completion**: blink.cmp with LuaSnip for snippets
 - **Fuzzy Finding**: fff.nvim for files and live grep (`<leader>sf`, `<leader>sg`); Telescope with fzf-native for help, keymaps, diagnostics, buffers, LSP symbols, and word-under-cursor grep
-- **Git Integration**: gitsigns (in-editor signs, blame, local hunks); Hunk (working-tree review); lazygit (Git transaction UI)
+- **Git Integration**: gitsigns (in-editor signs, blame, local hunks); Hunk (working-tree and staged review); lazygit (Git transaction UI)
 - **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
 - **Formatting**: conform.nvim for auto-formatting
 - **Linting**: nvim-lint with eslint_d, ruff
@@ -58,7 +58,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - Leader key: `<Space>`
 - Search operations: `<leader>s*` (files, grep, help, keymaps, diagnostics, etc.)
 - Toggle options: `<leader>t*` — `th` inlay hints, `tb` git blame line, `td` inline git diff, `ts` spell check
-- Git operations: `<leader>gg` (lazygit), `<leader>gd` (Hunk review), `<leader>g*` (hunk-local gitsigns actions), `]c`/`[c` (hunk navigation)
+- Git operations: `<leader>gg` (lazygit), `<leader>gd` / `<leader>gD` (Hunk working-tree and staged review), `<leader>g*` (hunk-local gitsigns actions), `]c`/`[c` (hunk navigation)
 - LSP operations: `gr*` prefix (Neovim 0.11 defaults for rename/code action, Telescope overrides for references/definitions)
 - Format: `<leader>f` (format buffer)
 - Explorer: `<leader>e` (neo-tree toggle)
@@ -120,7 +120,21 @@ require('custom.lib.terminal_tool').create {
 }
 ```
 
+A tool whose single surface should review more than one input declares `variants` instead of a top-level `command`/`key`/`desc`, and each variant owns its own key:
+
+```lua
+require('custom.lib.terminal_tool').create {
+  id = 'example',
+  variants = {
+    { command = { 'example' }, key = '<leader>gx', desc = 'Example' },
+    { command = { 'example', '--other-input' }, key = '<leader>gX', desc = 'Example (other input)' },
+  },
+}
+```
+
 - Start one persistent Neovim terminal job and Tool Tab per tool. Invoking a tool selects its existing Tool Tab; invoking its toggle from that tab returns directly to the latest non-tool Host Window.
+- Variants share one Tool Tab, one process slot, one `env`, and one handoff identity. Selecting a variant other than the running one restarts the job in place, exactly as a changed working directory does; only the running variant's own key hides the Tool Tab. Prefer variants over a second tool id when one CLI's inputs are alternative views of the same review, since duplicate processes make per-repository session selectors ambiguous.
+- A `variants` list must be a gapless list of two or more entries with distinct keys and distinct commands; use a top-level `command` for a single input. These are load-time assertions because a silently dropped entry would leave a documented key doing nothing.
 - Keep multiple Tool Tabs independent. Switching tools must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window.
 - Restart a tool job inside its existing Tool Tab when the Host Window's effective working directory changes. Native `:tabclose` only hides the live terminal buffer; the next invocation recreates its Tool Tab, while process exit removes the session.
 - Let the shared module install the normal-mode mapping; declarations do not receive or inspect mutable buffer, window, tab, or job state. Terminal input stays untouched, so use `<Esc><Esc>` before a normal-mode tool key.
@@ -129,15 +143,15 @@ require('custom.lib.terminal_tool').create {
 - Keep tool-specific environment exceptions declarative in `env`; reserved editor and handoff variables are rejected so the source marker and shell-owned editor contract cannot be replaced.
 - Hunk sets `OPENTUI_GRAPHICS=false` because its OpenTUI renderer otherwise mistakes inherited `TMUX` for its immediate terminal and sends tmux-wrapped graphics probes through Neovim's intervening terminal emulator.
 - Editor Handoff opens in the Host Window while preserving the originating Tool Tab. Use `handoff = 'return-and-acknowledge'` only for tools such as lazygit that wait for an Enter after returning; the default `return` policy sends no acknowledgement. The shared module transports the originating process generation through flatten without source-specific branches.
-- Keep each plugin file thin: declare the tool id, command, key, description, optional environment, and any exceptional handoff policy.
+- Keep each plugin file thin: declare the tool id, either a command with its key and description or a `variants` list carrying those per input, optional environment, and any exceptional handoff policy.
 
 ### Git Integration
 
-Focused on in-editor git context and full working-tree review. Git transactions and object selection are handled by lazygit:
+Focused on in-editor git context and full review of the working tree and the index. Git transactions and object selection are handled by lazygit:
 
 - **gitsigns**: In-editor git signs, blame, and hunk navigation
 - `<leader>gg` - Toggle lazygit's Git transaction Tool Tab (custom plugin: `lua/custom/plugins/lazygit.lua`)
-- `<leader>gd` - Toggle Hunk's stacked working-tree review Tool Tab (custom plugin: `lua/custom/plugins/hunk.lua`)
+- `<leader>gd` / `<leader>gD` - Toggle Hunk's stacked review Tool Tab on the working tree or the index (custom plugin: `lua/custom/plugins/hunk.lua`). Both keys drive one Tool Tab and one process; pressing the other input's key retargets the review in place rather than opening a second surface, which keeps `--watch` live and keeps the `--repo .` selector on `hunk session` subcommands matching exactly one session for agent notes.
 - Lazygit and Hunk use the shell-owned global editor contract (`EDITOR=nvim`) for native Editor Handoff; flatten.nvim returns nested Neovim invocations to the Host Window while preserving the originating Tool Tab.
 - `<leader>tb` - Toggle git blame line
 - `<leader>td` - Toggle inline git diff (deleted lines + word diff)

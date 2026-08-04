@@ -459,6 +459,299 @@ check('invoking an existing Tool Tab from a new Host Window selects it', functio
   assert(fixture.current_win == new_host_win, 'the latest non-tool window did not become the Host Window')
 end)
 
+local function setup_variants(overrides, fake_options)
+  local fake, fixture = fake_vim(fake_options)
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local config = {
+    id = 'hunk',
+    env = { OPENTUI_GRAPHICS = 'false' },
+    variants = {
+      { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff' },
+      { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk diff (staged)' },
+    },
+  }
+  for name, value in pairs(overrides or {}) do
+    config[name] = value
+  end
+
+  terminal_tool.create(config)
+  return fixture, terminal_tool
+end
+
+local function launched(fixture, index) return table.concat(fixture.job_attempts[index].command, ' ') end
+
+check('input variants share one Tool Tab and one process slot', function()
+  local fixture = setup_variants()
+  fixture.invoke('n', '<leader>gd')
+  local worktree = assert(fixture.surface(), 'expected the Hunk Tool Tab')
+  local tool_tab = fixture.current_tab
+  assert(launched(fixture, 1) == 'hunk diff', 'working-tree variant launched the wrong command')
+
+  fixture.invoke('n', '<leader>gD')
+  assert(#fixture.job_attempts == 2, 'selecting the staged variant did not restart the tool')
+  assert(launched(fixture, 2) == 'hunk diff --staged', 'staged variant launched the wrong command')
+  assert(fixture.current_tab == tool_tab, 'switching variants replaced the Tool Tab')
+  assert(not fixture.jobs[1].running, 'switching variants left the previous process running')
+  assert(not fixture.buffers[worktree.buf], 'switching variants leaked the previous terminal buffer')
+  assert(fixture.surface(), 'switching variants lost the terminal surface')
+
+  fixture.invoke('n', '<leader>gd')
+  assert(launched(fixture, 3) == 'hunk diff', 'switching back did not restore the working-tree command')
+end)
+
+check('each variant key toggles only its own running input', function()
+  local fixture = setup_variants()
+  fixture.invoke('n', '<leader>gd')
+  local host_win = 1
+
+  -- The other variant's key selects its input rather than hiding the tab.
+  fixture.invoke('n', '<leader>gD')
+  assert(fixture.current_tab ~= fixture.windows[host_win].tab, 'the staged key hid the Tool Tab instead of selecting its input')
+
+  fixture.invoke('n', '<leader>gD')
+  assert(fixture.current_win == host_win, 'the running variant key did not return to the Host Window')
+  assert(#fixture.job_attempts == 2, 'hiding the Tool Tab restarted the tool')
+
+  fixture.invoke('n', '<leader>gD')
+  assert(#fixture.job_attempts == 2, 'reselecting the running variant restarted its process')
+end)
+
+check('variants share the tool environment and handoff identity', function()
+  local fixture, terminal_tool = setup_variants()
+  fixture.invoke('n', '<leader>gD')
+  local env = fixture.job_attempts[1].options.env
+
+  assert(env.OPENTUI_GRAPHICS == 'false', 'staged variant lost the shared tool environment')
+  assert(env.DOTFILES_EDITOR_HANDOFF_SOURCE == 'hunk', 'variants did not share one editor-handoff source')
+  use_handoff_env(fixture, 1)
+  assert(terminal_tool.complete_editor_handoff(terminal_tool.editor_handoff_data()), 'staged variant could not complete editor handoff')
+  assert(fixture.surface(), 'staged variant handoff destroyed its Tool Tab')
+end)
+
+check('every variant honors one shared handoff policy', function()
+  local fixture, terminal_tool = setup_variants { handoff = 'return-and-acknowledge' }
+  fixture.invoke('n', '<leader>gD')
+  use_handoff_env(fixture, 1)
+
+  assert(terminal_tool.complete_editor_handoff(terminal_tool.editor_handoff_data()), 'expected the staged variant handoff to be handled')
+  fixture.run_deferred()
+  assert(#fixture.sends == 1, 'a non-first variant silently lost the shared acknowledgement policy')
+end)
+
+check('each variant key carries its own description', function()
+  local fixture = setup_variants()
+  local worktree = assert(fixture.mapping('n', '<leader>gd'), 'expected the working-tree mapping')
+  local staged = assert(fixture.mapping('n', '<leader>gD'), 'expected the staged mapping')
+
+  assert(worktree.options.desc == 'Hunk diff', 'working-tree key lost its own which-key description')
+  assert(staged.options.desc == 'Hunk diff (staged)', 'staged key did not get its own which-key description')
+end)
+
+check('a failed launch names the requested input, not the running one', function()
+  -- Rollback clears the running variant before the message is built, so a
+  -- lifecycle-derived label would misattribute the failure.
+  local fixture = setup_variants(nil, { job_results = { -1 } })
+  assert(not fixture.invoke('n', '<leader>gD'), 'expected the staged launch to fail')
+  assert(
+    fixture.notifications[1].message:match '^Hunk diff %(staged%)',
+    'failed staged launch was attributed to another input: ' .. fixture.notifications[1].message
+  )
+
+  local running = setup_variants()
+  running.invoke('n', '<leader>gD')
+  running.invoke('n', '<leader>gD')
+  vim.fn.getcwd = function() error 'no working directory' end
+  assert(not running.invoke('n', '<leader>gd'), 'expected the working-tree request to fail')
+  assert(
+    running.notifications[#running.notifications].message:match '^Hunk diff:',
+    'failure named the previously running input instead of the requested one: ' .. running.notifications[#running.notifications].message
+  )
+end)
+
+check('a failed variant switch tears down cleanly and stays retryable', function()
+  local fixture = setup_variants(nil, { job_results = { 1, -1 } })
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.surface(), 'expected the working-tree Tool Tab')
+
+  assert(not fixture.invoke('n', '<leader>gD'), 'expected the staged switch to fail')
+  assert(not fixture.jobs[1].running, 'failed switch left the replaced process running')
+  assert(fixture.valid_buffer_count() == 0, 'failed switch leaked a terminal buffer')
+  assert(fixture.current_win == 1, 'failed switch did not return to the Host Window')
+
+  assert(fixture.invoke('n', '<leader>gD'), 'failed switch left the tool unusable')
+  assert(launched(fixture, 3) == 'hunk diff --staged', 'retry after a failed switch launched the wrong input')
+end)
+
+check('a variant selected from another tool inherits the Host Window directory', function()
+  local fixture, terminal_tool = setup_variants()
+  terminal_tool.create { id = 'lazygit', command = { 'lazygit' }, key = '<leader>gg', desc = 'Lazygit' }
+  fixture.invoke('n', '<leader>gg')
+  fixture.windows[fixture.current_win].cwd = '/tool-local'
+  fixture.windows[1].cwd = '/repo/two'
+
+  fixture.invoke('n', '<leader>gD')
+  assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'a variant inherited another tool tab state instead of the Host Window cwd')
+  assert(fixture.jobs[1].running, 'selecting a variant stopped an unrelated tool')
+end)
+
+check('a variant switch recovers from an invalidated terminal buffer', function()
+  local fixture = setup_variants()
+  fixture.invoke('n', '<leader>gd')
+  fixture.invalidate_surface_buffer()
+
+  assert(fixture.invoke('n', '<leader>gD'), 'expected the staged variant to recover the tool')
+  assert(launched(fixture, 2) == 'hunk diff --staged', 'recovery launched the wrong input')
+  assert(fixture.surface(), 'recovery did not produce a terminal surface')
+end)
+
+check('a gap or named entry in variants is rejected instead of dropping an input', function()
+  local fake = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local worktree = { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff' }
+  local staged = { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged' }
+
+  local named_ok, named_err = pcall(function() terminal_tool.create { id = 'hunk', variants = { worktree, staged_input = staged } } end)
+  assert(not named_ok and tostring(named_err):match 'gapless', 'a named variants entry was silently dropped')
+
+  local gap_ok, gap_err = pcall(function() terminal_tool.create { id = 'hunk2', variants = { [1] = worktree, [3] = staged } } end)
+  assert(not gap_ok and tostring(gap_err):match 'gapless', 'a gap in variants silently dropped an input')
+end)
+
+check('a one-element variants list and duplicate commands are rejected', function()
+  local fake = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+
+  local single_ok, single_err = pcall(
+    function() terminal_tool.create { id = 'hunk', variants = { { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff' } } } end
+  )
+  assert(not single_ok and tostring(single_err):match 'top%-level command', 'a one-element variants list duplicated the single-command shape')
+
+  local duplicate_ok, duplicate_err = pcall(
+    function()
+      terminal_tool.create {
+        id = 'hunk2',
+        variants = {
+          { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff' },
+          { command = { 'hunk', 'diff' }, key = '<leader>gD', desc = 'Hunk again' },
+        },
+      }
+    end
+  )
+  assert(not duplicate_ok and tostring(duplicate_err):match 'same command', 'two variants declared an identical command')
+end)
+
+check('a declaration without a command or variants fails clearly', function()
+  local fake = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local ok, err = pcall(function() terminal_tool.create { id = 'hunk', key = '<leader>gd', desc = 'Hunk' } end)
+  assert(not ok and tostring(err):match 'command or a variants list', "a typo'd variants field produced a misleading error: " .. tostring(err))
+end)
+
+check("a variant key cannot collide with another tool's key", function()
+  local fake, fixture = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  terminal_tool.create { id = 'lazygit', command = { 'lazygit' }, key = '<leader>gg', desc = 'Lazygit' }
+
+  local ok, err = pcall(
+    function()
+      terminal_tool.create {
+        id = 'hunk',
+        variants = {
+          { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff' },
+          { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gg', desc = 'Hunk staged' },
+        },
+      }
+    end
+  )
+  assert(not ok and tostring(err):match 'already registered', 'expected a configuration error for a cross-tool key collision')
+
+  -- A rejected declaration must not reserve the keys it had already mapped.
+  local retry_ok = pcall(
+    function()
+      terminal_tool.create {
+        id = 'hunk',
+        variants = {
+          { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff' },
+          { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged' },
+        },
+      }
+    end
+  )
+  assert(retry_ok, 'a rejected declaration left its keys registered and blocked a corrected retry')
+  assert(fixture.invoke('n', '<leader>gD'), 'the corrected declaration could not launch')
+end)
+
+check('a declaration cannot repeat a variant key', function()
+  local fake = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local ok, err = pcall(
+    function()
+      terminal_tool.create {
+        id = 'hunk',
+        variants = {
+          { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff' },
+          { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gd', desc = 'Hunk staged' },
+        },
+      }
+    end
+  )
+  assert(not ok and tostring(err):match 'more than once', 'expected a configuration error for a repeated variant key')
+end)
+
+check('variants cannot be mixed with a top-level command', function()
+  local fake = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local ok, err = pcall(
+    function()
+      terminal_tool.create {
+        id = 'hunk',
+        command = { 'hunk' },
+        key = '<leader>gd',
+        desc = 'Hunk',
+        variants = { { command = { 'hunk', 'diff' }, key = '<leader>gD', desc = 'Hunk diff' } },
+      }
+    end
+  )
+  assert(not ok and tostring(err):match 'do not also declare them', 'expected an atomic error for an ambiguous declaration')
+end)
+
+check('a variant restarts in a new effective working directory', function()
+  local fixture = setup_variants()
+  fixture.invoke('n', '<leader>gD')
+  fixture.invoke('n', '<leader>gD')
+  fixture.cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gD')
+
+  assert(#fixture.job_attempts == 2, 'new working directory reused the old staged process')
+  assert(fixture.job_attempts[2].command[3] == '--staged', 'working-directory restart lost the selected variant')
+  assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'replacement process did not start in the new directory')
+end)
+
+check('production Hunk declaration owns both review inputs', function()
+  local fake, fixture = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local previous = package.loaded['custom.lib.terminal_tool']
+  package.loaded['custom.lib.terminal_tool'] = terminal_tool
+  local loaded, load_error = pcall(function() dofile(hunk_path) end)
+  package.loaded['custom.lib.terminal_tool'] = previous
+  assert(loaded, load_error)
+
+  fixture.invoke('n', '<leader>gd')
+  assert(table.concat(fixture.job_attempts[1].command, ' ') == 'hunk diff --watch --mode stack', 'production working-tree review lost its watch or layout')
+
+  fixture.invoke('n', '<leader>gD')
+  assert(table.concat(fixture.job_attempts[2].command, ' ') == 'hunk diff --staged --watch --mode stack', 'production staged review lost its watch or layout')
+  assert(fixture.job_attempts[2].options.env.OPENTUI_GRAPHICS == 'false', 'production staged review lost its render fix')
+end)
+
 check('tool environment extends the shell-owned editor contract', function()
   local fixture = setup {
     env = { OPENTUI_GRAPHICS = 'false' },

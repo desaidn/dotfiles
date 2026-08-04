@@ -38,7 +38,7 @@ The main workflow boundaries are:
 - fff.nvim owns file finding and live grep.
 - Telescope owns help, keymap, diagnostic, buffer, and LSP-symbol pickers.
 - gitsigns owns buffer-local Git hunk context and actions.
-- Hunk owns complete stacked working-tree review.
+- Hunk owns complete stacked review of the working tree and the index.
 - lazygit owns Git transactions: staging, commits, stashes, branches, history,
   and object selection.
 - Herdr owns the daily top-level workspace; tmux remains the top-level
@@ -166,16 +166,24 @@ In-buffer Git context ~
 <leader>td     Toggle deleted-line and word-diff display
 
 Complete workflow surfaces ~
-<leader>gd     Toggle Hunk's stacked working-tree Review Surface
+<leader>gd     Toggle Hunk's stacked Review Surface on the working tree
+<leader>gD     Toggle the same Review Surface on staged changes
 <leader>gg     Toggle lazygit's Git Transaction Surface
 
 Hunk and lazygit each run in one persistent Tool Tab. Invoking a tool selects
-its existing tab; invoking the same mapping from that tab returns to the most
-recent non-tool Host Window. Because the TUI starts in Terminal mode, press
-`<Esc><Esc>` before using its Normal-mode toggle.
+its existing tab; invoking the mapping of the input it is already showing, from
+that tab, returns to the most recent non-tool Host Window. Because the TUI
+starts in Terminal mode, press `<Esc><Esc>` before using its Normal-mode
+toggle.
+
+Hunk's two mappings share one Tool Tab and one process, so pressing the other
+input's mapping retargets the review in place rather than opening a second
+surface. This keeps exactly one Hunk session per repository, which is what lets
+agents attach review notes with `hunk session comment add --repo .`.
 
 Each tool uses the Host Window's effective working directory and restarts its
-job when that directory changes. The two Tool Tabs remain independent. When
+job when that directory changes or when a different input is selected. The two
+Tool Tabs remain independent. When
 Neovim is running in the tmux fallback, the host tmux prefix and pane
 navigation remain available while they run. Closing a Tool Tab hides its live
 session; the next invocation restores it. Process exit ends the session and

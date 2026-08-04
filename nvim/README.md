@@ -63,6 +63,7 @@ nvim
 
 - `<leader>gg` - Open lazygit sized to the launching window
 - `<leader>gd` - Open Hunk stacked working-tree review sized to the launching window
+- `<leader>gD` - Open the same Hunk review for staged changes
 - `<leader>ga` - Stage/add current hunk
 - `<leader>gr` - Reset current hunk
 - `<leader>gu` - Undo staged hunk
