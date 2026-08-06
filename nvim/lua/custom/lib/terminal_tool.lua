@@ -8,6 +8,7 @@ local HANDOFF_GENERATION_ENV = 'DOTFILES_EDITOR_HANDOFF_GENERATION'
 local HANDOFF_DATA_KEY = 'terminal_tool_id'
 local HANDOFF_DATA_GENERATION_KEY = 'terminal_tool_generation'
 local HANDOFF_ACK_DELAY_MS = 300
+local SHUTDOWN_WAIT_MS = 1000
 
 local tools = {}
 local tool_keys = {}
@@ -200,6 +201,26 @@ local function stop_generation(tool, preserve_tab)
   state.variant = nil
   return true
 end
+
+local function stop_all_jobs()
+  local stopping = {}
+  for _, tool in pairs(tools) do
+    local job = tool.state.job
+    if job then
+      local ok, stopped = pcall(vim.fn.jobstop, job)
+      if ok and stopped == 1 then stopping[#stopping + 1] = job end
+    end
+  end
+
+  if #stopping > 0 then pcall(vim.fn.jobwait, stopping, SHUTDOWN_WAIT_MS) end
+end
+
+local lifecycle_group = vim.api.nvim_create_augroup('custom-terminal-tool-lifecycle', { clear = true })
+vim.api.nvim_create_autocmd('VimLeavePre', {
+  group = lifecycle_group,
+  callback = stop_all_jobs,
+  desc = 'Stop terminal tools before Neovim exits',
+})
 
 local function start_tool(tool, variant, cwd, return_win)
   local state = tool.state

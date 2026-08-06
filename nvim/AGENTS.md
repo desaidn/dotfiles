@@ -34,9 +34,9 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `lazygit.lua` - Thin lazygit Git transaction launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gg`)
   - `hunk.lua` - Thin Hunk stacked review launcher over `lua/custom/lib/terminal_tool.lua`; declares its working-tree and staged input variants (owns `<leader>gd` and `<leader>gD`)
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
-- `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, handoff, failure/race recovery, environment handling, and host tmux input routing
+- `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
-- `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab
+- `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration, proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab, and verifying that both test-owned Hunk processes exit during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
 ### Plugin Management
@@ -132,7 +132,7 @@ require('custom.lib.terminal_tool').create {
 }
 ```
 
-- Start one persistent Neovim terminal job and Tool Tab per tool. Invoking a tool selects its existing Tool Tab; invoking its toggle from that tab returns directly to the latest non-tool Host Window.
+- Start one persistent Neovim terminal job and Tool Tab per tool. Invoking a tool selects its existing Tool Tab; invoking its toggle from that tab returns directly to the latest non-tool Host Window. Before Neovim exits, the shared module stops and briefly waits for every active terminal-tool job.
 - Variants share one Tool Tab, one process slot, one `env`, and one handoff identity. Selecting a variant other than the running one restarts the job in place, exactly as a changed working directory does; only the running variant's own key hides the Tool Tab. Prefer variants over a second tool id when one CLI's inputs are alternative views of the same review, since duplicate processes make per-repository session selectors ambiguous.
 - A `variants` list must be a gapless list of two or more entries with distinct keys and distinct commands; use a top-level `command` for a single input. These are load-time assertions because a silently dropped entry would leave a documented key doing nothing.
 - Keep multiple Tool Tabs independent. Switching tools must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window.

@@ -13,6 +13,8 @@ set nvim_socket [file join $temp_root "codex-hunk-render-nvim-$suffix.sock"]
 set fixture ""
 set host_spawn_id ""
 set host_slave ""
+set direct_hunk_pid ""
+set nvim_hunk_pid ""
 
 proc capture {socket target} {
   return [exec tmux -S $socket capture-pane -p -t $target]
@@ -65,6 +67,30 @@ proc wait_for_nvim_size {socket expected_width expected_height} {
   error "timed out waiting for Neovim size ${expected_width}x${expected_height}; last size was [join $size x]"
 }
 
+proc current_nvim_terminal_pid {socket} {
+  if {[catch {
+    exec nvim --server $socket --remote-expr \
+      {jobpid(getbufvar(bufnr(), 'terminal_job_id'))}
+  } pid]} {
+    return ""
+  }
+
+  set pid [string trim $pid]
+  if {![string is integer -strict $pid] || $pid <= 0} { return "" }
+  return $pid
+}
+
+proc wait_for_nvim_terminal_pid {socket} {
+  global timeout
+  set attempts [expr {$timeout * 10}]
+  for {set attempt 0} {$attempt < $attempts} {incr attempt} {
+    set pid [current_nvim_terminal_pid $socket]
+    if {$pid ne ""} { return $pid }
+    after 100
+  }
+  error "timed out waiting for Neovim's terminal job"
+}
+
 proc active_pane {socket target} {
   set panes [exec tmux -S $socket list-panes -t $target -F {#{pane_id} #{pane_active}}]
   foreach pane [split $panes "\n"] {
@@ -83,8 +109,48 @@ proc wait_for_active_pane_change {socket target previous} {
   error "host tmux did not navigate away from pane $previous"
 }
 
-proc cleanup {sockets files fixture} {
+proc process_running {pid} {
+  if {![string is integer -strict $pid] || $pid <= 0} { return 0 }
+  return [expr {![catch { exec kill -0 $pid }]}]
+}
+
+proc wait_for_process_exit {pid} {
+  global timeout
+  set attempts [expr {$timeout * 10}]
+  for {set attempt 0} {$attempt < $attempts} {incr attempt} {
+    if {![process_running $pid]} { return 1 }
+    after 100
+  }
+  return 0
+}
+
+proc terminate_process {label pid} {
   set errors {}
+  if {![process_running $pid]} { return $errors }
+
+  catch { exec kill -TERM $pid }
+  if {[wait_for_process_exit $pid]} { return $errors }
+
+  lappend errors "$label did not exit after SIGTERM; forced cleanup was required"
+  catch { exec kill -KILL $pid }
+  if {![wait_for_process_exit $pid]} { lappend errors "$label process $pid survived SIGKILL" }
+  return $errors
+}
+
+proc cleanup {sockets files fixture} {
+  global nvim_socket direct_hunk_pid nvim_hunk_pid
+  set errors {}
+
+  if {[file exists $nvim_socket]} {
+    if {$nvim_hunk_pid eq ""} { set nvim_hunk_pid [current_nvim_terminal_pid $nvim_socket] }
+    catch { exec nvim --server $nvim_socket --remote-expr {execute('qa!')} }
+  }
+  if {$nvim_hunk_pid ne "" && ![wait_for_process_exit $nvim_hunk_pid]} {
+    lappend errors "Neovim exit left Hunk process $nvim_hunk_pid running"
+    set errors [concat $errors [terminate_process "Neovim-owned Hunk" $nvim_hunk_pid]]
+  }
+  set errors [concat $errors [terminate_process "direct Hunk" $direct_hunk_pid]]
+
   foreach socket $sockets { catch { exec tmux -S $socket kill-server } }
   foreach path $files {
     catch { file delete -force $path }
@@ -99,6 +165,7 @@ proc cleanup {sockets files fixture} {
 
 proc run_test {} {
   global repo_root suffix temp_root host_socket direct_socket nvim_socket fixture host_spawn_id host_slave
+  global direct_hunk_pid nvim_hunk_pid
 
   set fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-$suffix.XXXXXX"]]
   set sample [open "$fixture/sample.txt" w]
@@ -113,7 +180,8 @@ proc run_test {} {
 
   set menu_pattern {File +View +Navigate +(Theme +)?Agent +Help}
   exec tmux -S $direct_socket -f /dev/null new-session -d -x 80 -y 21 -s direct -c $fixture \
-    "/usr/bin/env TERM=tmux-256color hunk diff --watch --mode stack"
+    "exec /usr/bin/env TERM=tmux-256color hunk diff --watch --mode stack"
+  set direct_hunk_pid [string trim [exec tmux -S $direct_socket display-message -p -t direct:0.0 {#{pane_pid}}]]
   set direct [wait_for_screen $direct_socket direct:0.0 $menu_pattern]
   set direct_first_row [lindex [split $direct "\n"] 0]
   if {![regexp $menu_pattern $direct_first_row]} {
@@ -127,6 +195,7 @@ proc run_test {} {
   set host_slave $spawn_out(slave,name)
   log_user 0
   exec stty rows 24 columns 80 < $host_slave
+  set nvim_hunk_pid [wait_for_nvim_terminal_pid $nvim_socket]
   wait_for_screen $host_socket host:0.0 {sample.txt}
   if {[catch { wait_for_row $host_socket host:0.0 1 $menu_pattern } initial]} {
     set initial [capture $host_socket host:0.0]

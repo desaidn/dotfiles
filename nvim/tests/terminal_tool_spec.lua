@@ -37,6 +37,7 @@ local function fake_vim(options)
     synchronous_exits = real_vim.deepcopy(options.synchronous_exits or {}),
     job_attempts = {},
     jobs = {},
+    waits = {},
     mappings = {},
     deferred = {},
     notifications = {},
@@ -149,6 +150,18 @@ local function fake_vim(options)
         if not job or not job.running then return 0 end
         job.running = false
         return 1
+      end,
+      jobwait = function(job_ids, timeout)
+        fixture.waits[#fixture.waits + 1] = {
+          jobs = deepcopy(job_ids),
+          timeout = timeout,
+        }
+        local statuses = {}
+        for _, job_id in ipairs(job_ids) do
+          local job = fixture.jobs[job_id]
+          statuses[#statuses + 1] = job and not job.running and 0 or -1
+        end
+        return statuses
       end,
     },
     api = {
@@ -938,6 +951,31 @@ check('tool exit removes its Tool Tab and returns to the Host Window', function(
   assert(not fixture.tabs[tool_tab].valid, 'exited tool left its Tool Tab open')
   assert(not fixture.buffers[tool_buf], 'exited tool left its terminal buffer loaded')
   assert(fixture.current_win == 1, 'exited tool did not return to the Host Window')
+end)
+
+check('editor exit stops and briefly waits for every terminal tool job', function()
+  local fixture, terminal_tool = setup()
+  terminal_tool.create {
+    id = 'hunk',
+    command = { 'hunk' },
+    key = '<leader>gd',
+    desc = 'Hunk',
+  }
+
+  fixture.invoke('n', '<leader>gg')
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'expected both terminal tools to be running')
+
+  fixture.fire 'VimLeavePre'
+
+  assert(not fixture.jobs[1].running, 'editor exit left Lazygit running')
+  assert(not fixture.jobs[2].running, 'editor exit left Hunk running')
+  local wait = assert(fixture.waits[1], 'editor exit did not wait for the stopped jobs')
+  assert(#fixture.waits == 1 and #wait.jobs == 2, 'editor exit did not wait once for every stopped job')
+  local waited = {}
+  for _, job in ipairs(wait.jobs) do waited[job] = true end
+  assert(waited[1] and waited[2], 'editor exit waited for the wrong jobs')
+  assert(wait.timeout > 0 and wait.timeout <= 1000, 'editor exit used an unbounded shutdown wait')
 end)
 
 check('a missing Host Window recovers to a new ordinary tab', function()
