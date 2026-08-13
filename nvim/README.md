@@ -98,7 +98,7 @@ Neovim-launched terminal tools use one shared flow in every environment: one per
 ### Utilities
 
 - `<leader>u` - Toggle undo tree
-- `<leader>pa` / `<leader>pr` - Copy absolute/relative file path
+- `<leader>pa` / `<leader>pr` - Copy the current buffer or selected Neo-tree file/directory's absolute/relative path
 
 ## Configuration
 

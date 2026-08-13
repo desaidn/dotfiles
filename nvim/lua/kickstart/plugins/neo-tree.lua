@@ -3,6 +3,18 @@
 
 local gh = require('custom.lib.pack').gh
 
+local function copy_absolute_path(state)
+  local path = vim.fs.abspath(assert(state.tree:get_node()).path)
+  vim.fn.setreg('+', path)
+  print('Copied absolute path: ' .. path)
+end
+
+local function copy_relative_path(state)
+  local path = assert(vim.fs.relpath(state.path, assert(state.tree:get_node()).path))
+  vim.fn.setreg('+', path)
+  print('Copied relative path: ' .. path)
+end
+
 vim.pack.add {
   { src = gh 'nvim-neo-tree/neo-tree.nvim', version = vim.version.range '3' },
   gh 'nvim-lua/plenary.nvim',
@@ -57,6 +69,12 @@ require('neo-tree').setup {
       leave_dirs_open = true,
     },
     use_libuv_file_watcher = true,
+    window = {
+      mappings = {
+        ['<leader>pa'] = { copy_absolute_path, desc = 'Copy [P]ath [A]bsolute' },
+        ['<leader>pr'] = { copy_relative_path, desc = 'Copy [P]ath [R]elative' },
+      },
+    },
   },
   -- Return focus to neo-tree after opening a file (keeps the explorer visible)
   event_handlers = {
