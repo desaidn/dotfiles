@@ -11,6 +11,7 @@ set host_socket [file join $temp_root "codex-hunk-render-host-$suffix.sock"]
 set direct_socket [file join $temp_root "codex-hunk-render-direct-$suffix.sock"]
 set nvim_socket [file join $temp_root "codex-hunk-render-nvim-$suffix.sock"]
 set fixture ""
+set second_fixture ""
 set host_spawn_id ""
 set host_slave ""
 set direct_hunk_pid ""
@@ -91,6 +92,34 @@ proc wait_for_nvim_terminal_pid {socket} {
   error "timed out waiting for Neovim's terminal job"
 }
 
+proc current_nvim_terminal_pids {socket} {
+  if {[catch {
+    exec nvim --server $socket --remote-expr \
+      {luaeval("HunkRenderTerminalPids()")}
+  } raw]} {
+    return {}
+  }
+  return [regexp -all -inline {[0-9]+} $raw]
+}
+
+proc terminal_buffer_count {socket} {
+  return [exec nvim --server $socket --remote-expr \
+    {luaeval("HunkRenderTerminalBufferCount()")}]
+}
+
+proc wait_for_terminal_buffer_count {socket expected} {
+  global timeout
+  set count unknown
+  set attempts [expr {$timeout * 10}]
+  for {set attempt 0} {$attempt < $attempts} {incr attempt} {
+    if {![catch { terminal_buffer_count $socket } count] && $count == $expected} {
+      return $count
+    }
+    after 100
+  }
+  error "timed out waiting for $expected Neovim terminal buffers; last count was $count"
+}
+
 proc active_pane {socket target} {
   set panes [exec tmux -S $socket list-panes -t $target -F {#{pane_id} #{pane_active}}]
   foreach pane [split $panes "\n"] {
@@ -137,17 +166,25 @@ proc terminate_process {label pid} {
   return $errors
 }
 
-proc cleanup {sockets files fixture} {
+proc cleanup {sockets files fixtures} {
   global nvim_socket direct_hunk_pid nvim_hunk_pid
   set errors {}
 
   if {[file exists $nvim_socket]} {
-    if {$nvim_hunk_pid eq ""} { set nvim_hunk_pid [current_nvim_terminal_pid $nvim_socket] }
+    set nvim_hunk_pids [current_nvim_terminal_pids $nvim_socket]
+    if {$nvim_hunk_pid ne "" && [lsearch -exact $nvim_hunk_pids $nvim_hunk_pid] < 0} {
+      lappend nvim_hunk_pids $nvim_hunk_pid
+    }
     catch { exec nvim --server $nvim_socket --remote-expr {execute('qa!')} }
+  } else {
+    set nvim_hunk_pids {}
+    if {$nvim_hunk_pid ne ""} { lappend nvim_hunk_pids $nvim_hunk_pid }
   }
-  if {$nvim_hunk_pid ne "" && ![wait_for_process_exit $nvim_hunk_pid]} {
-    lappend errors "Neovim exit left Hunk process $nvim_hunk_pid running"
-    set errors [concat $errors [terminate_process "Neovim-owned Hunk" $nvim_hunk_pid]]
+  foreach pid $nvim_hunk_pids {
+    if {![wait_for_process_exit $pid]} {
+      lappend errors "Neovim exit left Hunk process $pid running"
+      set errors [concat $errors [terminate_process "Neovim-owned Hunk" $pid]]
+    }
   }
   set errors [concat $errors [terminate_process "direct Hunk" $direct_hunk_pid]]
 
@@ -156,7 +193,8 @@ proc cleanup {sockets files fixture} {
     catch { file delete -force $path }
     if {[file exists $path]} { lappend errors "could not remove $path" }
   }
-  if {$fixture ne ""} {
+  foreach fixture $fixtures {
+    if {$fixture eq ""} { continue }
     catch { file delete -force $fixture }
     if {[file exists $fixture]} { lappend errors "could not remove $fixture" }
   }
@@ -164,7 +202,7 @@ proc cleanup {sockets files fixture} {
 }
 
 proc run_test {} {
-  global repo_root suffix temp_root host_socket direct_socket nvim_socket fixture host_spawn_id host_slave
+  global repo_root suffix temp_root host_socket direct_socket nvim_socket fixture second_fixture host_spawn_id host_slave
   global direct_hunk_pid nvim_hunk_pid
 
   set fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-$suffix.XXXXXX"]]
@@ -178,6 +216,17 @@ proc run_test {} {
   puts $sample "one\nTWO changed\nthree\nFOUR changed\nfive\nsix"
   close $sample
 
+  set second_fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-second-$suffix.XXXXXX"]]
+  set sample [open "$second_fixture/second.txt" w]
+  puts $sample "alpha\nbeta\ngamma\ndelta"
+  close $sample
+  exec git -C $second_fixture init -q
+  exec git -C $second_fixture add second.txt
+  exec git -C $second_fixture -c user.name=Test -c user.email=test@example.com commit -qm base
+  set sample [open "$second_fixture/second.txt" w]
+  puts $sample "alpha\nBETA changed\ngamma\nDELTA changed\nepsilon"
+  close $sample
+
   set menu_pattern {File +View +Navigate +(Theme +)?Agent +Help}
   exec tmux -S $direct_socket -f /dev/null new-session -d -x 80 -y 21 -s direct -c $fixture \
     "exec /usr/bin/env TERM=tmux-256color hunk diff --watch --mode stack"
@@ -188,7 +237,8 @@ proc run_test {} {
     error "HARNESS ERROR: direct Hunk menu was not on the first row"
   }
 
-  spawn -noecho /usr/bin/env TERM=xterm-256color HUNK_RENDER_FIXTURE=$fixture DOTFILES_REPO_ROOT=$repo_root \
+  spawn -noecho /usr/bin/env TERM=xterm-256color HUNK_RENDER_FIXTURE=$fixture HUNK_RENDER_SECOND_FIXTURE=$second_fixture \
+    DOTFILES_REPO_ROOT=$repo_root \
     tmux -S $host_socket -f /dev/null new-session -s host \
     "nvim --clean --listen $nvim_socket -u $repo_root/nvim/tests/terminal_tool_hunk_render_init.lua"
   set host_spawn_id $spawn_id
@@ -215,6 +265,17 @@ proc run_test {} {
   set protocol_present [expr {[string first {Gi=31337} $initial] >= 0}]
 
   if {$menu_present && !$protocol_present} {
+    exec nvim --server $nvim_socket --remote-expr \
+      {luaeval("HunkRenderOpenSecond()")}
+    wait_for_terminal_buffer_count $nvim_socket 2
+    wait_for_row $host_socket host:0.0 1 $menu_pattern
+    wait_for_screen $host_socket host:0.0 {second.txt}
+
+    exec nvim --server $nvim_socket --remote-expr \
+      {luaeval("HunkRenderOpen(1)")}
+    wait_for_row $host_socket host:0.0 1 $menu_pattern
+    wait_for_screen $host_socket host:0.0 {sample.txt}
+
     set nvim_pane [active_pane $host_socket host:0]
     exec tmux -S $host_socket split-window -h -b -d -t $nvim_pane
     exec tmux -S $host_socket bind-key h select-pane -L
@@ -243,7 +304,24 @@ proc run_test {} {
       error "FAIL Hunk lost its menu after the live host resize"
     }
 
-    return "PASS production Hunk Tool Tab renders cleanly below the tabline, follows a native 80x20 to 100x30 resize, and leaves C-b s plus C-b h with host tmux"
+    exec nvim --server $nvim_socket --remote-expr \
+      {luaeval("HunkRenderOpen(2)")}
+    wait_for_row $host_socket host:0.0 1 $menu_pattern
+    wait_for_screen $host_socket host:0.0 {second.txt}
+    exec nvim --server $nvim_socket --remote-expr \
+      {luaeval("HunkRenderOpen(1)")}
+    wait_for_row $host_socket host:0.0 1 $menu_pattern
+    wait_for_screen $host_socket host:0.0 {sample.txt}
+    exec nvim --server $nvim_socket --remote-expr \
+      {luaeval("vim.fn.jobstop(vim.b.terminal_job_id)")}
+    wait_for_terminal_buffer_count $nvim_socket 1
+
+    exec nvim --server $nvim_socket --remote-expr \
+      {luaeval("HunkRenderOpen(2)")}
+    wait_for_row $host_socket host:0.0 1 $menu_pattern
+    wait_for_screen $host_socket host:0.0 {second.txt}
+
+    return "PASS two production Hunk Tool Tabs render cleanly, survive tab switches and a native 80x20 to 100x30 resize, isolate process exit, and leave C-b s plus C-b h with host tmux"
   }
 
   if {$menu_present} {
@@ -261,7 +339,7 @@ proc run_test {} {
 }
 
 set status [catch { run_test } result]
-set cleanup_errors [cleanup [list $host_socket $direct_socket] [list $host_socket $direct_socket $nvim_socket] $fixture]
+set cleanup_errors [cleanup [list $host_socket $direct_socket] [list $host_socket $direct_socket $nvim_socket] [list $fixture $second_fixture]]
 if {$host_spawn_id ne ""} {
   catch { close -i $host_spawn_id }
   catch { wait -i $host_spawn_id }

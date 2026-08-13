@@ -37,7 +37,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neo_tree_spec.lua` - Headless regression harness for refreshing a visible filesystem tree after its watcher misses an external change
-- `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration, proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab, and verifying that both test-owned Hunk processes exit during teardown
+- `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
 ### Plugin Management
@@ -81,7 +81,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 ### Terminal Tool Launcher
 
 - `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` - Run the terminal-tool regression checks from the repository root
-- `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` - Compare real Hunk in a direct PTY and through its production Tool Tab, then verify native resize behavior and host tmux prefix routing; requires Expect, tmux, Git, Hunk, and Neovim on `PATH`
+- `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` - Compare real Hunk in a direct PTY and through two production Tool Tabs, then verify switching, isolated exit, native resize behavior, and host tmux prefix routing; requires Expect, tmux, Git, Hunk, and Neovim on `PATH`
 
 ### LSP and Language Support
 
@@ -118,6 +118,7 @@ require('custom.lib.terminal_tool').create {
   command = { 'example' },
   key = '<leader>gx',
   desc = 'Example',
+  instances = 'cwd', -- Optional; declarations are singleton by default.
 }
 ```
 
@@ -133,18 +134,19 @@ require('custom.lib.terminal_tool').create {
 }
 ```
 
-- Start one persistent Neovim terminal job and Tool Tab per tool. Invoking a tool selects its existing Tool Tab; invoking its toggle from that tab returns directly to the latest non-tool Host Window. Before Neovim exits, the shared module stops and briefly waits for every active terminal-tool job.
-- Variants share one Tool Tab, one process slot, one `env`, and one handoff identity. Selecting a variant other than the running one restarts the job in place, exactly as a changed working directory does; only the running variant's own key hides the Tool Tab. Prefer variants over a second tool id when one CLI's inputs are alternative views of the same review, since duplicate processes make per-repository session selectors ambiguous.
+- Start one persistent Neovim terminal job and Tool Tab per selected tool instance. Invoking a tool selects its existing Tool Tab; invoking its running variant's toggle from that tab returns directly to the latest non-tool Host Window. Before Neovim exits, the shared module stops and briefly waits for every active terminal-tool job across all instances.
+- Variants share one Tool Tab, one process slot, one `env`, and one handoff identity within each instance. Selecting a variant other than the running one restarts that instance's job in place; only the running variant's own key hides the Tool Tab. Prefer variants over a second tool id when one CLI's inputs are alternative views of the same review, since duplicate processes within a repository make session selectors ambiguous.
 - A `variants` list must be a gapless list of two or more entries with distinct keys and distinct commands; use a top-level `command` for a single input. These are load-time assertions because a silently dropped entry would leave a documented key doing nothing.
-- Keep multiple Tool Tabs independent. Switching tools must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window.
-- Restart a tool job inside its existing Tool Tab when the Host Window's effective working directory changes. Native `:tabclose` only hides the live terminal buffer; the next invocation recreates its Tool Tab, while process exit removes the session.
+- Keep declarations singleton by default. A singleton restarts inside its existing Tool Tab when the Host Window's effective working directory changes; this remains LazyGit's policy.
+- Use `instances = 'cwd'` only when a tool should retain concurrent instances selected by canonical Host Window working directory. Hunk uses this policy so reviews in different repositories or worktrees remain live together.
+- Keep every Tool Tab instance independent. Switching tools or contexts must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window. Native `:tabclose` hides only that instance's live terminal buffer; the next invocation recreates its Tool Tab, while process exit removes only that instance.
 - Let the shared module install the normal-mode mapping; declarations do not receive or inspect mutable buffer, window, tab, or job state. Terminal input stays untouched, so use `<Esc><Esc>` before a normal-mode tool key.
 - Use ordinary full-tab windows inside and outside tmux. This keeps sizing native and, when using the tmux fallback, keeps the host tmux client upstream so its prefix, session picker, and pane navigation remain available while the tool is running.
 - Pass through shell-owned `EDITOR`, `VISUAL`, and `GIT_EDITOR`; do not override the editor contract in tool-specific config.
 - Keep tool-specific environment exceptions declarative in `env`; reserved editor and handoff variables are rejected so the source marker and shell-owned editor contract cannot be replaced.
 - Hunk sets `OPENTUI_GRAPHICS=false` because its OpenTUI renderer otherwise mistakes inherited `TMUX` for its immediate terminal and sends tmux-wrapped graphics probes through Neovim's intervening terminal emulator.
-- Editor Handoff opens in the Host Window while preserving the originating Tool Tab. Use `handoff = 'return-and-acknowledge'` only for tools such as lazygit that wait for an Enter after returning; the default `return` policy sends no acknowledgement. The shared module transports the originating process generation through flatten without source-specific branches.
-- Keep each plugin file thin: declare the tool id, either a command with its key and description or a `variants` list carrying those per input, optional environment, and any exceptional handoff policy.
+- Editor Handoff opens in the global latest Host Window while preserving the originating Tool Tab. Use `handoff = 'return-and-acknowledge'` only for tools such as lazygit that wait for an Enter after returning; the default `return` policy sends no acknowledgement. The shared module validates the opaque originating instance identity and process generation through flatten without source-specific branches.
+- Keep each plugin file thin: declare the tool id, either a command with its key and description or a `variants` list carrying those per input, optional instance policy and environment, and any exceptional handoff policy.
 
 ### Git Integration
 
@@ -152,7 +154,7 @@ Focused on in-editor git context and full review of the working tree and the ind
 
 - **gitsigns**: In-editor git signs, blame, and hunk navigation
 - `<leader>gg` - Toggle lazygit's Git transaction Tool Tab (custom plugin: `lua/custom/plugins/lazygit.lua`)
-- `<leader>gd` / `<leader>gD` - Toggle Hunk's stacked review Tool Tab on the working tree or the index (custom plugin: `lua/custom/plugins/hunk.lua`). Both keys drive one Tool Tab and one process; pressing the other input's key retargets the review in place rather than opening a second surface, which keeps `--watch` live and keeps the `--repo .` selector on `hunk session` subcommands matching exactly one session for agent notes.
+- `<leader>gd` / `<leader>gD` - Toggle Hunk's stacked review Tool Tab on the working tree or the index (custom plugin: `lua/custom/plugins/hunk.lua`). Each working directory owns one instance; both keys drive that instance's Tool Tab and process, and pressing the other input's key retargets the review in place. This keeps `--watch` live and keeps the `--repo .` selector on `hunk session` subcommands matching exactly one session per repository for agent notes.
 - Lazygit and Hunk use the shell-owned global editor contract (`EDITOR=nvim`) for native Editor Handoff; flatten.nvim returns nested Neovim invocations to the Host Window while preserving the originating Tool Tab.
 - `<leader>tb` - Toggle git blame line
 - `<leader>td` - Toggle inline git diff (deleted lines + word diff)
@@ -195,6 +197,7 @@ inventory:
 - The host also provides `lazygit` and `hunk` for their production Tool Tabs,
   plus a platform clipboard provider where a display is available; remote
   sessions rely on the OSC 52 fallback instead.
+- Hunk must be version 0.18.1 or newer for concurrent watch sessions.
 - Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and
   Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Python debugging
   additionally requires the standalone `uv` CLI.

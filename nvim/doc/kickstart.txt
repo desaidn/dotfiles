@@ -170,24 +170,22 @@ Complete workflow surfaces ~
 <leader>gD     Toggle the same Review Surface on staged changes
 <leader>gg     Toggle lazygit's Git Transaction Surface
 
-Hunk and lazygit each run in one persistent Tool Tab. Invoking a tool selects
-its existing tab; invoking the mapping of the input it is already showing, from
-that tab, returns to the most recent non-tool Host Window. Because the TUI
-starts in Terminal mode, press `<Esc><Esc>` before using its Normal-mode
-toggle.
+Each selected terminal-tool instance runs in one persistent Tool Tab. Invoking
+the running input's mapping from that tab returns to the most recent non-tool
+Host Window. Because the TUI starts in Terminal mode, press `<Esc><Esc>` before
+using its Normal-mode toggle.
 
-Hunk's two mappings share one Tool Tab and one process, so pressing the other
-input's mapping retargets the review in place rather than opening a second
-surface. This keeps exactly one Hunk session per repository, which is what lets
-agents attach review notes with `hunk session comment add --repo .`.
-
-Each tool uses the Host Window's effective working directory and restarts its
-job when that directory changes or when a different input is selected. The two
-Tool Tabs remain independent. When
-Neovim is running in the tmux fallback, the host tmux prefix and pane
-navigation remain available while they run. Closing a Tool Tab hides its live
-session; the next invocation restores it. Process exit ends the session and
-removes its tab.
+Lazygit is a singleton: it restarts in its existing Tool Tab when the Host
+Window's effective working directory changes. Hunk keeps one live instance per
+canonical Host Window working directory, so reviews in multiple repositories
+or worktrees can coexist. Hunk's two mappings share the selected instance's Tool
+Tab and process; the other input's mapping retargets that review in place. This
+keeps exactly one Hunk session per repository for agent notes through
+`hunk session comment add --repo .`. All Tool Tab instances remain independent.
+When Neovim is running in the tmux fallback, the host tmux prefix and pane
+navigation remain available while they run. Closing a Tool Tab hides only its
+live session; the next invocation restores it. Process exit ends only that
+instance and removes its tab.
 
 The shell-owned Global Editor Contract sets `EDITOR`, `VISUAL`, and
 `GIT_EDITOR` to Neovim. flatten.nvim uses this contract for Editor Handoff:
@@ -218,7 +216,8 @@ educational comments:
 `lua/custom/lib/terminal_tool.lua`
     The shared launcher for a future Neovim-owned interactive terminal tool.
     New integrations should be thin declarations of command, key, description,
-    and only genuinely exceptional environment or handoff policy.
+    optional instance cardinality, and only genuinely exceptional environment
+    or handoff policy.
 
 `nvim-pack-lock.json`
     The committed |vim.pack-lockfile| for reproducible plugin revisions.

@@ -77,7 +77,7 @@ nvim
 
 Lazygit and Hunk open files through the shell-owned `EDITOR=nvim` contract. flatten.nvim routes nested Neovim calls back into the host editor and hides the originating Git surface.
 
-Neovim-launched terminal tools use one shared flow in every environment: one persistent terminal job and Tool Tab per tool, restarted when its effective working directory changes and stopped before Neovim exits, with host tmux prefix and pane navigation left available when running in the tmux fallback and flatten.nvim handling editor handoff. Add future flows through a declarative `terminal_tool.create { id, command, key, desc, env?, handoff? }` call; the module owns mappings, lifecycle state, error recovery, and source-agnostic handoff routing while leaving TUI input untouched.
+Neovim-launched terminal tools use one shared flow in every environment: one persistent terminal job and Tool Tab per selected instance, all stopped before Neovim exits, with host tmux prefix and pane navigation left available when running in the tmux fallback and flatten.nvim handling editor handoff. LazyGit keeps the default singleton and restarts when its effective working directory changes; Hunk retains one instance per canonical Host Window working directory, with working-tree and staged variants sharing that instance. Add future flows through a declarative `terminal_tool.create { id, command?, key?, desc?, variants?, instances?, env?, handoff? }` call; the module owns mappings, instance lifecycle, error recovery, and source-agnostic handoff routing while leaving TUI input untouched.
 
 ### File Explorer
 

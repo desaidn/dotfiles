@@ -27,12 +27,12 @@ This makes CLT/Xcode on macOS and distro development tools on Linux the correct 
 | `atuin` | [`atuin`](https://formulae.brew.sh/formula/atuin) formula | Both | Required shell-history integration |
 | `rg` | [`ripgrep`](https://formulae.brew.sh/formula/ripgrep) formula | Both | Required search tool; formula name differs from command |
 | `tree-sitter` | [`tree-sitter-cli`](https://formulae.brew.sh/formula/tree-sitter-cli) formula | Both | Required parser-management CLI; formula name differs from command. The current formula supplies `tree-sitter` 0.26.11, satisfying nvim-treesitter main's requirement for 0.26.1 or later. ([nvim-treesitter requirements](https://github.com/nvim-treesitter/nvim-treesitter#requirements)) |
-| `hunk` | [`hunk`](https://formulae.brew.sh/formula/hunk) formula | Both | Required Diffing Solution and stacked working-tree Review Surface. **Effective floor: 0.12**, which added static rendering for captured hosts such as LazyGit. ([Hunk changelog](https://github.com/modem-dev/hunk/blob/main/CHANGELOG.md#0120---2026-05-12)) |
+| `hunk` | [`hunk`](https://formulae.brew.sh/formula/hunk) formula | Both | Required Diffing Solution and stacked working-tree Review Surface. **Effective floor: 0.18.1** for concurrent watch sessions: 0.18 replaced the 250 ms Git polling loop with filesystem event hints, an authoritative Git signature, and a 10-second safety check. Hunk's frozen campaign measured 35–36 times fewer Git invocations and 1.8–6.4 times lower idle main-process CPU per session, subject to its stated platform and projection caveats. ([Hunk 0.18.1 release](https://github.com/modem-dev/hunk/releases/tag/v0.18.1), [watch benchmark](https://github.com/modem-dev/hunk/blob/d6e967bf5c5a3a93bb7796aa50e67ee3fec58179/docs/watch-benchmark-final.md#L9-L28)) |
 | `xclip` / `wl-copy` | [`xclip`](https://formulae.brew.sh/formula/xclip) / [`wl-clipboard`](https://formulae.brew.sh/formula/wl-clipboard) | Linux (`xclip` also has macOS bottles) | X11 and Wayland clipboard providers installed by the Linux Brewfile |
 | `Ghostty.app` or `ghostty` | [`ghostty`](https://formulae.brew.sh/cask/ghostty) cask (`brew install --cask ghostty`) | macOS only | Required only on macOS; the installer explicitly skips its config on Linux |
 
 The installer validates Fish 3.2 or newer, tmux 3.7 or newer, LazyGit 0.56 or
-newer, Hunk 0.12 or newer, tree-sitter CLI 0.26.1 or newer, and exactly stable
+newer, Hunk 0.18.1 or newer, tree-sitter CLI 0.26.1 or newer, and exactly stable
 Neovim 0.12.4 after applying the Brewfile.
 
 Ghostty's tracked configuration also selects **JetBrains Mono**. Homebrew maps that presentation dependency to the macOS-only [`font-jetbrains-mono`](https://formulae.brew.sh/cask/font-jetbrains-mono) cask. `install.sh` accepts either its Brew receipt or a matching font file in the standard macOS font directories.

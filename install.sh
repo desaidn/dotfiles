@@ -387,8 +387,8 @@ validate_brew_dependencies() {
 
     output="$(hunk --version 2>/dev/null || true)"
     version="${output##* }"
-    version_at_least "$version" "0.12.0" ||
-        errors+=("Hunk 0.12+ is required (found '${version:-unknown}')")
+    version_at_least "$version" "0.18.1" ||
+        errors+=("Hunk 0.18.1+ is required (found '${version:-unknown}')")
 
     output="$(tree-sitter --version 2>/dev/null || true)"
     version="${output##* }"

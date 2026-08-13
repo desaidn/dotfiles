@@ -4,11 +4,14 @@ local M = {}
 -- popups are modal, so they cannot preserve host prefix and pane navigation.
 
 local HANDOFF_SOURCE_ENV = 'DOTFILES_EDITOR_HANDOFF_SOURCE'
+local HANDOFF_INSTANCE_ENV = 'DOTFILES_EDITOR_HANDOFF_INSTANCE'
 local HANDOFF_GENERATION_ENV = 'DOTFILES_EDITOR_HANDOFF_GENERATION'
 local HANDOFF_DATA_KEY = 'terminal_tool_id'
+local HANDOFF_DATA_INSTANCE_KEY = 'terminal_tool_instance'
 local HANDOFF_DATA_GENERATION_KEY = 'terminal_tool_generation'
 local HANDOFF_ACK_DELAY_MS = 300
 local SHUTDOWN_WAIT_MS = 1000
+local SINGLETON_INSTANCE_KEY = {}
 
 local tools = {}
 local tool_keys = {}
@@ -31,9 +34,10 @@ local function editor_env()
   }
 end
 
-local function job_env(id, generation, extra_env)
+local function job_env(id, instance, generation, extra_env)
   local env = vim.deepcopy(extra_env or {})
   env[HANDOFF_SOURCE_ENV] = id
+  env[HANDOFF_INSTANCE_ENV] = instance.token
   env[HANDOFF_GENERATION_ENV] = tostring(generation)
 
   for name, value in pairs(editor_env()) do
@@ -45,7 +49,7 @@ end
 -- Failures about a requested input pass their own variant, because rollback
 -- clears the running one before the message is built.
 local function notify(tool, message, level, variant)
-  local named = variant or tool.state.variant
+  local named = variant or tool.spec.variants[1]
   vim.notify(string.format('%s: %s', named and named.desc or tool.spec.desc, message), level, { title = 'Terminal tool' })
 end
 
@@ -57,9 +61,28 @@ local function restore_window(win)
   if valid_window(win) then pcall(vim.api.nvim_set_current_win, win) end
 end
 
+local function canonical_cwd(cwd)
+  if vim.uv and vim.uv.fs_realpath then
+    local ok, resolved = pcall(vim.uv.fs_realpath, cwd)
+    if ok and resolved and resolved ~= '' then cwd = resolved end
+  end
+  if vim.fs and vim.fs.normalize then
+    local ok, normalized = pcall(vim.fs.normalize, cwd)
+    if ok and normalized and normalized ~= '' then cwd = normalized end
+  end
+  return cwd
+end
+
+local function instance_for_tab(tool, tab)
+  for _, instance in pairs(tool.instances) do
+    if instance.tab == tab and valid_tab(tab) then return instance end
+  end
+  return nil
+end
+
 local function tab_is_tool(tab)
   for _, registered in pairs(tools) do
-    if registered.state.tab == tab and valid_tab(tab) then return true end
+    if instance_for_tab(registered, tab) then return true end
   end
   return false
 end
@@ -115,100 +138,108 @@ local function forget_stale_tab(state)
   end
 end
 
-local function close_tool_tab(tool)
-  local state = tool.state
-  forget_stale_tab(state)
-  if not state.tab then return true end
+local function close_tool_tab(tool, instance)
+  forget_stale_tab(instance)
+  if not instance.tab then return true end
 
-  local tab = state.tab
+  local tab = instance.tab
   if vim.api.nvim_get_current_tabpage() == tab and not focus_host_window() then return false end
   local ok = pcall(vim.api.nvim_tabpage_close, tab, false)
   if not ok and valid_tab(tab) then return false end
-  state.tab = nil
-  state.win = nil
+  instance.tab = nil
+  instance.win = nil
   return true
 end
 
-local function clear_generation(tool, generation, buf, retried)
-  local state = tool.state
-  if state.generation ~= generation or state.buf ~= buf then return false end
+local function unregister_instance(tool, instance)
+  if tool.instances[instance.key] == instance then tool.instances[instance.key] = nil end
+  if tool.instances_by_token[instance.token] == instance then tool.instances_by_token[instance.token] = nil end
+end
 
-  local tab_closed = close_tool_tab(tool)
+local function current_generation(tool, instance, generation)
+  return tool.instances[instance.key] == instance and tool.instances_by_token[instance.token] == instance and instance.generation == generation
+end
+
+local function clear_generation(tool, instance, generation, buf, retried)
+  if not current_generation(tool, instance, generation) or instance.buf ~= buf then return false end
+
+  local tab_closed = close_tool_tab(tool, instance)
   local buffer_deleted = delete_buffer(buf)
   if not tab_closed or not buffer_deleted then
     if not retried then
-      vim.schedule(function() clear_generation(tool, generation, buf, true) end)
+      vim.schedule(function() clear_generation(tool, instance, generation, buf, true) end)
     else
       notify(tool, 'could not clean up its finished process', vim.log.levels.WARN)
     end
     return false
   end
 
-  state.buf = nil
-  state.job = nil
-  state.cwd = nil
-  state.variant = nil
+  instance.buf = nil
+  instance.job = nil
+  instance.cwd = nil
+  instance.variant = nil
+  unregister_instance(tool, instance)
   return true
 end
 
-local function open_tool_tab(tool)
-  local state = tool.state
-  forget_stale_tab(state)
+local function open_tool_tab(tool, instance)
+  forget_stale_tab(instance)
   local previous_win = vim.api.nvim_get_current_win()
   local created_tab = false
 
   local ok, err = pcall(function()
-    if state.tab then
-      vim.api.nvim_set_current_tabpage(state.tab)
-      if not valid_window(state.win) then state.win = vim.api.nvim_tabpage_list_wins(state.tab)[1] end
+    if instance.tab then
+      vim.api.nvim_set_current_tabpage(instance.tab)
+      if not valid_window(instance.win) then instance.win = vim.api.nvim_tabpage_list_wins(instance.tab)[1] end
     else
       vim.cmd.tabnew()
       created_tab = true
-      state.tab = vim.api.nvim_get_current_tabpage()
-      state.win = vim.api.nvim_get_current_win()
+      instance.tab = vim.api.nvim_get_current_tabpage()
+      instance.win = vim.api.nvim_get_current_win()
     end
-    vim.api.nvim_win_set_buf(state.win, state.buf)
+    vim.api.nvim_win_set_buf(instance.win, instance.buf)
   end)
 
   if ok then return true end
 
-  if created_tab and valid_tab(state.tab) then pcall(vim.api.nvim_tabpage_close, state.tab, false) end
-  state.tab = nil
-  state.win = nil
+  if created_tab and valid_tab(instance.tab) then pcall(vim.api.nvim_tabpage_close, instance.tab, false) end
+  instance.tab = nil
+  instance.win = nil
   restore_window(previous_win)
   notify(tool, 'could not open its Tool Tab: ' .. tostring(err), vim.log.levels.ERROR)
   return false
 end
 
-local function focus_terminal(tool)
-  if not open_tool_tab(tool) then return false end
+local function focus_terminal(tool, instance)
+  if not open_tool_tab(tool, instance) then return false end
   return pcall(function()
-    vim.api.nvim_set_current_win(tool.state.win)
+    vim.api.nvim_set_current_win(instance.win)
     vim.cmd.startinsert()
   end)
 end
 
-local function stop_generation(tool, preserve_tab)
-  local state = tool.state
-  local buf = state.buf
-  if state.job then pcall(vim.fn.jobstop, state.job) end
+local function stop_generation(tool, instance, preserve_tab)
+  local buf = instance.buf
+  if instance.job then pcall(vim.fn.jobstop, instance.job) end
 
-  if not preserve_tab and not close_tool_tab(tool) then return false end
+  if not preserve_tab and not close_tool_tab(tool, instance) then return false end
   if not delete_buffer(buf) then return false end
-  state.buf = nil
-  state.job = nil
-  state.cwd = nil
-  state.variant = nil
+  instance.buf = nil
+  instance.job = nil
+  instance.cwd = nil
+  instance.variant = nil
   return true
 end
 
 local function stop_all_jobs()
   local stopping = {}
   for _, tool in pairs(tools) do
-    local job = tool.state.job
-    if job then
-      local ok, stopped = pcall(vim.fn.jobstop, job)
-      if ok and stopped == 1 then stopping[#stopping + 1] = job end
+    for _, instance in pairs(tool.instances) do
+      local job = instance.job
+      if job then
+        local ok, stopped = pcall(vim.fn.jobstop, job)
+        if ok and stopped == 1 then stopping[#stopping + 1] = job end
+      end
     end
   end
 
@@ -222,40 +253,41 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
   desc = 'Stop terminal tools before Neovim exits',
 })
 
-local function start_tool(tool, variant, cwd, return_win)
-  local state = tool.state
-  state.generation = state.generation + 1
-  local generation = state.generation
+local function start_tool(tool, instance, variant, cwd, return_win)
+  instance.generation = instance.generation + 1
+  local generation = instance.generation
 
   local ok, buf_or_error = pcall(vim.api.nvim_create_buf, false, true)
   if not ok then
+    if not instance.tab then unregister_instance(tool, instance) end
+    restore_window(return_win)
     notify(tool, 'could not create its terminal buffer: ' .. tostring(buf_or_error), vim.log.levels.ERROR, variant)
     return false
   end
 
   local buf = buf_or_error
-  state.buf = buf
-  state.cwd = cwd
-  state.variant = variant
-  if not open_tool_tab(tool) then
-    clear_generation(tool, generation, buf)
+  instance.buf = buf
+  instance.cwd = cwd
+  instance.variant = variant
+  if not open_tool_tab(tool, instance) then
+    clear_generation(tool, instance, generation, buf)
     restore_window(return_win)
     return false
   end
 
-  local started, job = pcall(vim.api.nvim_win_call, state.win, function()
+  local started, job = pcall(vim.api.nvim_win_call, instance.win, function()
     return vim.fn.jobstart(vim.deepcopy(variant.command), {
       term = true,
       cwd = cwd,
-      env = job_env(tool.spec.id, generation, tool.spec.env),
+      env = job_env(tool.spec.id, instance, generation, tool.spec.env),
       on_exit = function()
-        vim.schedule(function() clear_generation(tool, generation, buf) end)
+        vim.schedule(function() clear_generation(tool, instance, generation, buf) end)
       end,
     })
   end)
 
   if not started or job <= 0 then
-    clear_generation(tool, generation, buf)
+    clear_generation(tool, instance, generation, buf)
     restore_window(return_win)
     local reason
     if not started then
@@ -269,15 +301,15 @@ local function start_tool(tool, variant, cwd, return_win)
 
   -- A very short-lived job may exit before jobstart returns. Its callback owns
   -- cleanup, so do not restore handles from a generation that already ended.
-  if state.generation ~= generation or state.buf ~= buf then
+  if not current_generation(tool, instance, generation) or instance.buf ~= buf then
     restore_window(return_win)
     return false
   end
-  state.job = job
-  local focused, focus_error = focus_terminal(tool)
+  instance.job = job
+  local focused, focus_error = focus_terminal(tool, instance)
   if not focused then
     pcall(vim.fn.jobstop, job)
-    clear_generation(tool, generation, buf)
+    clear_generation(tool, instance, generation, buf)
     restore_window(return_win)
     notify(tool, 'could not focus its Tool Tab: ' .. tostring(focus_error), vim.log.levels.ERROR, variant)
     return false
@@ -285,15 +317,37 @@ local function start_tool(tool, variant, cwd, return_win)
   return true
 end
 
-local function toggle(tool, variant)
-  local state = tool.state
-  forget_stale_tab(state)
-  local current_win = vim.api.nvim_get_current_win()
-  local selects_running_variant = state.variant == variant
+local function new_instance(tool, key)
+  tool.next_instance_token = tool.next_instance_token + 1
+  local instance = {
+    key = key,
+    token = tostring(tool.next_instance_token),
+    generation = 0,
+    buf = nil,
+    win = nil,
+    tab = nil,
+    job = nil,
+    cwd = nil,
+    variant = nil,
+  }
+  tool.instances[key] = instance
+  tool.instances_by_token[instance.token] = instance
+  return instance
+end
 
-  -- Only the running variant's own key hides the Tool Tab. Another variant's key
-  -- selects a different input for the same tool instead of toggling it closed.
-  if selects_running_variant and state.tab and vim.api.nvim_get_current_tabpage() == state.tab then return focus_host_window() end
+local function instance_key(tool, cwd)
+  if tool.spec.instances == 'cwd' then return canonical_cwd(cwd) end
+  return SINGLETON_INSTANCE_KEY
+end
+
+local function toggle(tool, variant)
+  local current_win = vim.api.nvim_get_current_win()
+  local current_tab = vim.api.nvim_get_current_tabpage()
+  local current_instance = instance_for_tab(tool, current_tab)
+
+  -- Only the running variant's own key hides the Tool Tab. Another variant's
+  -- key retargets this instance instead of toggling it closed.
+  if current_instance and current_instance.variant == variant then return focus_host_window() end
   if not current_tab_is_tool() then host_win = current_win end
 
   local cwd = host_cwd()
@@ -302,11 +356,16 @@ local function toggle(tool, variant)
     return false
   end
 
-  if state.buf and not vim.api.nvim_buf_is_valid(state.buf) and not stop_generation(tool, false) then return false end
-  if state.buf and (state.cwd ~= cwd or not selects_running_variant) and not stop_generation(tool, true) then return false end
+  local key = instance_key(tool, cwd)
+  local instance = tool.instances[key] or new_instance(tool, key)
+  forget_stale_tab(instance)
 
-  if state.buf then
-    local focused, focus_error = focus_terminal(tool)
+  if instance.buf and not vim.api.nvim_buf_is_valid(instance.buf) and not stop_generation(tool, instance, false) then return false end
+  local changed_cwd = tool.spec.instances == 'singleton' and instance.cwd ~= cwd
+  if instance.buf and (changed_cwd or instance.variant ~= variant) and not stop_generation(tool, instance, true) then return false end
+
+  if instance.buf then
+    local focused, focus_error = focus_terminal(tool, instance)
     if not focused then
       notify(tool, 'could not focus its Tool Tab: ' .. tostring(focus_error), vim.log.levels.ERROR, variant)
       restore_window(current_win)
@@ -315,29 +374,31 @@ local function toggle(tool, variant)
     return true
   end
 
-  return start_tool(tool, variant, cwd, current_win)
+  local launch_cwd = tool.spec.instances == 'cwd' and key or cwd
+  return start_tool(tool, instance, variant, launch_cwd, current_win)
 end
 
-local function acknowledge_editor_return(tool)
-  local state = tool.state
-  local generation = state.generation
-  local job = state.job
+local function acknowledge_editor_return(tool, instance)
+  local generation = instance.generation
+  local job = instance.job
   if not job then return end
 
   vim.defer_fn(function()
-    if state.generation ~= generation or state.job ~= job then return end
+    if not current_generation(tool, instance, generation) or instance.job ~= job then return end
 
     local ok, sent = pcall(vim.fn.chansend, job, '\r')
     if not ok or sent == 0 then notify(tool, 'could not acknowledge editor return', vim.log.levels.WARN) end
   end, HANDOFF_ACK_DELAY_MS)
 end
 
-local function handoff_tool(data)
-  if type(data) ~= 'table' then return nil end
+local function handoff_instance(data)
+  if type(data) ~= 'table' then return nil, nil end
   local tool = tools[data[HANDOFF_DATA_KEY]]
-  if not tool then return nil end
-  if tostring(tool.state.generation) ~= data[HANDOFF_DATA_GENERATION_KEY] or not tool.state.job then return nil end
-  return tool
+  if not tool then return nil, nil end
+  local instance = tool.instances_by_token[data[HANDOFF_DATA_INSTANCE_KEY]]
+  if not instance then return nil, nil end
+  if tostring(instance.generation) ~= data[HANDOFF_DATA_GENERATION_KEY] or not instance.job then return nil, nil end
+  return tool, instance
 end
 
 local function assert_nonempty_string(value, message)
@@ -407,10 +468,14 @@ local function normalize_config(config)
   local handoff = config.handoff or 'return'
   assert(handoff == 'return' or handoff == 'return-and-acknowledge', "terminal tool handoff must be 'return' or 'return-and-acknowledge'")
 
+  local instances = config.instances or 'singleton'
+  assert(instances == 'singleton' or instances == 'cwd', "terminal tool instances must be 'singleton' or 'cwd'")
+
   local env = config.env or {}
   assert(type(env) == 'table', 'terminal tool env must be a table')
   local reserved_env = {
     [HANDOFF_SOURCE_ENV] = true,
+    [HANDOFF_INSTANCE_ENV] = true,
     [HANDOFF_GENERATION_ENV] = true,
     EDITOR = true,
     VISUAL = true,
@@ -428,6 +493,7 @@ local function normalize_config(config)
     variants = variants,
     env = vim.deepcopy(env),
     handoff = handoff,
+    instances = instances,
   }
 end
 
@@ -444,20 +510,15 @@ end
 ---@field variants? custom.TerminalToolVariant[] input variants sharing one Tool Tab
 ---@field env? table<string, string>
 ---@field handoff? 'return'|'return-and-acknowledge'
+---@field instances? 'singleton'|'cwd'
 
 ---@param config custom.TerminalToolConfig
 function M.create(config)
   local tool = {
     spec = normalize_config(config),
-    state = {
-      generation = 0,
-      buf = nil,
-      win = nil,
-      tab = nil,
-      job = nil,
-      cwd = nil,
-      variant = nil,
-    },
+    instances = {},
+    instances_by_token = {},
+    next_instance_token = 0,
   }
 
   -- Install every mapping before claiming any key, so a failure partway cannot
@@ -474,10 +535,12 @@ end
 ---@return table
 function M.editor_handoff_data()
   local id = vim.env[HANDOFF_SOURCE_ENV]
+  local instance = vim.env[HANDOFF_INSTANCE_ENV]
   local generation = vim.env[HANDOFF_GENERATION_ENV]
-  if id == nil or id == '' or generation == nil or generation == '' then return {} end
+  if id == nil or id == '' or instance == nil or instance == '' or generation == nil or generation == '' then return {} end
   return {
     [HANDOFF_DATA_KEY] = id,
+    [HANDOFF_DATA_INSTANCE_KEY] = instance,
     [HANDOFF_DATA_GENERATION_KEY] = generation,
   }
 end
@@ -485,20 +548,20 @@ end
 ---@param data? table
 ---@return integer? win
 function M.editor_handoff_window(data)
-  if not handoff_tool(data) then return nil end
+  if not handoff_instance(data) then return nil end
   return find_host_window()
 end
 
 ---@param data? table
 ---@return boolean handled
 function M.complete_editor_handoff(data)
-  local tool = handoff_tool(data)
+  local tool, instance = handoff_instance(data)
   if not tool then return false end
   if not focus_host_window() then
     notify(tool, 'could not return to the Host Window after editor handoff', vim.log.levels.WARN)
     return false
   end
-  if tool.spec.handoff == 'return-and-acknowledge' then acknowledge_editor_return(tool) end
+  if tool.spec.handoff == 'return-and-acknowledge' then acknowledge_editor_return(tool, instance) end
   return true
 end
 

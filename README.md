@@ -126,7 +126,7 @@ layer:
 | `herdr` | Daily workspace manager |
 | `tmux` | Fallback multiplexer; version 3.7 or newer |
 | `lazygit` | Git Transaction Surface; version 0.56 or newer for the configured Diffing Solution |
-| `hunk` | Diffing Solution and stacked working-tree and staged Review Surface; version 0.12 or newer for LazyGit rendering |
+| `hunk` | Diffing Solution and stacked working-tree and staged Review Surface; version 0.18.1 or newer for efficient concurrent watch sessions (0.12 introduced LazyGit rendering) |
 | `mise` | Language runtime manager |
 | `atuin` | Shell history integration |
 | `gh` | GitHub issue workflows described under `docs/agents/` |

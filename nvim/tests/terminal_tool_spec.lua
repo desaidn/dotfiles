@@ -34,6 +34,7 @@ local function fake_vim(options)
     next_win = 2,
     next_job = 1,
     job_results = real_vim.deepcopy(options.job_results or {}),
+    buffer_results = real_vim.deepcopy(options.buffer_results or {}),
     synchronous_exits = real_vim.deepcopy(options.synchronous_exits or {}),
     job_attempts = {},
     jobs = {},
@@ -94,6 +95,12 @@ local function fake_vim(options)
       diffthis = function() end,
       startinsert = function() end,
       tabnew = function() create_tab(false) end,
+    },
+    fs = {
+      normalize = function(path) return path end,
+    },
+    uv = {
+      fs_realpath = function(path) return (options.realpaths or {})[path] or path end,
     },
     pack = { add = function() end },
     deepcopy = deepcopy,
@@ -228,6 +235,8 @@ local function fake_vim(options)
         return window.host and fixture.geometry.height or window.config.height
       end,
       nvim_create_buf = function()
+        local result = table.remove(fixture.buffer_results, 1)
+        if result == false then error 'provisional buffer failure' end
         local buf = fixture.next_buf
         fixture.next_buf = fixture.next_buf + 1
         fixture.buffers[buf] = true
@@ -360,6 +369,7 @@ end
 local function use_handoff_env(fixture, job_index)
   local env = fixture.job_attempts[job_index].options.env
   vim.env.DOTFILES_EDITOR_HANDOFF_SOURCE = env.DOTFILES_EDITOR_HANDOFF_SOURCE
+  vim.env.DOTFILES_EDITOR_HANDOFF_INSTANCE = env.DOTFILES_EDITOR_HANDOFF_INSTANCE
   vim.env.DOTFILES_EDITOR_HANDOFF_GENERATION = env.DOTFILES_EDITOR_HANDOFF_GENERATION
 end
 
@@ -440,6 +450,88 @@ check('a hidden tool restarts in a new effective working directory', function()
   assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'replacement process did not start in the new directory')
   assert(fixture.current_tab == tool_tab, 'working-directory restart replaced the Tool Tab')
   assert(not fixture.jobs[1].running, 'old repository process was left running')
+end)
+
+check('a singleton restarts when effective cwd aliases change', function()
+  local fixture = setup(nil, { realpaths = { ['/repo/link'] = '/repo/one' } })
+  fixture.invoke('n', '<leader>gg')
+  local tool_tab = fixture.current_tab
+  fixture.invoke('n', '<leader>gg')
+  fixture.cwd = '/repo/link'
+  fixture.invoke('n', '<leader>gg')
+
+  assert(#fixture.job_attempts == 2, 'singleton alias change did not preserve raw-cwd restart behavior')
+  assert(fixture.job_attempts[2].options.cwd == '/repo/link', 'singleton launched from a canonical path instead of its effective cwd')
+  assert(fixture.current_tab == tool_tab, 'singleton alias restart replaced its Tool Tab')
+  assert(not fixture.jobs[1].running, 'singleton alias restart left its old process running')
+end)
+
+check('a per-cwd declaration keeps one live Tool Tab per Host Window directory', function()
+  local fixture = setup { instances = 'cwd' }
+  fixture.invoke('n', '<leader>gg')
+  local first = assert(fixture.surface(), 'expected the first per-cwd Tool Tab')
+  local first_tab = fixture.current_tab
+  fixture.invoke('n', '<leader>gg')
+
+  fixture.switch_tab()
+  local second_host = fixture.current_win
+  fixture.windows[second_host].cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gg')
+  local second_tab = fixture.current_tab
+
+  assert(second_tab ~= first_tab, 'the second cwd replaced the first Tool Tab')
+  assert(#fixture.job_attempts == 2, 'the second cwd did not start its own terminal job')
+  assert(fixture.job_attempts[1].options.cwd == '/repo/one', 'the first instance started in the wrong cwd')
+  assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'the second instance started in the wrong cwd')
+  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'starting the second cwd stopped a live instance')
+
+  fixture.invoke('n', '<leader>gg')
+  vim.api.nvim_set_current_win(1)
+  fixture.invoke('n', '<leader>gg')
+
+  assert(fixture.current_tab == first_tab, 'returning to the first cwd did not select its Tool Tab')
+  assert(fixture.windows[fixture.current_win].buf == first.buf, 'returning to the first cwd selected the wrong terminal buffer')
+  assert(#fixture.job_attempts == 2, 'returning to the first cwd restarted its terminal job')
+end)
+
+check('per-cwd instances collapse filesystem aliases to one canonical directory', function()
+  local fixture = setup({ instances = 'cwd' }, { realpaths = { ['/repo/link'] = '/repo/one' } })
+  fixture.invoke('n', '<leader>gg')
+  local first_tab = fixture.current_tab
+  fixture.invoke('n', '<leader>gg')
+
+  fixture.switch_tab()
+  fixture.windows[fixture.current_win].cwd = '/repo/link'
+  fixture.invoke('n', '<leader>gg')
+
+  assert(fixture.current_tab == first_tab, 'a filesystem alias created a duplicate Tool Tab')
+  assert(#fixture.job_attempts == 1 and fixture.jobs[1].running, 'a filesystem alias restarted the canonical instance')
+end)
+
+check('closing one per-cwd Tool Tab preserves both live jobs and can recreate only that tab', function()
+  local fixture = setup { instances = 'cwd' }
+  fixture.invoke('n', '<leader>gg')
+  local first_tab = fixture.current_tab
+  local first_buf = fixture.windows[fixture.current_win].buf
+  fixture.invoke('n', '<leader>gg')
+
+  fixture.switch_tab()
+  local second_host = fixture.current_win
+  fixture.windows[second_host].cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gg')
+  local second_tab = fixture.current_tab
+  local second_buf = fixture.windows[fixture.current_win].buf
+  fixture.invoke('n', '<leader>gg')
+
+  vim.api.nvim_tabpage_close(first_tab, false)
+  vim.api.nvim_set_current_win(1)
+  fixture.invoke('n', '<leader>gg')
+
+  assert(fixture.current_tab ~= first_tab, 'the natively closed Tool Tab was not recreated')
+  assert(fixture.windows[fixture.current_win].buf == first_buf, 'recreating one cwd replaced its terminal buffer')
+  assert(fixture.tabs[second_tab].valid, 'recreating one cwd closed the other Tool Tab')
+  assert(fixture.buffers[second_buf], 'the other cwd lost its buffer')
+  assert(#fixture.job_attempts == 2 and fixture.jobs[1].running and fixture.jobs[2].running, 'recreating one tab restarted or stopped a job')
 end)
 
 check('tool-to-tool invocation derives its working directory from the Host Window', function()
@@ -774,6 +866,8 @@ check('tool environment extends the shell-owned editor contract', function()
 
   assert(env.OPENTUI_GRAPHICS == 'false', 'expected the tool-specific environment variable')
   assert(env.DOTFILES_EDITOR_HANDOFF_SOURCE == 'lazygit', 'expected the tool id as the editor-handoff source')
+  assert(env.DOTFILES_EDITOR_HANDOFF_INSTANCE == '1', 'expected an opaque tool-instance marker')
+  assert(env.DOTFILES_EDITOR_HANDOFF_GENERATION == '1', 'expected the tool-instance generation')
   assert(env.EDITOR == 'nvim', 'expected the shell-owned editor')
   assert(env.VISUAL == 'nvim' and env.GIT_EDITOR == 'nvim', 'expected the complete shell-owned editor contract')
 end)
@@ -781,6 +875,41 @@ end)
 check('reserved editor environment cannot be overridden', function()
   local ok, err = pcall(function() setup { env = { EDITOR = 'tool-specific-editor' } } end)
   assert(not ok and tostring(err):match 'cannot override EDITOR', 'expected an atomic configuration error for EDITOR')
+end)
+
+check('instance policy rejects unsupported cardinality', function()
+  local ok, err = pcall(function() setup { instances = 'repository-picker' } end)
+  assert(not ok and tostring(err):match "instances must be 'singleton' or 'cwd'", 'expected an atomic instance-policy error')
+end)
+
+check('production Hunk keeps a live session for each Host Window directory', function()
+  local fake, fixture = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local module_names = { 'custom.lib.terminal_tool', 'custom.lib.pack' }
+  local previous_modules = {}
+  for _, name in ipairs(module_names) do
+    previous_modules[name] = package.loaded[name]
+  end
+  package.loaded['custom.lib.terminal_tool'] = terminal_tool
+  package.loaded['custom.lib.pack'] = { gh = function(repository) return repository end }
+
+  local loaded, load_error = pcall(dofile, hunk_path)
+  for _, name in ipairs(module_names) do
+    package.loaded[name] = previous_modules[name]
+  end
+  assert(loaded, load_error)
+
+  fixture.invoke('n', '<leader>gd')
+  local first_tab = fixture.current_tab
+  fixture.invoke('n', '<leader>gd')
+  fixture.switch_tab()
+  fixture.windows[fixture.current_win].cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gd')
+
+  assert(fixture.current_tab ~= first_tab, 'production Hunk reused its first repository Tool Tab')
+  assert(#fixture.job_attempts == 2, 'production Hunk did not start one job per repository')
+  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'production Hunk stopped the first repository session')
 end)
 
 check('production declarations and flatten adapter share source-agnostic routing', function()
@@ -901,6 +1030,29 @@ check('editor handoff is source-agnostic and acknowledges only configured tools'
   assert(not terminal_tool.complete_editor_handoff {}, 'unknown handoff data should be ignored')
 end)
 
+check('per-cwd editor handoff identifies and acknowledges the exact originating job', function()
+  local fixture, terminal_tool = setup { instances = 'cwd' }
+  fixture.invoke('n', '<leader>gg')
+  use_handoff_env(fixture, 1)
+  local first_data = terminal_tool.editor_handoff_data()
+  fixture.invoke('n', '<leader>gg')
+
+  fixture.switch_tab()
+  local latest_host = fixture.current_win
+  fixture.windows[latest_host].cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gg')
+  use_handoff_env(fixture, 2)
+  local second_data = terminal_tool.editor_handoff_data()
+
+  assert(terminal_tool.complete_editor_handoff(first_data), 'the first cwd handoff was not recognized while the second was active')
+  assert(fixture.current_win == latest_host, 'the first cwd handoff ignored the global latest Host Window')
+  assert(terminal_tool.complete_editor_handoff(second_data), 'the second cwd handoff was not recognized')
+  fixture.run_deferred()
+
+  assert(#fixture.sends == 2, 'expected one acknowledgement for each originating instance')
+  assert(fixture.sends[1].job == 1 and fixture.sends[2].job == 2, 'handoff acknowledgement crossed per-cwd jobs')
+end)
+
 check('return-only editor handoff does not send terminal input', function()
   local fixture, terminal_tool = setup { id = 'hunk', handoff = 'return' }
   fixture.invoke('n', '<leader>gg')
@@ -923,6 +1075,39 @@ check('failed job startup rolls back and remains retryable', function()
     assert(fixture.invoke('n', '<leader>gg'), 'expected a later mapping invocation to retry')
     assert(#fixture.job_attempts == 2 and fixture.surface(), 'startup failure left the declaration unusable')
   end
+end)
+
+check('a failed singleton restart keeps its Tool Tab registered and retryable', function()
+  local fixture = setup(nil, { buffer_results = { true, false } })
+  fixture.invoke('n', '<leader>gg')
+  local tool_tab = fixture.current_tab
+  fixture.invoke('n', '<leader>gg')
+  fixture.cwd = '/repo/two'
+
+  assert(not fixture.invoke('n', '<leader>gg'), 'expected replacement buffer allocation to fail')
+  assert(fixture.tabs[tool_tab].valid, 'failed singleton restart orphaned or closed its Tool Tab')
+  assert(fixture.current_win == 1, 'failed singleton restart did not restore the Host Window')
+  assert(fixture.invoke('n', '<leader>gg'), 'failed singleton restart was not retryable')
+  assert(fixture.current_tab == tool_tab, 'retry created a second Tool Tab instead of reusing the registered tab')
+  assert(#fixture.job_attempts == 2, 'retry did not start exactly one replacement job')
+end)
+
+check('a failed per-cwd startup preserves another live instance and is independently retryable', function()
+  local fixture = setup({ instances = 'cwd' }, { job_results = { 1, -1 } })
+  fixture.invoke('n', '<leader>gg')
+  local first_tab = fixture.current_tab
+  fixture.invoke('n', '<leader>gg')
+
+  fixture.switch_tab()
+  local second_host = fixture.current_win
+  fixture.windows[second_host].cwd = '/repo/two'
+  assert(not fixture.invoke('n', '<leader>gg'), 'expected the second cwd startup to fail')
+  assert(fixture.current_win == second_host, 'failed second startup did not restore its invoking Host Window')
+  assert(fixture.tabs[first_tab].valid and fixture.jobs[1].running, 'failed second startup damaged the first instance')
+
+  assert(fixture.invoke('n', '<leader>gg'), 'the failed cwd was not independently retryable')
+  assert(#fixture.job_attempts == 3 and fixture.jobs[2].running, 'retry did not start only the failed cwd')
+  assert(fixture.tabs[first_tab].valid and fixture.jobs[1].running, 'retry damaged the first instance')
 end)
 
 check('failed tool-to-tool startup preserves the source Tool Tab', function()
@@ -976,6 +1161,49 @@ check('editor exit stops and briefly waits for every terminal tool job', functio
   for _, job in ipairs(wait.jobs) do waited[job] = true end
   assert(waited[1] and waited[2], 'editor exit waited for the wrong jobs')
   assert(wait.timeout > 0 and wait.timeout <= 1000, 'editor exit used an unbounded shutdown wait')
+end)
+
+check('editor exit stops every live per-cwd instance', function()
+  local fixture = setup { instances = 'cwd' }
+  fixture.invoke('n', '<leader>gg')
+  fixture.invoke('n', '<leader>gg')
+  fixture.switch_tab()
+  fixture.windows[fixture.current_win].cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gg')
+  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'expected both cwd instances to be running')
+
+  fixture.fire 'VimLeavePre'
+
+  assert(not fixture.jobs[1].running and not fixture.jobs[2].running, 'editor exit left a cwd instance running')
+  local wait = assert(fixture.waits[1], 'editor exit did not wait for the cwd instances')
+  assert(#fixture.waits == 1 and #wait.jobs == 2, 'editor exit did not wait once for every cwd instance')
+end)
+
+check('one per-cwd exit removes only that instance and invalidates its opaque handoff token', function()
+  local fixture, terminal_tool = setup { instances = 'cwd' }
+  fixture.invoke('n', '<leader>gg')
+  local first_tab = fixture.current_tab
+  use_handoff_env(fixture, 1)
+  local exited_data = terminal_tool.editor_handoff_data()
+  local exited_token = fixture.job_attempts[1].options.env.DOTFILES_EDITOR_HANDOFF_INSTANCE
+  fixture.invoke('n', '<leader>gg')
+
+  fixture.switch_tab()
+  fixture.windows[fixture.current_win].cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gg')
+  local second_tab = fixture.current_tab
+  fixture.exit_job(1)
+
+  assert(not fixture.tabs[first_tab].valid, 'exited cwd left its Tool Tab open')
+  assert(fixture.tabs[second_tab].valid and fixture.jobs[2].running, 'exited cwd damaged the other instance')
+  fixture.invoke('n', '<leader>gg')
+  vim.api.nvim_set_current_win(1)
+  fixture.invoke('n', '<leader>gg')
+
+  local replacement_token = fixture.job_attempts[3].options.env.DOTFILES_EDITOR_HANDOFF_INSTANCE
+  assert(replacement_token ~= exited_token, 'a replacement cwd reused the exited instance token')
+  assert(not terminal_tool.complete_editor_handoff(exited_data), 'an exited instance handoff redirected its replacement')
+  assert(fixture.tabs[second_tab].valid and fixture.jobs[2].running, 'stale handoff damaged the other live instance')
 end)
 
 check('a missing Host Window recovers to a new ordinary tab', function()

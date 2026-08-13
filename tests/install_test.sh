@@ -369,9 +369,9 @@ case "${0##*/}" in
         ;;
     hunk)
         if [[ -e "$DOTFILES_TEST_STATE/old-hunk" ]]; then
-            printf '0.11.1\n'
+            printf '0.18.0\n'
         else
-            printf '0.17.0\n'
+            printf '0.18.1\n'
         fi
         ;;
     tree-sitter)
@@ -799,7 +799,7 @@ test_incompatible_git_tool_versions_are_rejected_before_linking() {
 
     grep -Fq 'LazyGit 0.56+ is required' "$FIXTURE_OUTPUT" ||
         fail "old LazyGit failure was not actionable"
-    grep -Fq 'Hunk 0.12+ is required' "$FIXTURE_OUTPUT" ||
+    grep -Fq 'Hunk 0.18.1+ is required' "$FIXTURE_OUTPUT" ||
         fail "old Hunk failure was not actionable"
     assert_not_exists "$FIXTURE_HOME/.config"
     pass "Git tools below the configured integration floors are rejected before linking"

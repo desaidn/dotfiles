@@ -13,7 +13,7 @@ The most recently used non-tool window to which Tool Tabs return. Moving between
 _Avoid_: Main buffer, previous tab, calling tool
 
 **Tool Tab**:
-A dedicated Development Surface workspace owned by one terminal tool. Invoking the tool returns to its existing workspace rather than creating another; the workspace exists until the tool exits.
+A dedicated Development Surface workspace owned by one terminal-tool instance. Invoking a tool selects the existing instance for the Host Window's context; singleton tools have one instance. The workspace exists until that instance's process exits.
 _Avoid_: Terminal float, tool window, Terminal Tool Surface
 
 **Language Tooling**:
