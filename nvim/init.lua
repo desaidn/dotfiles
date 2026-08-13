@@ -165,6 +165,9 @@ do
   -- Keep signcolumn on by default
   vim.o.signcolumn = 'yes'
 
+  -- Forward passive mouse movement to hover-aware terminal tools such as Hunk.
+  vim.o.mousemoveevent = true
+
   -- Decrease update time
   vim.o.updatetime = 250
 
