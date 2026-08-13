@@ -360,6 +360,20 @@ case "${0##*/}" in
     tmux)
         printf 'tmux 3.7b\n'
         ;;
+    lazygit)
+        if [[ -e "$DOTFILES_TEST_STATE/old-lazygit" ]]; then
+            printf 'commit=, build date=, build source=Homebrew, version=0.55.2, os=darwin, arch=arm64\n'
+        else
+            printf 'commit=, build date=, build source=Homebrew, version=0.63.0, os=darwin, arch=arm64\n'
+        fi
+        ;;
+    hunk)
+        if [[ -e "$DOTFILES_TEST_STATE/old-hunk" ]]; then
+            printf '0.11.1\n'
+        else
+            printf '0.17.0\n'
+        fi
+        ;;
     tree-sitter)
         printf 'tree-sitter 0.26.1\n'
         ;;
@@ -537,7 +551,6 @@ new_fixture() {
 run_installer() {
     local expected_result="${1:-success}"
     local run_home="$FIXTURE_HOME"
-    local installer_args=()
 
     if (( $# > 0 )); then
         shift
@@ -546,7 +559,6 @@ run_installer() {
         run_home="$1"
         shift
     fi
-    installer_args=("$@")
 
     if (
         cd "$FIXTURE_CALLER_DIR"
@@ -569,7 +581,7 @@ run_installer() {
             DOTFILES_TEST_REPO_ROOT="$FIXTURE_INSTALL_REPO_ROOT" \
             DOTFILES_TEST_RUNTIME_TEMPLATE="$FIXTURE_RUNTIME_TEMPLATE" \
             DOTFILES_TEST_STATE="$FIXTURE_STATE" \
-            "$FIXTURE_INSTALL_REPO_ROOT/install.sh" "${installer_args[@]}"
+            "$FIXTURE_INSTALL_REPO_ROOT/install.sh" "$@"
     ) >"$FIXTURE_OUTPUT" 2>&1
     then
         if [[ "$expected_result" == "failure" ]]; then
@@ -776,6 +788,21 @@ test_non_corretto_jdk_is_rejected_before_linking() {
         fail "non-Corretto JDK failure was not actionable"
     assert_not_exists "$FIXTURE_HOME/.config"
     pass "non-Corretto JDKs are rejected before configuration mutations"
+}
+
+test_incompatible_git_tool_versions_are_rejected_before_linking() {
+    new_fixture incompatible-git-tool-versions Darwin
+    : >"$FIXTURE_STATE/old-lazygit"
+    : >"$FIXTURE_STATE/old-hunk"
+
+    run_installer failure
+
+    grep -Fq 'LazyGit 0.56+ is required' "$FIXTURE_OUTPUT" ||
+        fail "old LazyGit failure was not actionable"
+    grep -Fq 'Hunk 0.12+ is required' "$FIXTURE_OUTPUT" ||
+        fail "old Hunk failure was not actionable"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "Git tools below the configured integration floors are rejected before linking"
 }
 
 test_user_mise_config_does_not_override_bootstrap_manifest() {
@@ -1252,6 +1279,7 @@ test_linux_manager_fresh_and_second_run pacman
 test_unsupported_linux_package_manager
 test_linux_handoff_is_validated_before_linking
 test_non_corretto_jdk_is_rejected_before_linking
+test_incompatible_git_tool_versions_are_rejected_before_linking
 test_uninstall_cli_is_safe
 test_install_and_uninstall_reject_unsafe_homes
 test_uninstall_removes_only_owned_links

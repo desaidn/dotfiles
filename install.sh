@@ -379,6 +379,17 @@ validate_brew_dependencies() {
     version_at_least "$version" "3.7.0" ||
         errors+=("tmux 3.7+ is required (found '${version:-unknown}')")
 
+    output="$(lazygit --version 2>/dev/null || true)"
+    version="${output#*version=}"
+    version="${version%%,*}"
+    version_at_least "$version" "0.56.0" ||
+        errors+=("LazyGit 0.56+ is required (found '${version:-unknown}')")
+
+    output="$(hunk --version 2>/dev/null || true)"
+    version="${output##* }"
+    version_at_least "$version" "0.12.0" ||
+        errors+=("Hunk 0.12+ is required (found '${version:-unknown}')")
+
     output="$(tree-sitter --version 2>/dev/null || true)"
     version="${output##* }"
     version_at_least "$version" "0.26.1" ||

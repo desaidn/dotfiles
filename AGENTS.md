@@ -19,8 +19,9 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 ### Development Tools
 
 - **Neovim** (`nvim/`) - Primary editor for most languages (see `nvim/AGENTS.md` for details)
-- **LazyGit** (`lazygit/config.yml`) - Git TUI with nvim integration, native staging UI, and custom theme
-- **Hunk** (`hunk/config.toml`) - Full stacked review surface from Neovim for the working tree and the index; only durable preferences are tracked
+- **LazyGit** (`lazygit/config.yml`) - Git Transaction Surface with nvim
+  integration, Hunk as its Diffing Solution, native staging, and a custom theme
+- **Hunk** (`hunk/config.toml`) - Full stacked working-tree and staged review surface from Neovim; only durable preferences are tracked
 
 ### Dependency ownership
 
@@ -29,7 +30,8 @@ Keep provisioning ownership explicit:
 - **Platform bootstrap** owns Homebrew plus the compiler, download, and archive
   utilities required to install Homebrew and populate Neovim.
 - **Homebrew** owns applications and standalone CLIs: Git, Fish 3.2+, Zsh,
-  Neovim 0.12.4 stable, Herdr, tmux 3.7+, lazygit, Hunk, Mise, Atuin, `gh`,
+  Neovim 0.12.4 stable, Herdr, tmux 3.7+, LazyGit 0.56+, Hunk 0.12+,
+  Mise, Atuin, `gh`,
   ripgrep, tree-sitter CLI 0.26.1+, and capability-specific tools such as
   `uv` and `ghcup`; on Linux it also owns `xclip` and `wl-clipboard`.
 - **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy/rustfmt, and Amazon
@@ -100,7 +102,8 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 
 ### Git Operations
 
-- Use `lazygit` for TUI operations (integrated with nvim via `<leader>gg`)
+- Use `lazygit` for TUI operations (integrated with nvim via `<leader>gg`),
+  with Hunk as its Diffing Solution and native LazyGit staging controls
 - Configured with custom theme matching development environment
 - Use direct Hunk from Neovim only for full stacked review: `<leader>gd` → `hunk diff --watch --mode stack` for the working tree, `<leader>gD` → the same review with `--staged`. Both inputs share one Tool Tab and one process, so exactly one session matches the repository and the `--repo .` selector on `hunk session` subcommands stays unambiguous.
 - Keep gitsigns keymaps hunk-local; buffer-wide stage/reset operations belong in lazygit.
@@ -110,7 +113,7 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 - Treat the user-facing code interface as Neovim plus terminal tools, regardless of which agent harness is active.
 - Keep harness-specific instructions as thin adapters into shared repo guidance.
 - Do not add Codex-only or Claude-only workflows when a shared command, file, or review surface can express the same behavior.
-- Hunk is the direct full review surface from Neovim for both the working tree and the index; lazygit remains the Git transaction surface and uses its native diff/staging UI.
+- Hunk is the direct full Review Surface from Neovim for both the working tree and the index and the Diffing Solution inside lazygit; lazygit remains the Git Transaction Surface and keeps its native staging UI.
 
 ## Architecture Notes
 

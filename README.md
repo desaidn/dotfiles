@@ -12,7 +12,7 @@ The setup is designed around one uniform code interface: Herdr is the daily work
 | `ghostty/`          | `~/.config/ghostty/`         | macOS Ghostty terminal config.                            |
 | `herdr/config.toml` | `~/.config/herdr/config.toml` | Daily workspace config; mutable runtime state is local.   |
 | `hunk/config.toml`  | `~/.config/hunk/config.toml`  | Review preferences; mutable runtime state remains local.  |
-| `lazygit/`          | `~/.config/lazygit/`         | Git TUI with Neovim editor handoff and native staging UI. |
+| `lazygit/`          | `~/.config/lazygit/`         | Git Transaction Surface with Hunk as its Diffing Solution. |
 | `mise/conf.d/00-dotfiles.toml` | `~/.config/mise/conf.d/00-dotfiles.toml` | Global runtime defaults; user config can override them. |
 | `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack`.           |
 | `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer with 1-indexed windows and panes.    |
@@ -30,8 +30,11 @@ This repo keeps the interface to code agent-harness agnostic:
 - Keep external dependencies narrow, durable, and easy to replace; avoid plugin layers that only wrap behavior Neovim already owns.
 - Use self-made or locally-owned performant tools when a workflow needs more than native Neovim but should remain inspectable, fast, and independent of an agent harness.
 - Use gitsigns for local in-buffer hunk operations.
-- Use Hunk directly from Neovim for full stacked review of the working tree (`<leader>gd`) or staged changes (`<leader>gD`).
-- Use lazygit for Git state, staging, stashes, history, branches, and commits.
+- Use Hunk as the Diffing Solution: directly from Neovim for full stacked
+  working-tree (`<leader>gd`) and staged (`<leader>gD`) review, and inside
+  lazygit for rendered diffs.
+- Use lazygit as the Git Transaction Surface for Git state, staging, stashes,
+  history, branches, and commits.
 - Let shell configuration declare Neovim as the global editor through `EDITOR`, `VISUAL`, and `GIT_EDITOR`.
 - Use flatten.nvim for editor handoff from terminal tools back into the host Neovim instance.
 - Keep Neovim gitsigns actions hunk-local; buffer-wide Git transactions belong in lazygit.
@@ -122,8 +125,8 @@ layer:
 | `neovim` | `nvim`; exactly stable 0.12.4 |
 | `herdr` | Daily workspace manager |
 | `tmux` | Fallback multiplexer; version 3.7 or newer |
-| `lazygit` | Git transaction surface |
-| `hunk` | Stacked working-tree and staged review surface |
+| `lazygit` | Git Transaction Surface; version 0.56 or newer for the configured Diffing Solution |
+| `hunk` | Diffing Solution and stacked working-tree and staged Review Surface; version 0.12 or newer for LazyGit rendering |
 | `mise` | Language runtime manager |
 | `atuin` | Shell history integration |
 | `gh` | GitHub issue workflows described under `docs/agents/` |
