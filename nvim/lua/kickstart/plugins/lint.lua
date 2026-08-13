@@ -2,6 +2,7 @@
 -- https://github.com/mfussenegger/nvim-lint
 
 local gh = require('custom.lib.pack').gh
+local lint_root = require 'custom.lib.lint_root'
 local languages = require 'custom.languages'
 
 vim.pack.add { gh 'mfussenegger/nvim-lint' }
@@ -23,7 +24,18 @@ end
 
 -- Skip read-only buffers (e.g. LSP hover popups) to avoid superfluous noise
 local function try_lint_if_modifiable()
-  if vim.bo.modifiable then lint.try_lint() end
+  if not vim.bo.modifiable then return end
+
+  local bufnr = vim.api.nvim_get_current_buf()
+  local cwd
+  for _, linter in ipairs(lint.linters_by_ft[vim.bo[bufnr].filetype] or {}) do
+    if linter == 'eslint_d' then
+      cwd = lint_root.eslint_root(bufnr)
+      break
+    end
+  end
+
+  lint.try_lint(nil, { cwd = cwd })
 end
 
 -- Run linters on key buffer events

@@ -21,7 +21,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `gitsigns.lua` - Git signs, blame, and hunk navigation keymaps
   - `neo-tree.lua` - File explorer (right-side, text-based icons)
   - `debug.lua` - DAP debugger keymaps plus on-demand Python setup via debugpy/uv; DAP plugins load on first debug action, not normal startup
-  - `lint.lua` - nvim-lint with eslint_d and ruff
+  - `lint.lua` - nvim-lint with eslint_d and ruff; ESLint runs from the nearest config root
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
 - `lua/custom/lib/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
@@ -37,6 +37,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
+- `tests/lint_spec.lua` - Headless regression harness for nearest ESLint config CWD selection and fallback behavior
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
