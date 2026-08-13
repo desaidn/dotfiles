@@ -74,3 +74,16 @@ require('neo-tree').setup {
     },
   },
 }
+
+local manager = require 'neo-tree.sources.manager'
+local renderer = require 'neo-tree.ui.renderer'
+local filesystem_commands = require 'neo-tree.sources.filesystem.commands'
+
+vim.api.nvim_create_autocmd('FocusGained', {
+  group = vim.api.nvim_create_augroup('NeoTreeRefreshOnFocus', { clear = true }),
+  desc = 'Refresh the visible Neo-tree filesystem after external changes',
+  callback = function()
+    local state = manager.get_state 'filesystem'
+    if renderer.window_exists(state) then filesystem_commands.refresh(state) end
+  end,
+})

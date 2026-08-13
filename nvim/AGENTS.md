@@ -36,6 +36,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
+- `tests/neo_tree_spec.lua` - Headless regression harness for refreshing a visible filesystem tree after its watcher misses an external change
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration, proving its complete first frame renders without graphics-protocol artifacts inside its Tool Tab, and verifying that both test-owned Hunk processes exit during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
@@ -168,6 +169,7 @@ Neo-tree file explorer is enabled with right-side positioning and minimal stylin
 - Switch sources with `<Tab>` (filesystem → buffers → git_status)
 - Configured without icons for clean, text-based interface
 - Git status colors match the main colorscheme (+, ~, -, etc.)
+- `nvim --clean --headless -l nvim/tests/neo_tree_spec.lua` - Verify a visible filesystem tree refreshes on `FocusGained` after a watcher failure
 
 ### Customization Points
 
