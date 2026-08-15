@@ -20,6 +20,6 @@ vim.api.nvim_create_autocmd('FileType', {
   group = vim.api.nvim_create_augroup('python-dap-setup', { clear = true }),
   pattern = 'python',
   callback = function(event)
-    require('custom.lib.dap').register_buffer_setup(event.buf, ensure_debugpy)
+    require('custom.languages.dap').register_buffer_setup(event.buf, ensure_debugpy)
   end,
 })

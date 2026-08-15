@@ -461,7 +461,10 @@ do
   -- Plugins in this module come from upstream nvim-lua/kickstart.nvim.
   require 'kickstart.plugins'
 
-  -- Add your own plugins to `lua/custom/plugins/*.lua`.
+  -- Repository-owned language tooling stays separate from the Kickstart base.
+  require 'custom.languages'
+
+  -- Add other local features to `lua/custom/plugins/*.lua`.
   require 'custom.plugins'
 end
 

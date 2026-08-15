@@ -109,7 +109,7 @@ Use `:lua vim.pack.update(nil, { offline = true })` to inspect plugin state,
 and `:checkhealth` to diagnose issues.
 
 Shared LSP, Mason, Treesitter, formatter, format-on-save, and linter support is
-declared once in `lua/custom/languages.lua`; plugin configurations consume its
+declared once in `lua/custom/languages/config.lua`; language tooling consumes its
 native-shaped declarations directly.
 
 ## Reset

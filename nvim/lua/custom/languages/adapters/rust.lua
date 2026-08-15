@@ -7,7 +7,7 @@ vim.g.rustaceanvim = {
     -- rustaceanvim discovers CodeLLDB and installs its Rust configurations
     -- during LSP attachment, so DAP must be ready before its default callback.
     on_attach = function()
-      require('custom.lib.dap').ensure()
+      require('custom.languages.dap').ensure()
     end,
     default_settings = {
       ['rust-analyzer'] = {

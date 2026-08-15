@@ -1,6 +1,6 @@
 local failures = {}
 local script_path = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
-local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/..')
+local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/../..')
 
 package.path = table.concat({
   nvim_root .. '/lua/?.lua',
@@ -8,7 +8,7 @@ package.path = table.concat({
   package.path,
 }, ';')
 
-local languages = require 'custom.languages'
+local languages = require 'custom.languages.config'
 
 local function check(name, body)
   local ok, err = pcall(body)

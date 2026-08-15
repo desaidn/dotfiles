@@ -4,7 +4,7 @@ Guidance for coding agents working on the nvim config. See [`../AGENTS.md`](../A
 
 ## Neovim Configuration Overview
 
-This is a Neovim configuration based on kickstart.nvim, providing a well-documented starting point for Neovim customization. `init.lua` handles core settings, basic keymaps, native `vim.pack` build hooks, and core UI plugins; each modular plugin configuration lives under `lua/kickstart/plugins/` or `lua/custom/plugins/`.
+This is a Neovim configuration based on kickstart.nvim, providing a well-documented starting point for Neovim customization. `init.lua` handles core settings, basic keymaps, native `vim.pack` build hooks, and core UI plugins; each modular plugin configuration lives under `lua/kickstart/plugins/`, `lua/custom/languages/`, or `lua/custom/plugins/`.
 
 ## Core Architecture
 
@@ -12,25 +12,22 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 
 - `init.lua` - Core settings, basic keymaps, autocommands, native `vim.pack` build hooks, core UI plugins, and top-level module imports
 - `colors/custom.lua` - Custom colorscheme (transparent backgrounds, peach accents)
-- `lua/kickstart/plugins/` - Auto-imported by `lua/kickstart/plugins/init.lua` in the established startup order; each plugin file calls `vim.pack.add()` for the plugin(s) it owns and then configures them:
-  - `lsp.lua` - nvim-lspconfig, Mason, fidget, and generic application of the Language Tooling Inventory's native LSP configurations
+- `lua/kickstart/plugins/` - Upstream-oriented Kickstart modules, explicitly loaded by `lua/kickstart/plugins/init.lua`.
   - `blink-cmp.lua` - blink.cmp completion with LuaSnip
-  - `conform.lua` - conform.nvim formatter config and format-on-save
   - `telescope.lua` - Telescope pickers and LSP reference/definition keymaps
   - `treesitter.lua` - nvim-treesitter and treesitter-context, restricted to the Inventory's parser whitelist
   - `gitsigns.lua` - Git signs, blame, and hunk navigation keymaps
   - `neo-tree.lua` - File explorer (right-side, text-based icons)
-  - `debug.lua` - DAP debugger keymaps; shared setup stays lazy until a debug action or Rust LSP attachment
-  - `python.lua` - Python-owned lazy debugpy setup via uv
-  - `rust.lua` - rustaceanvim-owned rust-analyzer and CodeLLDB integration
-  - `lint.lua` - nvim-lint with eslint_d and ruff; ESLint runs from the nearest config root
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
 - `lua/custom/lib/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
-- `lua/custom/lib/dap.lua` - Shared lazy nvim-dap and DAP UI setup; language integrations register their own buffer-specific debuggers
-- `lua/custom/lib/plugins_loader.lua` - Shared sorted directory plugin module loader used by `kickstart.plugins` and `custom.plugins`
 - `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should run in a persistent Tool Tab while leaving host tmux navigation available when Neovim is running in the tmux fallback
-- `lua/custom/languages.lua` - Canonical read-only Language Tooling Inventory: native LSP configurations, Mason packages, the Treesitter parser whitelist, Conform formatting policy, and nvim-lint mappings
+- `lua/custom/languages/` - Repository-owned language tooling, loaded explicitly by `init.lua`:
+  - `init.lua` - deterministic language-tooling bootstrap
+  - `config.lua` - canonical declarative LSP, Mason, Treesitter, formatting, and linting configuration
+  - `lsp.lua`, `format.lua`, `lint.lua`, and `dap.lua` - shared language surfaces
+  - `dap.lua` - shared lazy DAP lifecycle, UI, controls, and buffer-specific debugger registration
+  - `adapters/python.lua` and `adapters/rust.lua` - language-specific adapters
 - `lua/custom/plugins/` - Auto-imported by `lua/custom/plugins/init.lua`; every sibling `*.lua` file is required, following symlinks:
   - `init.lua` - Custom plugin loader
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
@@ -40,10 +37,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
-- `tests/lint_spec.lua` - Headless regression harness for nearest ESLint config CWD selection and fallback behavior
-- `tests/rust_spec.lua` - Headless regression harness for rustaceanvim ownership, lazy DAP initialization, and the shared keymap boundary
-- `tests/python_spec.lua` - Headless regression harness for Python-buffer-only lazy debugpy registration and one-time setup
-- `tests/python_spec.lua` - Headless regression harness for Python-buffer-only lazy debugpy registration and one-time setup
+- `tests/languages/` - Headless language-tooling regression harnesses for inventory, linting, DAP, Python, and Rust behavior
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
@@ -51,7 +45,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 
 Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple and idiomatic: call `vim.pack.add()` for the package(s) they own, configure them directly, and avoid recreating lazy.nvim's trigger DSL. Prefer native Neovim APIs before adding plugins, and keep each plugin responsible for a clear capability that is not already covered by core Neovim or a local helper. Core plugins include:
 
-- **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ server configuration lives in the Language Tooling Inventory and is applied by `lua/kickstart/plugins/lsp.lua`
+- **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ server configuration lives in `lua/custom/languages/`.
 - **Completion**: blink.cmp with LuaSnip for snippets
 - **Fuzzy Finding**: fff.nvim for files and live grep (`<leader>sf`, `<leader>sg`); Telescope with fzf-native for help, keymaps, diagnostics, buffers, LSP symbols, and word-under-cursor grep
 - **Git Integration**: gitsigns (in-editor signs, blame, local hunks); Hunk (working-tree and staged review); lazygit (Git transaction UI)
@@ -101,15 +95,15 @@ common target-selection interface is designed.
 
 Configured with multiple language servers (TypeScript, Python, Rust, Lua, JSON, YAML, HTML, CSS, Haskell, Java, Kotlin). Three config layers (lowest to highest priority):
 
-1. **`vim.lsp.config('*')` in `lua/kickstart/plugins/lsp.lua`** — shared client capabilities
+1. **`vim.lsp.config('*')` in `lua/custom/languages/lsp.lua`** — shared client capabilities
 2. **nvim-lspconfig defaults** — cmd, filetypes, root_dir, commands (no files needed)
-3. **Named configurations in `lua/custom/languages.lua`** — server-specific settings and callbacks applied through `vim.lsp.config()`
+3. **Named configurations in `lua/custom/languages/config.lua`** — server-specific settings and callbacks applied through `vim.lsp.config()`
 
-Common language facts live in the Language Tooling Inventory at `lua/custom/languages.lua`. Its fields use the native data shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, and nvim-lint. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes. LSP enablement and Mason installation stay explicit because runtime configuration names and package names differ, and some project-owned tools should not be installed by Mason. Plugin setup, event wiring, invocation, and other runtime behavior remain in the plugin modules.
+Common language configuration lives in `lua/custom/languages/config.lua`; shared lifecycle and language adapters live beside it in the same folder. Its fields use the native data shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, and nvim-lint. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes.
 
 To add a new language server:
 
-1. Add the server's nvim-lspconfig name and native configuration to `lsp_servers` in `lua/custom/languages.lua`; use an empty table when nvim-lspconfig defaults are sufficient.
+1. Add the server's nvim-lspconfig name and native configuration to `lsp_servers` in `lua/custom/languages/config.lua`; use an empty table when nvim-lspconfig defaults are sufficient.
 2. Add its Mason package to `mason_tools` only when Mason owns installation, and add the required Treesitter parsers to `treesitter_parsers`.
 3. Add native Conform or nvim-lint filetype mappings and any format-on-save policy in the same Inventory when the language needs them.
 4. Restart Neovim, then use `:Mason` to inspect installation status.
@@ -190,8 +184,8 @@ Neo-tree file explorer is enabled with right-side positioning and minimal stylin
 
 ### Customization Points
 
-- `lua/custom/plugins/` - Drop a new `*.lua` file here and it will be auto-imported by the custom plugin loader
-- `lua/custom/languages.lua` - Add or change native-shaped LSP, Mason, Treesitter, formatter, format-on-save, and linter declarations
+- `lua/custom/plugins/` - Add a module here and explicitly require it from `lua/custom/plugins/init.lua`
+- `lua/custom/languages/` - Add or change inventory declarations, shared language lifecycle, or a language-specific adapter
 
 ### Important Settings
 

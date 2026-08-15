@@ -2,8 +2,26 @@
 -- https://github.com/mfussenegger/nvim-lint
 
 local gh = require('custom.lib.pack').gh
-local lint_root = require 'custom.lib.lint_root'
-local languages = require 'custom.languages'
+local languages = require 'custom.languages.config'
+
+local eslint_config_markers = {
+  {
+    '.eslintrc',
+    '.eslintrc.js',
+    '.eslintrc.cjs',
+    '.eslintrc.yaml',
+    '.eslintrc.yml',
+    '.eslintrc.json',
+    'eslint.config.js',
+    'eslint.config.mjs',
+    'eslint.config.cjs',
+    'eslint.config.ts',
+    'eslint.config.mts',
+    'eslint.config.cts',
+  },
+}
+
+local function eslint_root(source) return vim.fs.root(source, eslint_config_markers) end
 
 vim.pack.add { gh 'mfussenegger/nvim-lint' }
 
@@ -30,7 +48,7 @@ local function try_lint_if_modifiable()
   local cwd
   for _, linter in ipairs(lint.linters_by_ft[vim.bo[bufnr].filetype] or {}) do
     if linter == 'eslint_d' then
-      cwd = lint_root.eslint_root(bufnr)
+      cwd = eslint_root(bufnr)
       break
     end
   end

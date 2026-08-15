@@ -106,7 +106,7 @@ or read `:help MiniAi` and `:help MiniSurround`.
 LANGUAGE TOOLING                                 *dotfiles-nvim-languages*
                                            *dotfiles-nvim-language-tooling*
 
-The Language Tooling Inventory in `lua/custom/languages.lua` is the source of
+The language configuration in `lua/custom/languages/config.lua` is the source of
 truth for enabled LSP configurations, Mason-owned packages, Treesitter
 parsers, formatters, format-on-save policy, and linters. The surrounding
 plugin modules consume that inventory; language intent is not duplicated in
@@ -214,9 +214,9 @@ educational comments:
 
 `lua/custom/plugins/`
     Repo-owned integrations. Add a sibling `*.lua` module here for a new
-    personal plugin capability; the sorted loader imports it automatically.
+    personal plugin capability; require it explicitly from its `init.lua`.
 
-`lua/custom/languages.lua`
+`lua/custom/languages/config.lua`
     The canonical Language Tooling Inventory. Add a language capability here
     instead of scattering tool-specific declarations across plugin modules.
 

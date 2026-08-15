@@ -43,9 +43,9 @@ The result will still not be a single proprietary, polyglot semantic index. LSP 
 
 ### Shared editor layer
 
-`nvim/lua/kickstart/plugins/lsp.lua` already uses the Neovim 0.11+ `vim.lsp.config`/`vim.lsp.enable` API, merges Blink completion capabilities, attaches standard mappings, document highlights, and capability-gated inlay hints. This follows the current [Neovim LSP configuration model](https://neovim.io/doc/user/lsp/). `nvim-lspconfig` supplies executable, filetype, and root defaults.
+`nvim/lua/custom/languages/lsp.lua` uses the Neovim 0.11+ `vim.lsp.config`/`vim.lsp.enable` API, merges Blink completion capabilities, attaches standard mappings, document highlights, and capability-gated inlay hints. This follows the current [Neovim LSP configuration model](https://neovim.io/doc/user/lsp/). `nvim-lspconfig` supplies executable, filetype, and root defaults.
 
-`nvim/lua/custom/lib/dap.lua` lazy-loads the shared `nvim-dap`, `nvim-dap-ui`, and `nvim-nio` stack; [`python.lua`](../nvim/lua/kickstart/plugins/python.lua) separately owns lazy `nvim-dap-python`/debugpy setup for Python buffers. [`debug.lua`](../nvim/lua/kickstart/plugins/debug.lua) provides the basic start/continue/step/breakpoint mappings and opens/closes the UI around sessions. [nvim-dap](https://github.com/mfussenegger/nvim-dap) supports the required generic launch, attach, breakpoint, stepping, inspection, and REPL operations; adapters are intentionally language-specific dependencies.
+`nvim/lua/custom/languages/dap.lua` owns the shared lazy `nvim-dap`, `nvim-dap-ui`, and `nvim-nio` stack plus the common controls; [`python.lua`](../nvim/lua/custom/languages/python.lua) separately owns lazy `nvim-dap-python`/debugpy setup for Python buffers. [nvim-dap](https://github.com/mfussenegger/nvim-dap) supports the required generic launch, attach, breakpoint, stepping, inspection, and REPL operations; adapters are intentionally language-specific dependencies.
 
 Provisioning boundaries are clear:
 

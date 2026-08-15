@@ -55,6 +55,6 @@ their own setup only when needed.
 ## Starting points
 
 - [`docs/lsp-dap-research.md`](../lsp-dap-research.md)
-- [`nvim/lua/custom/lib/dap.lua`](../../nvim/lua/custom/lib/dap.lua)
-- [`nvim/lua/kickstart/plugins/rust.lua`](../../nvim/lua/kickstart/plugins/rust.lua)
+- [`nvim/lua/custom/languages/dap.lua`](../../nvim/lua/custom/languages/dap.lua)
+- [`nvim/lua/custom/languages/rust.lua`](../../nvim/lua/custom/languages/rust.lua)
 - [`nvim/AGENTS.md`](../../nvim/AGENTS.md)

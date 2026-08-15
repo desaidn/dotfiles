@@ -23,16 +23,6 @@ local function packadd_if_needed(name, active)
   return true
 end
 
-local function sync_treesitter_artifacts(kind)
-  local ok, treesitter = pcall(require, 'nvim-treesitter')
-  if not ok then return end
-
-  -- install() skips existing parsers; update() advances installed parser/query pairs together.
-  local operation = kind == 'update' and treesitter.update or treesitter.install
-  local task = operation(require('custom.languages').treesitter_parsers)
-  if task and task.wait then task:wait(60000) end
-end
-
 local function install_fff_binary()
   local ok, download = pcall(require, 'fff.download')
   if ok then download.download_or_build_binary() end
@@ -53,11 +43,6 @@ function M.setup()
 
       if name == 'LuaSnip' then
         if vim.fn.has 'win32' ~= 1 and vim.fn.executable 'make' == 1 then run_build(name, { 'make', 'install_jsregexp' }, ev.data.path) end
-        return
-      end
-
-      if name == 'nvim-treesitter' then
-        if packadd_if_needed(name, ev.data.active) then sync_treesitter_artifacts(kind) end
         return
       end
 

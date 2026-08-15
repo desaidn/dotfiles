@@ -6,7 +6,7 @@ Provide reliable OCaml and OxCaml editing in Neovim—LSP features, formatting, 
 
 ## Context / current state
 
-The canonical Language Tooling Inventory in [`lua/custom/languages.lua`](../../nvim/lua/custom/languages.lua) currently enables neither `ocamllsp` nor `ocamlformat`, and its authoritative Treesitter parser whitelist does not include OCaml.
+The canonical Language Tooling Inventory in [`lua/custom/languages/inventory.lua`](../../nvim/lua/custom/languages/inventory.lua) currently enables neither `ocamllsp` nor `ocamlformat`, and its authoritative Treesitter parser whitelist does not include OCaml.
 
 The Inventory keeps enabled LSP configuration names and Mason-managed package names in independent tables. It can therefore enable `ocamllsp` without adding it to `mason_tools`, which matches current OCaml guidance to install `ocaml-lsp-server` in the active opam switch because the language server is compiler-version-sensitive. `ocamlformat` is similarly expected to match the project toolchain and can be configured without making Mason its installer. At the time this brief was written, `opam`, `ocamllsp`, `ocamlformat`, and `dune` were not available on the investigating workstation's `PATH`.
 
@@ -71,9 +71,9 @@ Upstream behavior is especially time-sensitive here. Before changing code, re-re
 
 ## Starting points / references
 
-- [`nvim/lua/custom/languages.lua`](../../nvim/lua/custom/languages.lua) — current Language Tooling Inventory, including independent LSP configuration, Mason installation, and Treesitter parser declarations.
-- [`nvim/lua/kickstart/plugins/lsp.lua`](../../nvim/lua/kickstart/plugins/lsp.lua) — `nvim-lspconfig`, Mason, and LSP enablement adapter.
-- [`nvim/lua/kickstart/plugins/conform.lua`](../../nvim/lua/kickstart/plugins/conform.lua) — formatter adapter.
+- [`nvim/lua/custom/languages/inventory.lua`](../../nvim/lua/custom/languages/inventory.lua) — current Language Tooling Inventory, including independent LSP configuration, Mason installation, and Treesitter parser declarations.
+- [`nvim/lua/custom/languages/lsp.lua`](../../nvim/lua/custom/languages/lsp.lua) — `nvim-lspconfig`, Mason, and LSP enablement adapter.
+- [`nvim/lua/custom/languages/format.lua`](../../nvim/lua/custom/languages/format.lua) — formatter adapter.
 - [`nvim/AGENTS.md`](../../nvim/AGENTS.md) — current language-tooling workflow and platform/path constraints.
 - [OCaml editor setup](https://ocaml.org/docs/set-up-editor) — official editor and Neovim guidance.
 - [OCaml LSP](https://github.com/ocaml/ocaml-lsp) — server installation and compatibility details.

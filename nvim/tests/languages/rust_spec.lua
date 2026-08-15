@@ -1,6 +1,6 @@
 local failures = {}
 local script_path = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
-local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/..')
+local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/../..')
 
 package.path = table.concat({ nvim_root .. '/lua/?.lua', nvim_root .. '/lua/?/init.lua', package.path }, ';')
 
@@ -16,11 +16,11 @@ end
 
 local original_pack_add = vim.pack.add
 local original_config = vim.g.rustaceanvim
-local original_dap = package.loaded['custom.lib.dap']
+local original_dap = package.loaded['custom.languages.dap']
 local captured
 vim.pack.add = function(spec) captured = spec end
 
-local ok, err = xpcall(function() dofile(nvim_root .. '/lua/kickstart/plugins/rust.lua') end, debug.traceback)
+local ok, err = xpcall(function() dofile(nvim_root .. '/lua/custom/languages/adapters/rust.lua') end, debug.traceback)
 vim.pack.add = original_pack_add
 
 check('loads rustaceanvim v9 before Rust buffers attach', function()
@@ -32,7 +32,7 @@ end)
 
 check('loads DAP before rustaceanvim creates CodeLLDB configurations', function()
   local ensured = false
-  package.loaded['custom.lib.dap'] = { ensure = function() ensured = true end }
+  package.loaded['custom.languages.dap'] = { ensure = function() ensured = true end }
   vim.g.rustaceanvim.server.on_attach(nil, 0)
   assert(ensured, 'Rust on_attach did not initialize the shared DAP stack')
 end)
@@ -53,6 +53,6 @@ check('does not claim Rust-only keymaps over the common language interface', fun
 end)
 
 vim.g.rustaceanvim = original_config
-package.loaded['custom.lib.dap'] = original_dap
+package.loaded['custom.languages.dap'] = original_dap
 if #failures > 0 then error(string.format('%d Rust configuration check(s) failed: %s', #failures, table.concat(failures, ', '))) end
 io.stdout:write 'All Rust configuration checks passed.\n'

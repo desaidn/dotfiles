@@ -1,6 +1,6 @@
 local failures = {}
 local script_path = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
-local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/..')
+local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/../..')
 
 package.path = table.concat({ nvim_root .. '/lua/?.lua', nvim_root .. '/lua/?/init.lua', package.path }, ';')
 
@@ -17,8 +17,8 @@ end
 local original_pack_add = vim.pack.add
 local captured
 vim.pack.add = function(spec) captured = spec end
-package.loaded['custom.lib.dap'] = nil
-local dap = assert(loadfile(nvim_root .. '/lua/custom/lib/dap.lua'))()
+package.loaded['custom.languages.dap'] = nil
+local dap = assert(loadfile(nvim_root .. '/lua/custom/languages/dap.lua'))()
 vim.pack.add = original_pack_add
 
 check('keeps the shared DAP loader language-neutral', function()

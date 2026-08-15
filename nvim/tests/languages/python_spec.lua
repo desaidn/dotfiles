@@ -1,6 +1,6 @@
 local failures = {}
 local script_path = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
-local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/..')
+local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/../..')
 
 package.path = table.concat({ nvim_root .. '/lua/?.lua', nvim_root .. '/lua/?/init.lua', package.path }, ';')
 
@@ -15,7 +15,7 @@ local function check(name, body)
 end
 
 local original_pack_add = vim.pack.add
-local original_dap = package.loaded['custom.lib.dap']
+local original_dap = package.loaded['custom.languages.dap']
 local original_dap_python = package.preload['dap-python']
 local captured
 local buffer_setups = {}
@@ -24,7 +24,7 @@ local pack_root = vim.fn.tempname()
 local original_packpath = vim.o.packpath
 
 vim.pack.add = function(spec) captured = spec end
-package.loaded['custom.lib.dap'] = {
+package.loaded['custom.languages.dap'] = {
   register_buffer_setup = function(bufnr, setup) buffer_setups[bufnr] = setup end,
 }
 package.preload['dap-python'] = function()
@@ -33,7 +33,7 @@ end
 vim.fn.mkdir(pack_root .. '/pack/test/opt/nvim-dap-python', 'p')
 vim.o.packpath = pack_root .. ',' .. original_packpath
 
-local ok, err = xpcall(function() dofile(nvim_root .. '/lua/kickstart/plugins/python.lua') end, debug.traceback)
+local ok, err = xpcall(function() dofile(nvim_root .. '/lua/custom/languages/adapters/python.lua') end, debug.traceback)
 vim.pack.add = original_pack_add
 
 check('registers debugpy only for Python buffers and initializes it once', function()
@@ -55,7 +55,7 @@ end)
 
 vim.o.packpath = original_packpath
 vim.fn.delete(pack_root, 'rf')
-package.loaded['custom.lib.dap'] = original_dap
+package.loaded['custom.languages.dap'] = original_dap
 package.preload['dap-python'] = original_dap_python
 if #failures > 0 then error(string.format('%d Python configuration check(s) failed: %s', #failures, table.concat(failures, ', '))) end
 io.stdout:write 'All Python configuration checks passed.\n'

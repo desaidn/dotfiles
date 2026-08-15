@@ -2,7 +2,7 @@
 -- See `:help nvim-treesitter`
 
 local gh = require('custom.lib.pack').gh
-local languages = require 'custom.languages'
+local languages = require 'custom.languages.config'
 
 vim.pack.add {
   { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' },
@@ -65,3 +65,13 @@ vim.api.nvim_create_autocmd('FileType', {
 })
 
 require('treesitter-context').setup {}
+
+vim.api.nvim_create_autocmd('PackChanged', {
+  group = vim.api.nvim_create_augroup('language-treesitter-sync', { clear = true }),
+  callback = function(event)
+    if event.data.spec.name ~= 'nvim-treesitter' or (event.data.kind ~= 'install' and event.data.kind ~= 'update') then return end
+    local operation = event.data.kind == 'update' and treesitter.update or treesitter.install
+    local task = operation(languages.treesitter_parsers)
+    if task and task.wait then task:wait(60000) end
+  end,
+})

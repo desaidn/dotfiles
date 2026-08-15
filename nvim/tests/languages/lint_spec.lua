@@ -1,6 +1,6 @@
 local failures = {}
 local script_path = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
-local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/..')
+local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/../..')
 
 package.path = table.concat({
   nvim_root .. '/lua/?.lua',
@@ -49,7 +49,7 @@ vim.fn.executable = function(name) return name == 'eslint_d' and 1 or 0 end
 package.loaded.lint = fake_lint
 
 local setup_ok, setup_error = xpcall(function()
-  dofile(nvim_root .. '/lua/kickstart/plugins/lint.lua')
+  dofile(nvim_root .. '/lua/custom/languages/lint.lua')
 
   local bufnr = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_name(bufnr, file_path)

@@ -2,7 +2,7 @@
 -- See `:help conform`
 
 local gh = require('custom.lib.pack').gh
-local languages = require 'custom.languages'
+local languages = require 'custom.languages.config'
 
 vim.pack.add { gh 'stevearc/conform.nvim' }
 
