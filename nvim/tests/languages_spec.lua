@@ -60,6 +60,12 @@ check('declares Bash and POSIX shell tooling with one save formatter', function(
   assert(not client.server_capabilities.documentRangeFormattingProvider, 'BashLS range formatting must be disabled')
 end)
 
+check('leaves Rust lifecycle to rustaceanvim and installs its debugger', function()
+  assert(languages.lsp_servers.rust_analyzer == nil, 'rust-analyzer must not be enabled through the generic LSP inventory')
+  assert(contains(languages.mason_tools, 'rust-analyzer'), 'missing rust-analyzer Mason package')
+  assert(contains(languages.mason_tools, 'codelldb'), 'missing codelldb Mason package')
+end)
+
 if #failures > 0 then error(string.format('%d language inventory check(s) failed: %s', #failures, table.concat(failures, ', '))) end
 
 io.stdout:write 'All language inventory checks passed.\n'

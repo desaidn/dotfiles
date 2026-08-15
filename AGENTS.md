@@ -34,7 +34,7 @@ Keep provisioning ownership explicit:
   Mise, Atuin, `gh`,
   ripgrep, tree-sitter CLI 0.26.1+, and capability-specific tools such as
   `uv` and `ghcup`; on Linux it also owns `xclip` and `wl-clipboard`.
-- **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy/rustfmt, and Amazon
+- **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy/rustfmt/rust-src, and Amazon
   Corretto JDK 21 (`corretto-21.0.12.8.1`). The tracked manifest uses exact
   versions so reruns do not silently advance runtimes; update those pins
   deliberately. Do not install these runtimes through Homebrew.

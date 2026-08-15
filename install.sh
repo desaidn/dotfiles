@@ -482,6 +482,9 @@ install_mise_runtimes() (
 
     cargo clippy --version >/dev/null 2>&1 ||
         die "Mise's Rust toolchain is missing the configured Clippy component"
+    rust_sysroot="$(rustc --print sysroot 2>/dev/null || true)"
+    [[ -n "$rust_sysroot" && -d "$rust_sysroot/lib/rustlib/src/rust/library" ]] ||
+        die "Mise's Rust toolchain is missing the configured rust-src component"
 
     output="$(java -version 2>&1 || true)"
     if [[ "$output" != *"Corretto-21."* ]]; then

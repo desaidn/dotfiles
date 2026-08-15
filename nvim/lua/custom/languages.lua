@@ -87,14 +87,6 @@ return {
     fish_lsp = {
       root_markers = { 'config.fish', '.git' },
     },
-    rust_analyzer = {
-      settings = {
-        ['rust-analyzer'] = {
-          cargo = { allFeatures = true },
-          check = { command = 'clippy' },
-        },
-      },
-    },
     pyright = {},
     jsonls = { init_options = { provideFormatter = false } },
     yamlls = { settings = { yaml = { keyOrdering = false } } },
@@ -118,6 +110,7 @@ return {
     'prettierd',
     'eslint_d',
     'rust-analyzer',
+    'codelldb',
     'pyright',
     'ruff',
     'json-lsp',

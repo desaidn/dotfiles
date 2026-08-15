@@ -142,7 +142,7 @@ On macOS, the configured UI also uses the `ghostty` and
 ### Mise runtimes
 
 The enabled Neovim language capabilities require Node.js/npm, Python, Rust
-with Cargo, Clippy, and rustfmt, and Amazon Corretto JDK 21. These runtimes
+with Cargo, Clippy, rustfmt, and rust-src, and Amazon Corretto JDK 21. These runtimes
 belong to Mise; Mason installs the corresponding editor tooling. Haskell is
 the current exception: Mason's Haskell Language Server recipe invokes `ghcup`
 directly.

@@ -20,11 +20,13 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `treesitter.lua` - nvim-treesitter and treesitter-context, restricted to the Inventory's parser whitelist
   - `gitsigns.lua` - Git signs, blame, and hunk navigation keymaps
   - `neo-tree.lua` - File explorer (right-side, text-based icons)
-  - `debug.lua` - DAP debugger keymaps plus on-demand Python setup via debugpy/uv; DAP plugins load on first debug action, not normal startup
+  - `debug.lua` - DAP debugger keymaps; shared setup stays lazy until a debug action or Rust LSP attachment
+  - `rust.lua` - rustaceanvim-owned rust-analyzer and CodeLLDB integration
   - `lint.lua` - nvim-lint with eslint_d and ruff; ESLint runs from the nearest config root
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
 - `lua/custom/lib/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
+- `lua/custom/lib/dap.lua` - Shared lazy nvim-dap, DAP UI, and debugpy setup used by generic debugger keymaps and Rust attachment
 - `lua/custom/lib/plugins_loader.lua` - Shared sorted directory plugin module loader used by `kickstart.plugins` and `custom.plugins`
 - `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should run in a persistent Tool Tab while leaving host tmux navigation available when Neovim is running in the tmux fallback
 - `lua/custom/languages.lua` - Canonical read-only Language Tooling Inventory: native LSP configurations, Mason packages, the Treesitter parser whitelist, Conform formatting policy, and nvim-lint mappings
@@ -38,6 +40,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
 - `tests/lint_spec.lua` - Headless regression harness for nearest ESLint config CWD selection and fallback behavior
+- `tests/rust_spec.lua` - Headless regression harness for rustaceanvim ownership, lazy DAP initialization, and Rust target actions
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
@@ -52,7 +55,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
 - **Formatting**: conform.nvim for auto-formatting
 - **Linting**: nvim-lint with eslint_d, ruff
-- **Debugging**: nvim-dap with Python (debugpy via uv)
+- **Debugging**: nvim-dap with Python (debugpy via uv) and Rust (rustaceanvim + Mason CodeLLDB)
 - **UI**: which-key, mini.nvim (statusline, surround, text objects), undotree, todo-comments
 
 ### Key Bindings Structure
@@ -66,7 +69,8 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - Explorer: `<leader>e` (neo-tree toggle)
 - Undo tree: `<leader>u` (toggle undotree)
 - Path copy: `<leader>p*` (copy absolute/relative file paths)
-- Debug: `<leader>b` (breakpoint), `F1-F3` (stepping), `F5` (continue), `F7` (DAP UI). These keys lazy-load and configure DAP on first use.
+- Debug: `<leader>b` (breakpoint), `F1-F3` (stepping), `F5` (continue), `F7` (DAP UI). These keys lazy-load and configure DAP on first use; Rust also initializes it when rust-analyzer attaches so rustaceanvim can create CodeLLDB configurations.
+- Rust: `<leader>rr` (runnables), `<leader>rt` (testables), `<leader>rd` (debuggables), `<leader>rm` (expand macro), `K` (hover actions).
 - Diagnostic quickfix: `<leader>q`
 
 ## Development Workflows
@@ -200,7 +204,7 @@ inventory:
   plus a platform clipboard provider where a display is available; remote
   sessions rely on the OSC 52 fallback instead.
 - Hunk must be version 0.18.1 or newer for concurrent watch sessions.
-- Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and
+- Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, rustfmt, and rust-src, and
   Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Python debugging
   additionally requires the standalone `uv` CLI.
 - Haskell is an explicit ownership exception: the current Mason HLS recipe

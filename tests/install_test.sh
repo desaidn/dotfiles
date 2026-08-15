@@ -218,6 +218,7 @@ fi
 
 write_runtime_commands() {
     local command_name
+    mkdir -p "$DOTFILES_TEST_STATE/rust-sysroot/lib/rustlib/src/rust/library"
     for command_name in node npm python python3 rustc cargo clippy rustfmt java javac; do
         cp "$DOTFILES_TEST_RUNTIME_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
         chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
@@ -325,7 +326,11 @@ case "${0##*/}" in
         printf 'Python 3.14.6\n'
         ;;
     rustc)
-        printf 'rustc 1.97.1\n'
+        if [[ " ${*:-} " == *' --print sysroot '* ]]; then
+            printf '%s\n' "$DOTFILES_TEST_STATE/rust-sysroot"
+        else
+            printf 'rustc 1.97.1\n'
+        fi
         ;;
     cargo)
         printf 'cargo 1.97.1\n'
@@ -1250,7 +1255,7 @@ test_dependency_manifests_match_the_install_contract() {
     mise_lines=(
         '"core:node" = "24.18.0"'
         '"core:python" = "3.14.6"'
-        '"core:rust" = { version = "1.97.1", profile = "minimal", components = ["clippy", "rustfmt"] }'
+        '"core:rust" = { version = "1.97.1", profile = "minimal", components = ["clippy", "rustfmt", "rust-src"] }'
         '"core:java" = "corretto-21.0.12.8.1"'
     )
     for expected_line in "${mise_lines[@]}"; do
