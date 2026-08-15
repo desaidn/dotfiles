@@ -21,12 +21,13 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `gitsigns.lua` - Git signs, blame, and hunk navigation keymaps
   - `neo-tree.lua` - File explorer (right-side, text-based icons)
   - `debug.lua` - DAP debugger keymaps; shared setup stays lazy until a debug action or Rust LSP attachment
+  - `python.lua` - Python-owned lazy debugpy setup via uv
   - `rust.lua` - rustaceanvim-owned rust-analyzer and CodeLLDB integration
   - `lint.lua` - nvim-lint with eslint_d and ruff; ESLint runs from the nearest config root
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
 - `lua/custom/lib/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
-- `lua/custom/lib/dap.lua` - Shared lazy nvim-dap, DAP UI, and debugpy setup used by generic debugger keymaps and Rust attachment
+- `lua/custom/lib/dap.lua` - Shared lazy nvim-dap and DAP UI setup; language integrations register their own buffer-specific debuggers
 - `lua/custom/lib/plugins_loader.lua` - Shared sorted directory plugin module loader used by `kickstart.plugins` and `custom.plugins`
 - `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should run in a persistent Tool Tab while leaving host tmux navigation available when Neovim is running in the tmux fallback
 - `lua/custom/languages.lua` - Canonical read-only Language Tooling Inventory: native LSP configurations, Mason packages, the Treesitter parser whitelist, Conform formatting policy, and nvim-lint mappings

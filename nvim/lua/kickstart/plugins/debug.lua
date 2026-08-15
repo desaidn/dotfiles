@@ -4,7 +4,7 @@
 local debug = require 'custom.lib.dap'
 
 local function with_dap(callback)
-  callback(debug.ensure())
+  callback(debug.ensure_buffer())
 end
 
 -- Basic debugging keymaps
@@ -34,6 +34,6 @@ end, { desc = 'Debug: Set Breakpoint' })
 
 -- Toggle to see last session result. Without this, you can't see session output in case of unhandled exception.
 vim.keymap.set('n', '<F7>', function()
-  debug.ensure()
+  debug.ensure_buffer()
   require('dapui').toggle()
 end, { desc = 'Debug: See last session result.' })

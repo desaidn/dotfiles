@@ -7,10 +7,10 @@ vim.pack.add({
   gh 'mfussenegger/nvim-dap',
   gh 'rcarriga/nvim-dap-ui',
   gh 'nvim-neotest/nvim-nio',
-  gh 'mfussenegger/nvim-dap-python',
 }, { load = function() end })
 
 local did_setup = false
+local buffer_setups = {}
 local M = {}
 
 local function packadd(name)
@@ -27,7 +27,6 @@ function M.ensure()
     'nvim-dap',
     'nvim-nio',
     'nvim-dap-ui',
-    'nvim-dap-python',
   } do
     packadd(name)
   end
@@ -56,10 +55,21 @@ function M.ensure()
   dap.listeners.before.event_terminated['dapui_config'] = dapui.close
   dap.listeners.before.event_exited['dapui_config'] = dapui.close
 
-  -- Python debugger (debugpy via uv).
-  require('dap-python').setup 'uv'
-
   did_setup = true
+  return dap
+end
+
+---@param bufnr integer
+---@param setup fun()
+function M.register_buffer_setup(bufnr, setup)
+  buffer_setups[bufnr] = setup
+end
+
+---@param bufnr? integer
+function M.ensure_buffer(bufnr)
+  local dap = M.ensure()
+  local setup = buffer_setups[bufnr or vim.api.nvim_get_current_buf()]
+  if setup then setup() end
   return dap
 end
 
