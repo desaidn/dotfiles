@@ -1,5 +1,10 @@
 local prettier = { 'prettierd', 'prettier', stop_after_first = true }
 
+local function disable_lsp_formatting(client)
+  client.server_capabilities.documentFormattingProvider = false
+  client.server_capabilities.documentRangeFormattingProvider = false
+end
+
 -- Inject Neovim runtime settings only when editing the Neovim config directory.
 -- Other Lua projects get the nvim-lspconfig defaults or use their own .luarc.json.
 -- See: https://luals.github.io/wiki/settings/
@@ -31,6 +36,7 @@ return {
     'css',
     'diff',
     'dockerfile',
+    'fish',
     'gitcommit',
     'gitignore',
     'haskell',
@@ -69,6 +75,18 @@ return {
       },
     },
     ts_ls = {},
+    bashls = {
+      filetypes = { 'bash', 'sh' },
+      on_attach = disable_lsp_formatting,
+      settings = {
+        bashIde = {
+          globPattern = '*@(.sh|.inc|.bash|.command)',
+        },
+      },
+    },
+    fish_lsp = {
+      root_markers = { 'config.fish', '.git' },
+    },
     rust_analyzer = {
       settings = {
         ['rust-analyzer'] = {
@@ -92,6 +110,10 @@ return {
     'lua-language-server',
     'stylua',
     'typescript-language-server',
+    'bash-language-server',
+    'fish-lsp',
+    'shellcheck',
+    'shfmt',
     'prettier',
     'prettierd',
     'eslint_d',
@@ -113,6 +135,8 @@ return {
     lua = { 'stylua' },
     javascript = prettier,
     javascriptreact = prettier,
+    bash = { 'shfmt' },
+    sh = { 'shfmt' },
     typescript = prettier,
     typescriptreact = prettier,
     json = prettier,
