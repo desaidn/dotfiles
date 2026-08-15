@@ -86,6 +86,29 @@ common target-selection interface is designed.
 - `:checkhealth` - Diagnose configuration issues
 - `nvim --clean --headless -l nvim/tests/pack_spec.lua` - Verify native package build hooks
 
+### Headless Specs
+
+Run one language-tooling spec in an isolated Neovim process:
+
+```sh
+nvim --clean --headless -l nvim/tests/languages/context_spec.lua
+```
+
+Run every Lua `*_spec.lua` harness:
+
+```sh
+for spec in nvim/tests/**/*_spec.lua; do
+  nvim --clean --headless -l "$spec" || exit 1
+done
+```
+
+`--clean` excludes the normal user configuration. Each harness adds this
+repository's `nvim/lua` directory to `package.path` and loads the production
+module under test, using focused API/plugin stubs where a real server or
+adapter is outside the test's scope. The real-PTY Hunk check is separate; run
+`/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` when that surface
+changes.
+
 ### Terminal Tool Launcher
 
 - `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` - Run the terminal-tool regression checks from the repository root
