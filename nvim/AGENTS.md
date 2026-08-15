@@ -42,6 +42,8 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
 - `tests/lint_spec.lua` - Headless regression harness for nearest ESLint config CWD selection and fallback behavior
 - `tests/rust_spec.lua` - Headless regression harness for rustaceanvim ownership, lazy DAP initialization, and the shared keymap boundary
+- `tests/python_spec.lua` - Headless regression harness for Python-buffer-only lazy debugpy registration and one-time setup
+- `tests/python_spec.lua` - Headless regression harness for Python-buffer-only lazy debugpy registration and one-time setup
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
