@@ -37,17 +37,18 @@ check('loads DAP before rustaceanvim creates CodeLLDB configurations', function(
   assert(ensured, 'Rust on_attach did not initialize the shared DAP stack')
 end)
 
-check('provides buffer-local Rust navigation and debug target actions', function()
-  local expected = {
-    [(vim.g.mapleader or '\\') .. 'rr'] = 'runnables',
-    [(vim.g.mapleader or '\\') .. 'rt'] = 'testables',
-    [(vim.g.mapleader or '\\') .. 'rd'] = 'debuggables',
-    [(vim.g.mapleader or '\\') .. 'rm'] = 'expandMacro',
-    K = 'hover actions',
+check('does not claim Rust-only keymaps over the common language interface', function()
+  vim.g.rustaceanvim.server.on_attach(nil, 0)
+  local forbidden = {
+    (vim.g.mapleader or '\\') .. 'rr',
+    (vim.g.mapleader or '\\') .. 'rt',
+    (vim.g.mapleader or '\\') .. 'rd',
+    (vim.g.mapleader or '\\') .. 'rm',
+    'K',
   }
-  for lhs, rhs in pairs(expected) do
-    local mappings = vim.tbl_filter(function(map) return map.lhs == lhs and map.rhs:find(rhs, 1, true) end, vim.api.nvim_buf_get_keymap(0, 'n'))
-    assert(#mappings == 1, ('missing Rust action %s'):format(lhs))
+  local mappings = vim.api.nvim_buf_get_keymap(0, 'n')
+  for _, lhs in ipairs(forbidden) do
+    assert(not vim.tbl_contains(vim.tbl_map(function(map) return map.lhs end, mappings), lhs), ('Rust must not claim %s'):format(lhs))
   end
 end)
 

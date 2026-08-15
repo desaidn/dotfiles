@@ -40,7 +40,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
 - `tests/lint_spec.lua` - Headless regression harness for nearest ESLint config CWD selection and fallback behavior
-- `tests/rust_spec.lua` - Headless regression harness for rustaceanvim ownership, lazy DAP initialization, and Rust target actions
+- `tests/rust_spec.lua` - Headless regression harness for rustaceanvim ownership, lazy DAP initialization, and the shared keymap boundary
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
@@ -70,8 +70,14 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - Undo tree: `<leader>u` (toggle undotree)
 - Path copy: `<leader>p*` (copy absolute/relative file paths)
 - Debug: `<leader>b` (breakpoint), `F1-F3` (stepping), `F5` (continue), `F7` (DAP UI). These keys lazy-load and configure DAP on first use; Rust also initializes it when rust-analyzer attaches so rustaceanvim can create CodeLLDB configurations.
-- Rust: `<leader>rr` (runnables), `<leader>rt` (testables), `<leader>rd` (debuggables), `<leader>rm` (expand macro), `K` (hover actions).
 - Diagnostic quickfix: `<leader>q`
+
+The editing and debugging interface is language-neutral. Language plugins may
+provide backend-specific commands, but must not claim a separate keymap
+namespace or override shared LSP mappings. Rustaceanvim's advanced actions are
+available through `:RustLsp runnables`, `:RustLsp testables`, `:RustLsp
+debuggables`, `:RustLsp expandMacro`, and `:RustLsp hover actions` while a
+common target-selection interface is designed.
 
 ## Development Workflows
 
