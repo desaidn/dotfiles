@@ -33,7 +33,7 @@ Host requirements:
   `:checkhealth vim.provider` reports the active provider
 
 Mise owns the language runtimes used by the enabled Language Tooling
-Inventory: Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and
+configuration: Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and
 Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Mason owns the corresponding
 LSPs, formatters, and linters. Python DAP invokes the standalone `uv` CLI.
 Haskell support currently requires `ghcup` because Mason's HLS installer calls

@@ -1,4 +1,5 @@
 local prettier = { 'prettierd', 'prettier', stop_after_first = true }
+local context = require 'custom.languages.context'
 
 local function disable_lsp_formatting(client)
   client.server_capabilities.documentFormattingProvider = false
@@ -27,6 +28,43 @@ local function configure_neovim_lua_workspace(client)
       },
     },
   })
+end
+
+local function jdtls_command(dispatchers, config)
+  local jvm_args = {}
+  for argument in (vim.env.JDTLS_JVM_ARGS or ''):gmatch '%S+' do
+    jvm_args[#jvm_args + 1] = '--jvm-arg=' .. argument
+  end
+
+  local command = { 'jdtls', '-data', context.workspace_data('jdtls', assert(config.root_dir, 'JDTLS root is required')) }
+  vim.list_extend(command, jvm_args)
+  return vim.lsp.rpc.start(command, dispatchers, {
+    cwd = config.cmd_cwd,
+    env = config.cmd_env,
+    detached = config.detached,
+  })
+end
+
+-- Use the nearest workspace manifest before rust-analyzer has attached. Avoid
+-- running Cargo synchronously from a DAP configuration provider.
+local function cargo_workspace_root(path)
+  local crate_root = vim.fs.root(path, { 'Cargo.toml' })
+  if not crate_root then return vim.fs.root(path, { 'rust-project.json', '.git' }) end
+
+  local directory = crate_root
+  while directory do
+    local manifest = vim.fs.joinpath(directory, 'Cargo.toml')
+    if vim.uv.fs_stat(manifest) then
+      for _, line in ipairs(vim.fn.readfile(manifest)) do
+        if vim.trim(line) == '[workspace]' then return directory end
+      end
+    end
+
+    local parent = vim.fs.dirname(directory)
+    if parent == directory then break end
+    directory = parent
+  end
+  return crate_root
 end
 
 return {
@@ -93,7 +131,9 @@ return {
     html = { init_options = { provideFormatter = false } },
     cssls = { init_options = { provideFormatter = false } },
     hls = {},
-    jdtls = { init_options = { provideFormatter = false } },
+    -- nvim-lspconfig's default path is derived from only the root basename.
+    -- JDTLS requires isolated, durable workspace data for each project root.
+    jdtls = { cmd = jdtls_command, init_options = { provideFormatter = false } },
     kotlin_lsp = {},
   },
 
@@ -146,6 +186,23 @@ return {
   format_on_save_disabled_filetypes = {
     c = true,
     cpp = true,
+  },
+
+  -- Debug launch files are resolved from the active buffer's nearest project
+  -- marker, never Neovim's process-wide current directory.
+  dap_by_ft = {
+    rust = {
+      lsp_client = 'rust_analyzer',
+      root_profile = { markers = { 'Cargo.toml', 'rust-project.json', '.git' }, resolve = cargo_workspace_root },
+      launch_types = { 'codelldb' },
+    },
+    python = {
+      lsp_client = 'pyright',
+      root_profile = {
+        markers = { 'pyrightconfig.json', 'pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile', '.git' },
+      },
+      launch_types = { 'python' },
+    },
   },
 
   linters_by_ft = {

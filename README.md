@@ -113,7 +113,7 @@ layer:
 - Homebrew owns applications and standalone CLIs.
 - Mise owns versioned language runtimes.
 - Neovim owns plugins, Treesitter parsers, and the LSP/formatter/linter/debugger
-  packages declared in its Language Tooling Inventory.
+  packages declared in its language configuration.
 
 ### Homebrew applications
 

@@ -45,7 +45,7 @@ The result will still not be a single proprietary, polyglot semantic index. LSP 
 
 `nvim/lua/custom/languages/lsp.lua` uses the Neovim 0.11+ `vim.lsp.config`/`vim.lsp.enable` API, merges Blink completion capabilities, attaches standard mappings, document highlights, and capability-gated inlay hints. This follows the current [Neovim LSP configuration model](https://neovim.io/doc/user/lsp/). `nvim-lspconfig` supplies executable, filetype, and root defaults.
 
-`nvim/lua/custom/languages/dap.lua` owns the shared lazy `nvim-dap`, `nvim-dap-ui`, and `nvim-nio` stack plus the common controls; [`python.lua`](../nvim/lua/custom/languages/python.lua) separately owns lazy `nvim-dap-python`/debugpy setup for Python buffers. [nvim-dap](https://github.com/mfussenegger/nvim-dap) supports the required generic launch, attach, breakpoint, stepping, inspection, and REPL operations; adapters are intentionally language-specific dependencies.
+`nvim/lua/custom/languages/dap.lua` owns the shared lazy `nvim-dap`, `nvim-dap-ui`, and `nvim-nio` stack plus the common controls; [`adapters/python.lua`](../nvim/lua/custom/languages/adapters/python.lua) separately owns lazy `nvim-dap-python`/debugpy setup for Python buffers. [nvim-dap](https://github.com/mfussenegger/nvim-dap) supports the required generic launch, attach, breakpoint, stepping, inspection, and REPL operations; adapters are intentionally language-specific dependencies.
 
 Provisioning boundaries are clear:
 
@@ -66,27 +66,21 @@ Provisioning boundaries are clear:
 | Fish                  | Tree-sitter is not installed; no LSP, formatter, lint/action owner, or debugger                                                 | The primary interactive shell's functions, completions, abbreviations, and sourced configuration have no semantic navigation, diagnostics, or Fish-aware formatting.                                                                                                                      |
 | Bash/POSIX `sh`       | Tree-sitter `bash` only; no LSP, formatter, or diagnostics                                                                   | Shell scripts lack cross-file navigation, ShellCheck analysis, and an explicit formatting owner.                                                                                                                                                                                              |
 
-There is also a shared cross-project gap. Current nvim-dap automatically considers `.vscode/launch.json` when choosing a configuration, but its default provider calls `getconfigs()` without a path, which reads `getcwd()/.vscode/launch.json`; its `${workspaceFolder}` and `${workspaceFolderBasename}` substitutions also use `getcwd()`. The behavior is visible directly in the current [launch-file reader](https://raw.githubusercontent.com/mfussenegger/nvim-dap/master/lua/dap/ext/vscode.lua) and [configuration provider/variable expansion](https://raw.githubusercontent.com/mfussenegger/nvim-dap/master/lua/dap.lua). Neovim deliberately does not change the current directory to an LSP workspace root. In a tabbed, multi-project session, variables, `cwd`, launch-file discovery, and adapter target discovery can therefore refer to a different project from the active buffer. A root-aware DAP provider is required; adding a second manual `load_launchjs` call is not. The latter is deprecated in current nvim-dap.
+The initial cross-project foundation replaces nvim-dap's CWD-based `.vscode/launch.json` provider with one that receives the initiating buffer, resolves its declared project root, and substitutes all CWD-sensitive file/workspace values before nvim-dap expands them. The upstream provider's CWD behavior remains visible in the current [launch-file reader](https://raw.githubusercontent.com/mfussenegger/nvim-dap/master/lua/dap/ext/vscode.lua) and [configuration provider/variable expansion](https://raw.githubusercontent.com/mfussenegger/nvim-dap/master/lua/dap.lua). Adding a second manual `load_launchjs` call is not an alternative: it is deprecated in current nvim-dap.
 
 ## Shared target architecture
 
 ### One project-context boundary
 
-Add one small locally owned module that answers three questions for the active buffer:
+Add one small locally owned module that resolves a named buffer through a caller-owned marker profile and derives collision-resistant workspace-data paths. Each consumer supplies its own profile: a Rust Cargo root, Python environment root, and Java build root can legitimately differ within one repository. Paths should be normalized with `vim.fs.normalize` without resolving symlinks by default; distinct Git worktrees must remain distinct roots.
 
-1. What language/runtime owns this buffer?
-2. What is the canonical semantic/build root for its primary LSP client?
-3. Where is the Mason-owned adapter executable or bundle for that runtime?
-
-The primary source of truth should be the attached primary semantic client. File markers are a fallback before attachment and for debug-only buffers. Auxiliary clients such as Ruff and ESLint must never win root selection over basedpyright or TypeScript. Paths should be normalized with `vim.fs.normalize` and resolved carefully; distinct Git worktrees must remain distinct roots.
-
-This is a boundary, not a universal root algorithm. Each build ecosystem decides its own root. The module merely makes that result reusable by DAP, health reporting, and tests. It must not set global `cwd`, mutate every LSP root, or turn `.git` into a one-size-fits-all root.
+This is a boundary, not a universal root algorithm or LSP-root replacement. It makes explicit project paths reusable by DAP, health reporting, JDTLS, and tests. It must not set global `cwd`, mutate every LSP root, or turn `.git` into a one-size-fits-all root. Unnamed and special buffers return no context rather than inheriting CWD.
 
 ### Root and client-reuse policy
 
 | Ecosystem             | Root policy                                                                                                                                                             | Why                                                                                                                                                                                                                               |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rust                  | rust-analyzer/Cargo workspace root derived from `Cargo.toml`, `rust-project.json`, and Cargo metadata                                                                   | Cargo workspace membership, target discovery, build scripts, and dependency graphs are semantic inputs.                                                                                                                           |
+| Rust                  | Attached rust-analyzer root; otherwise nearest ancestor `Cargo.toml` with a `[workspace]` manifest, then `rust-project.json`/Git fallback                                | Cargo workspace membership, target discovery, build scripts, and dependency graphs are semantic inputs without blocking a debug action on an external Cargo process.                                                               |
 | Java                  | Highest applicable Gradle/Maven build root: wrapper, `settings.gradle[.kts]`, or reactor `pom.xml`; module build files are fallback                                     | JDT LS imports a build model. Starting one server for every module loses cross-module references; using the Git root for unrelated builds over-indexes.                                                                           |
 | Kotlin                | `settings.gradle[.kts]`, Maven reactor `pom.xml`, supported build file, or JetBrains `workspace.json`; avoid a bare `.git` fallback when no supported JVM build exists  | The official server currently imports JVM Gradle/Maven models and has had nested-project import fixes; unrelated directories should not share its large index.                                                                    |
 | Python                | Nearest `pyrightconfig.json` or relevant `pyproject.toml`, then packaging/project markers; Git only as a last fallback                                                  | Python monorepos often need explicit execution environments, import roots, and distinct virtual environments. Ruff may have a nearer lint configuration without becoming the semantic root.                                       |
@@ -102,7 +96,7 @@ Keep nvim-dap's on-demand configuration-provider mechanism, but replace the defa
 
 - reads the active buffer's project root from the shared context module;
 - loads that root's `.vscode/launch.json` once, with an explicit adapter-type mapping;
-- recursively pre-resolves `${workspaceFolder}` and `${workspaceFolderBasename}` in keys and nested values against that same root, and supplies default `cwd` from it without changing global `cwd`;
+- recursively pre-resolves nvim-dap's CWD-sensitive file and workspace placeholders in keys and nested values against that same root, and supplies default `cwd` from it without changing global `cwd`;
 - resolves prompts and functions at launch time rather than at Neovim startup;
 - merges small language defaults only when no project configuration exists.
 

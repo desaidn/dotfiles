@@ -15,7 +15,6 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `lua/kickstart/plugins/` - Upstream-oriented Kickstart modules, explicitly loaded by `lua/kickstart/plugins/init.lua`.
   - `blink-cmp.lua` - blink.cmp completion with LuaSnip
   - `telescope.lua` - Telescope pickers and LSP reference/definition keymaps
-  - `treesitter.lua` - nvim-treesitter and treesitter-context, restricted to the Inventory's parser whitelist
   - `gitsigns.lua` - Git signs, blame, and hunk navigation keymaps
   - `neo-tree.lua` - File explorer (right-side, text-based icons)
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
@@ -25,11 +24,12 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `lua/custom/languages/` - Repository-owned language tooling, loaded explicitly by `init.lua`:
   - `init.lua` - deterministic language-tooling bootstrap
   - `config.lua` - canonical declarative LSP, Mason, Treesitter, formatting, and linting configuration
-  - `lsp.lua`, `format.lua`, `lint.lua`, and `dap.lua` - shared language surfaces
-  - `dap.lua` - shared lazy DAP lifecycle, UI, controls, and buffer-specific debugger registration
+  - `context.lua` - buffer-derived project roots and collision-resistant workspace-data paths; it never changes Neovim's current directory
+  - `lsp.lua`, `treesitter.lua`, `format.lua`, `lint.lua`, and `dap.lua` - shared language surfaces
+  - `dap.lua` - shared lazy DAP lifecycle, UI, controls, buffer-specific debugger registration, and root-aware `launch.json` provider
   - `adapters/python.lua` and `adapters/rust.lua` - language-specific adapters
-- `lua/custom/plugins/` - Auto-imported by `lua/custom/plugins/init.lua`; every sibling `*.lua` file is required, following symlinks:
-  - `init.lua` - Custom plugin loader
+- `lua/custom/plugins/` - Repository-owned plugin modules, explicitly required by `lua/custom/plugins/init.lua`:
+  - `init.lua` - Custom plugin imports
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
   - `lazygit.lua` - Thin lazygit Git transaction launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gg`)
   - `hunk.lua` - Thin Hunk stacked review launcher over `lua/custom/lib/terminal_tool.lua`; declares its working-tree and staged input variants (owns `<leader>gd` and `<leader>gD`)
@@ -37,7 +37,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
-- `tests/languages/` - Headless language-tooling regression harnesses for inventory, linting, DAP, Python, and Rust behavior
+- `tests/languages/` - Headless language-tooling regression harnesses for configuration, project context, JDTLS, linting, DAP, Python, and Rust behavior
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
@@ -52,7 +52,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
 - **Formatting**: conform.nvim for auto-formatting
 - **Linting**: nvim-lint with eslint_d, ruff
-- **Debugging**: nvim-dap with Python (debugpy via uv) and Rust (rustaceanvim + Mason CodeLLDB)
+- **Debugging**: nvim-dap with project-root-aware `launch.json`, Python (debugpy via uv), and Rust (rustaceanvim + Mason CodeLLDB)
 - **UI**: which-key, mini.nvim (statusline, surround, text objects), undotree, todo-comments
 
 ### Key Bindings Structure
@@ -66,7 +66,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - Explorer: `<leader>e` (neo-tree toggle)
 - Undo tree: `<leader>u` (toggle undotree)
 - Path copy: `<leader>p*` (copy absolute/relative file paths)
-- Debug: `<leader>b` (breakpoint), `F1-F3` (stepping), `F5` (continue), `F7` (DAP UI). These keys lazy-load and configure DAP on first use; Rust also initializes it when rust-analyzer attaches so rustaceanvim can create CodeLLDB configurations.
+- Debug: `<leader>b` (breakpoint), `F1-F3` (stepping), `F5` (continue), `F7` (DAP UI). These keys lazy-load and configure DAP on first use; `launch.json` is selected from the current buffer's language-specific project root. Rust also initializes it when rust-analyzer attaches so rustaceanvim can create CodeLLDB configurations.
 - Diagnostic quickfix: `<leader>q`
 
 The editing and debugging interface is language-neutral. Language plugins may
@@ -97,15 +97,15 @@ Configured with multiple language servers (TypeScript, Python, Rust, Lua, JSON, 
 
 1. **`vim.lsp.config('*')` in `lua/custom/languages/lsp.lua`** — shared client capabilities
 2. **nvim-lspconfig defaults** — cmd, filetypes, root_dir, commands (no files needed)
-3. **Named configurations in `lua/custom/languages/config.lua`** — server-specific settings and callbacks applied through `vim.lsp.config()`
+3. **Named configurations in `lua/custom/languages/config.lua`** — server-specific settings, callbacks, and declared DAP root/type routing applied through `vim.lsp.config()` and the DAP provider
 
-Common language configuration lives in `lua/custom/languages/config.lua`; shared lifecycle and language adapters live beside it in the same folder. Its fields use the native data shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, and nvim-lint. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes.
+Common language configuration lives in `lua/custom/languages/config.lua`; shared lifecycle, buffer-derived context, and language adapters live beside it in the same folder. Its fields use the native data shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, nvim-lint, and nvim-dap. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes.
 
 To add a new language server:
 
 1. Add the server's nvim-lspconfig name and native configuration to `lsp_servers` in `lua/custom/languages/config.lua`; use an empty table when nvim-lspconfig defaults are sufficient.
 2. Add its Mason package to `mason_tools` only when Mason owns installation, and add the required Treesitter parsers to `treesitter_parsers`.
-3. Add native Conform or nvim-lint filetype mappings and any format-on-save policy in the same Inventory when the language needs them.
+3. Add native Conform or nvim-lint filetype mappings and any format-on-save policy in the same configuration when the language needs them.
 4. Restart Neovim, then use `:Mason` to inspect installation status.
 
 ### Terminal Integration
@@ -185,7 +185,7 @@ Neo-tree file explorer is enabled with right-side positioning and minimal stylin
 ### Customization Points
 
 - `lua/custom/plugins/` - Add a module here and explicitly require it from `lua/custom/plugins/init.lua`
-- `lua/custom/languages/` - Add or change inventory declarations, shared language lifecycle, or a language-specific adapter
+- `lua/custom/languages/` - Add or change declarative language configuration, shared lifecycle/context, or a language-specific adapter
 
 ### Important Settings
 

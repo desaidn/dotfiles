@@ -45,7 +45,7 @@ Conform is more opinionated about formatter roots than `nvim-lint`: its pinned b
 
 ## Recommended Neovim direction
 
-Keep the existing Language Tooling Inventory and `nvim-lint`/`eslint_d` ownership. Resolve the nearest `eslint.config.*` from the current buffer and pass that directory as `try_lint`'s `cwd`; do not change Neovim's global CWD. The resolver belongs in the `nvim-lint` adapter, not in each language declaration or in the built-in linter table.
+Keep the existing language configuration and `nvim-lint`/`eslint_d` ownership. Resolve the nearest `eslint.config.*` from the current buffer and pass that directory as `try_lint`'s `cwd`; do not change Neovim's global CWD. The resolver belongs in the `nvim-lint` adapter, not in each language declaration or in the built-in linter table.
 
 This is hand-written integration code, but it is precisely the extension point upstream documents. Use all six flat-config names as equal-priority markers, search upward from the buffer, and fall back to normal `nvim-lint` behavior when none exists. For the affected file this selects `packages/assets`, so both package-local ESLint resolution and `./tsconfig.json` agree with the package's own lint command.
 

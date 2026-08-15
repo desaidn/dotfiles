@@ -6,9 +6,9 @@ Provide reliable OCaml and OxCaml editing in Neovim—LSP features, formatting, 
 
 ## Context / current state
 
-The canonical Language Tooling Inventory in [`lua/custom/languages/inventory.lua`](../../nvim/lua/custom/languages/inventory.lua) currently enables neither `ocamllsp` nor `ocamlformat`, and its authoritative Treesitter parser whitelist does not include OCaml.
+The canonical language configuration in [`lua/custom/languages/config.lua`](../../nvim/lua/custom/languages/config.lua) currently enables neither `ocamllsp` nor `ocamlformat`, and its authoritative Treesitter parser whitelist does not include OCaml.
 
-The Inventory keeps enabled LSP configuration names and Mason-managed package names in independent tables. It can therefore enable `ocamllsp` without adding it to `mason_tools`, which matches current OCaml guidance to install `ocaml-lsp-server` in the active opam switch because the language server is compiler-version-sensitive. `ocamlformat` is similarly expected to match the project toolchain and can be configured without making Mason its installer. At the time this brief was written, `opam`, `ocamllsp`, `ocamlformat`, and `dune` were not available on the investigating workstation's `PATH`.
+The configuration keeps enabled LSP configuration names and Mason-managed package names in independent tables. It can therefore enable `ocamllsp` without adding it to `mason_tools`, which matches current OCaml guidance to install `ocaml-lsp-server` in the active opam switch because the language server is compiler-version-sensitive. `ocamlformat` is similarly expected to match the project toolchain and can be configured without making Mason its installer. At the time this brief was written, `opam`, `ocamllsp`, `ocamlformat`, and `dune` were not available on the investigating workstation's `PATH`.
 
 OxCaml is a fast-moving extension of OCaml, not a separate Neovim filetype. Its toolchain supplies modified OCaml tools, including `ocaml-lsp-server` and `ocamlformat`, through an OxCaml opam switch. The same Neovim language intent should therefore work with either toolchain while resolving binaries from the intended project environment.
 
@@ -19,7 +19,7 @@ OxCaml is a fast-moving extension of OCaml, not a separate Neovim filetype. Its 
 - Enable the current `ocamllsp` configuration without allowing Mason to shadow an active switch's incompatible binary.
 - Configure `ocamlformat` for the appropriate Neovim filetypes without making Mason the source of truth unless current upstream guidance has changed.
 - Add the minimum useful OCaml Treesitter parser set, including interface files where supported.
-- Preserve all existing Inventory declarations when adding the OCaml entries.
+- Preserve all existing language configuration declarations when adding the OCaml entries.
 - Document required per-machine/project toolchain activation and how to confirm which binaries Neovim sees.
 - Smoke-test both an upstream OCaml project and a project using OxCaml-only syntax.
 
@@ -48,7 +48,7 @@ OxCaml is a fast-moving extension of OCaml, not a separate Neovim filetype. Its 
 - Opening a project containing OxCaml-only syntax attaches the OxCaml-aware `ocamllsp` and provides diagnostics/hover without parser-version errors caused by an upstream-only server.
 - `ocamlformat` formats supported OCaml/OxCaml buffers using the intended project toolchain.
 - Mason does not install or prepend an incompatible OCaml LSP/formatter that shadows the active switch.
-- The Language Tooling Inventory enables `ocamllsp` and maps `ocamlformat` without adding either tool to `mason_tools`, while preserving all existing declarations.
+- The language configuration enables `ocamllsp` and maps `ocamlformat` without adding either tool to `mason_tools`, while preserving all existing declarations.
 - OCaml implementation and interface files receive working Treesitter highlighting with no startup errors.
 - Toolchain prerequisites and switch-selection expectations are documented without machine-specific paths.
 - A clean production Neovim startup remains green.
@@ -71,7 +71,7 @@ Upstream behavior is especially time-sensitive here. Before changing code, re-re
 
 ## Starting points / references
 
-- [`nvim/lua/custom/languages/inventory.lua`](../../nvim/lua/custom/languages/inventory.lua) — current Language Tooling Inventory, including independent LSP configuration, Mason installation, and Treesitter parser declarations.
+- [`nvim/lua/custom/languages/config.lua`](../../nvim/lua/custom/languages/config.lua) — current language configuration, including independent LSP configuration, Mason installation, and Treesitter parser declarations.
 - [`nvim/lua/custom/languages/lsp.lua`](../../nvim/lua/custom/languages/lsp.lua) — `nvim-lspconfig`, Mason, and LSP enablement adapter.
 - [`nvim/lua/custom/languages/format.lua`](../../nvim/lua/custom/languages/format.lua) — formatter adapter.
 - [`nvim/AGENTS.md`](../../nvim/AGENTS.md) — current language-tooling workflow and platform/path constraints.
