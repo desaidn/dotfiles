@@ -25,9 +25,10 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `init.lua` - deterministic language-tooling bootstrap
   - `config.lua` - canonical declarative LSP, Mason, Treesitter, formatting, and linting configuration
   - `context.lua` - buffer-derived project roots and collision-resistant workspace-data paths; it never changes Neovim's current directory
+  - `capabilities.lua` - shared LSP capability policy, including single-owner formatting
   - `lsp.lua`, `treesitter.lua`, `format.lua`, `lint.lua`, and `dap.lua` - shared language surfaces
   - `dap.lua` - shared lazy DAP lifecycle, UI, controls, buffer-specific debugger registration, and root-aware `launch.json` provider
-  - `adapters/python.lua` and `adapters/rust.lua` - language-specific adapters
+  - `adapters/java.lua`, `adapters/python.lua`, and `adapters/rust.lua` - language-specific adapters
 - `lua/custom/plugins/` - Repository-owned plugin modules, explicitly required by `lua/custom/plugins/init.lua`:
   - `init.lua` - Custom plugin imports
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
@@ -52,7 +53,7 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
 - **Formatting**: conform.nvim for auto-formatting
 - **Linting**: nvim-lint with eslint_d, ruff
-- **Debugging**: nvim-dap with project-root-aware `launch.json`, Python (debugpy via uv), and Rust (rustaceanvim + Mason CodeLLDB)
+- **Debugging**: nvim-dap with project-root-aware `launch.json`, Java (nvim-jdtls + Mason debug/test bundles), Python (debugpy via uv), and Rust (rustaceanvim + Mason CodeLLDB)
 - **UI**: which-key, mini.nvim (statusline, surround, text objects), undotree, todo-comments
 
 ### Key Bindings Structure
@@ -123,6 +124,8 @@ Configured with multiple language servers (TypeScript, Python, Rust, Lua, JSON, 
 3. **Named configurations in `lua/custom/languages/config.lua`** — server-specific settings, callbacks, and declared DAP root/type routing applied through `vim.lsp.config()` and the DAP provider
 
 Common language configuration lives in `lua/custom/languages/config.lua`; shared lifecycle, buffer-derived context, and language adapters live beside it in the same folder. Its fields use the native data shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, nvim-lint, and nvim-dap. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes.
+
+Java and Rust are intentional lifecycle exceptions: nvim-jdtls and rustaceanvim own their respective language-server startup, so neither server appears in generic `vim.lsp.enable` configuration. Java's adapter starts JDTLS per project and initializes its DAP integration before attachment.
 
 To add a new language server:
 

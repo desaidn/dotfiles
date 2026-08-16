@@ -1,10 +1,5 @@
 local prettier = { 'prettierd', 'prettier', stop_after_first = true }
-local context = require 'custom.languages.context'
-
-local function disable_lsp_formatting(client)
-  client.server_capabilities.documentFormattingProvider = false
-  client.server_capabilities.documentRangeFormattingProvider = false
-end
+local capabilities = require 'custom.languages.capabilities'
 
 -- Inject Neovim runtime settings only when editing the Neovim config directory.
 -- Other Lua projects get the nvim-lspconfig defaults or use their own .luarc.json.
@@ -27,21 +22,6 @@ local function configure_neovim_lua_workspace(client)
         '${3rd}/luv/library',
       },
     },
-  })
-end
-
-local function jdtls_command(dispatchers, config)
-  local jvm_args = {}
-  for argument in (vim.env.JDTLS_JVM_ARGS or ''):gmatch '%S+' do
-    jvm_args[#jvm_args + 1] = '--jvm-arg=' .. argument
-  end
-
-  local command = { 'jdtls', '-data', context.workspace_data('jdtls', assert(config.root_dir, 'JDTLS root is required')) }
-  vim.list_extend(command, jvm_args)
-  return vim.lsp.rpc.start(command, dispatchers, {
-    cwd = config.cmd_cwd,
-    env = config.cmd_env,
-    detached = config.detached,
   })
 end
 
@@ -93,7 +73,7 @@ return {
     ts_ls = {},
     bashls = {
       filetypes = { 'bash', 'sh' },
-      on_attach = disable_lsp_formatting,
+      on_attach = capabilities.disable_formatting,
       settings = {
         bashIde = {
           globPattern = '*@(.sh|.inc|.bash|.command)',
@@ -109,9 +89,6 @@ return {
     html = { init_options = { provideFormatter = false } },
     cssls = { init_options = { provideFormatter = false } },
     hls = {},
-    -- nvim-lspconfig's default path is derived from only the root basename.
-    -- JDTLS requires isolated, durable workspace data for each project root.
-    jdtls = { cmd = jdtls_command, init_options = { provideFormatter = false } },
     kotlin_lsp = {},
   },
 
@@ -137,6 +114,8 @@ return {
     'css-lsp',
     'haskell-language-server',
     'jdtls',
+    'java-debug-adapter',
+    'java-test',
     'google-java-format',
     'kotlin-lsp',
     'ktlint',

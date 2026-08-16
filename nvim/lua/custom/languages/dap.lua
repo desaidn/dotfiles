@@ -129,6 +129,12 @@ end
 
 function M.register_buffer_setup(bufnr, setup) buffer_setups[bufnr] = setup end
 
+function M.register_project(filetype, config)
+  assert(type(filetype) == 'string' and filetype ~= '', 'DAP project filetype is required')
+  assert(type(config) == 'table', 'DAP project configuration is required')
+  languages.dap_by_ft[filetype] = config
+end
+
 function M.ensure_buffer(bufnr)
   local dap = M.ensure()
   local setup = buffer_setups[bufnr or vim.api.nvim_get_current_buf()]

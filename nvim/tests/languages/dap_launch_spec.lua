@@ -28,14 +28,20 @@ local fake_dap = {
 }
 local launch_path
 local launch_name = 'Rust'
+local java_launch_name = 'Java'
 local client_root
 local cwd_before = vim.fn.getcwd()
 local fixture = vim.fn.tempname()
 assert(vim.fn.mkdir(fixture .. '/rust-app/.vscode', 'p') == 1, 'failed to create launch fixture')
 assert(vim.fn.writefile({}, fixture .. '/rust-app/.vscode/launch.json') == 0, 'failed to create launch file')
+assert(vim.fn.mkdir(fixture .. '/java-app/.vscode', 'p') == 1, 'failed to create Java launch fixture')
+assert(vim.fn.writefile({}, fixture .. '/java-app/.vscode/launch.json') == 0, 'failed to create Java launch file')
 local project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/rust-app', ':p'))
+local java_project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/java-app', ':p'))
 local rust_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[rust_buffer].filetype = 'rust'
+local java_buffer = vim.api.nvim_create_buf(true, false)
+vim.bo[java_buffer].filetype = 'java'
 vim.pack.add = function() end
 vim.cmd.packadd = function() end
 vim.lsp.get_clients = function()
@@ -47,6 +53,13 @@ package.loaded.dapui = { setup = function() end }
 package.loaded['dap.ext.vscode'] = {
   getconfigs = function(path)
     launch_path = path
+    if path == java_project_root .. '/.vscode/launch.json' then
+      return {
+        { name = java_launch_name, type = 'java', cwd = '${workspaceFolder}' },
+        { name = 'Rust', type = 'codelldb' },
+        { name = 'Python', type = 'python' },
+      }
+    end
     local rust = {
       name = launch_name,
       type = 'codelldb',
@@ -69,6 +82,7 @@ package.loaded['dap.ext.vscode'] = {
 package.loaded['custom.languages.context'] = {
   for_buffer = function(bufnr)
     if bufnr == rust_buffer then return { root = project_root, path = project_root .. '/src/main.rs' } end
+    if bufnr == java_buffer then return { root = java_project_root, path = java_project_root .. '/src/Main.java' } end
     return nil
   end,
 }
@@ -76,6 +90,11 @@ package.loaded['custom.languages.context'] = {
 package.loaded['custom.languages.dap'] = nil
 local dap = assert(loadfile(nvim_root .. '/lua/custom/languages/dap.lua'))()
 dap.ensure()
+dap.register_project('java', {
+  lsp_client = 'jdtls',
+  root_profile = { markers = { 'pom.xml' } },
+  launch_types = { 'java' },
+})
 
 check('uses the initiating buffer root for launch.json without changing cwd', function()
   local configs = fake_dap.providers.configs['dap.launch.json'](rust_buffer)
@@ -117,6 +136,17 @@ check('reads launch configurations again for each debug selection', function()
   assert(configs[1].name == 'Updated Rust', vim.inspect(configs))
 end)
 
+check('filters Java launch configurations and reads their changes afresh', function()
+  local configs = fake_dap.providers.configs['dap.launch.json'](java_buffer)
+  assert(launch_path == java_project_root .. '/.vscode/launch.json', tostring(launch_path))
+  assert(#configs == 1 and configs[1].type == 'java', vim.inspect(configs))
+  assert(configs[1].cwd == java_project_root, vim.inspect(configs[1]))
+
+  java_launch_name = 'Updated Java'
+  configs = fake_dap.providers.configs['dap.launch.json'](java_buffer)
+  assert(#configs == 1 and configs[1].name == 'Updated Java', vim.inspect(configs))
+end)
+
 vim.pack.add = original_pack_add
 vim.cmd.packadd = original_cmd_packadd
 package.loaded.dap = original_dap
@@ -125,6 +155,7 @@ package.loaded['dap.ext.vscode'] = original_vscode
 package.loaded['custom.languages.context'] = original_context
 vim.lsp.get_clients = original_get_clients
 vim.api.nvim_buf_delete(rust_buffer, { force = true })
+vim.api.nvim_buf_delete(java_buffer, { force = true })
 vim.fn.delete(fixture, 'rf')
 
 if #failures > 0 then error(string.format('%d DAP launch check(s) failed: %s', #failures, table.concat(failures, ', '))) end

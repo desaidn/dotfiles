@@ -143,10 +143,11 @@ Completion ~
 <Tab>/<S-Tab>  Move through snippet fields
 <C-k>          Show signature help
 
-Debugging exposes one language-neutral interface. Python runs debugpy through
-`uv` and requires `uv` on `PATH`; Rust uses rustaceanvim with Mason's
-CodeLLDB. The shared DAP plugins load on the first debug action, or when
-rust-analyzer attaches so Rust can create its project debug configurations:
+Debugging exposes one language-neutral interface. Java uses nvim-jdtls with
+Mason's Java debug/test bundles; Python runs debugpy through `uv` and requires
+`uv` on `PATH`; Rust uses rustaceanvim with Mason's CodeLLDB. The shared DAP
+plugins load on the first debug action, or when Java or Rust attaches so their
+language integrations can create project debug configurations:
 
 <F5>           Start or continue
 <F1>/<F2>/<F3>
@@ -155,10 +156,13 @@ rust-analyzer attaches so Rust can create its project debug configurations:
 <leader>B      Set a conditional breakpoint
 <F7>           Toggle the debug UI or inspect the last session
 
-Language integrations do not claim separate keymap namespaces. Rust's
-advanced actions remain available through `:RustLsp runnables`, `:RustLsp
-testables`, `:RustLsp debuggables`, `:RustLsp expandMacro`, and `:RustLsp
-hover actions` while a common target-selection interface is designed.
+Language integrations do not claim separate keymap namespaces. Java's
+JDT-specific operations are exposed through buffer-local `:Jdt...` commands,
+including `:JdtCompile`, `:JdtSetRuntime`, `:JdtUpdateDebugConfig`, and
+`:JdtRestart`. Rust's advanced actions remain available through `:RustLsp
+runnables`, `:RustLsp testables`, `:RustLsp debuggables`, `:RustLsp
+expandMacro`, and `:RustLsp hover actions` while a common target-selection
+interface is designed.
 
 ==============================================================================
 GIT AND TOOL TABS               *dotfiles-nvim-git* *dotfiles-nvim-tool-tabs*

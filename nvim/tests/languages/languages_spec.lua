@@ -66,6 +66,14 @@ check('leaves Rust lifecycle to rustaceanvim and installs its debugger', functio
   assert(contains(languages.mason_tools, 'codelldb'), 'missing codelldb Mason package')
 end)
 
+check('leaves Java lifecycle to nvim-jdtls and installs its debugger bundles', function()
+  assert(languages.lsp_servers.jdtls == nil, 'JDTLS must not be enabled through the generic LSP inventory')
+  assert(contains(languages.mason_tools, 'jdtls'), 'missing jdtls Mason package')
+  assert(contains(languages.mason_tools, 'java-debug-adapter'), 'missing Java debug adapter Mason package')
+  assert(contains(languages.mason_tools, 'java-test'), 'missing Java test Mason package')
+  assert(vim.deep_equal(languages.formatters_by_ft.java, { 'google-java-format' }), 'Java must use Google Java Format through Conform')
+end)
+
 if #failures > 0 then error(string.format('%d language inventory check(s) failed: %s', #failures, table.concat(failures, ', '))) end
 
 io.stdout:write 'All language inventory checks passed.\n'
