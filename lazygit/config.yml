@@ -1,7 +1,7 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/jesseduffield/lazygit/v0.56.0/schema/config.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/jesseduffield/lazygit/v0.64.1/schema/config.json
 git:
-  pagers:
-    - pager: hunk pager
+  diffRenderers:
+    - command: hunk pager
 gui:
   theme:
     selectedLineBgColor:
