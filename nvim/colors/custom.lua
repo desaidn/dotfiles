@@ -81,6 +81,9 @@ end
 -- Popup menu border (used when pumborder = 'rounded')
 vim.api.nvim_set_hl(0, 'PmenuBorder', { fg = colors.grey, bg = 'NONE' })
 
+-- Keep Neo-tree's structural line numbers quieter than the editor gutter.
+vim.api.nvim_set_hl(0, 'NeoTreeLineNr', { fg = '#4e5968' })
+
 -- Statusline background (matches float windows)
 vim.api.nvim_set_hl(0, 'StatusLine', { bg = colors.charcoal })
 vim.api.nvim_set_hl(0, 'StatusLineNC', { bg = colors.charcoal })
