@@ -35,7 +35,8 @@ Host requirements:
 Mise owns the language runtimes used by the enabled Language Tooling
 configuration: Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and
 Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Mason owns the corresponding
-LSPs, formatters, and linters. Python DAP invokes the standalone `uv` CLI.
+LSPs, formatters, linters, and debuggers. Python DAP uses Mason's debugpy
+adapter while debug targets use their project environments.
 Haskell support currently requires `ghcup` because Mason's HLS installer calls
 it directly.
 

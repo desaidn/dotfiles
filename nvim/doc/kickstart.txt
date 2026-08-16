@@ -144,10 +144,11 @@ Completion ~
 <C-k>          Show signature help
 
 Debugging exposes one language-neutral interface. Java uses nvim-jdtls with
-Mason's Java debug/test bundles; Python runs debugpy through `uv` and requires
-`uv` on `PATH`; Rust uses rustaceanvim with Mason's CodeLLDB. The shared DAP
-plugins load on the first debug action, or when Java or Rust attaches so their
-language integrations can create project debug configurations:
+Mason's Java debug/test bundles; Python uses Mason's debugpy adapter and its
+project Python environment; Rust uses rustaceanvim with Mason's CodeLLDB. The
+shared DAP plugins load on the first debug action, or when Java or Rust
+attaches so their language integrations can create project debug
+configurations:
 
 <F5>           Start or continue
 <F1>/<F2>/<F3>
@@ -162,7 +163,8 @@ including `:JdtCompile`, `:JdtSetRuntime`, `:JdtUpdateDebugConfig`, and
 `:JdtRestart`. Rust's advanced actions remain available through `:RustLsp
 runnables`, `:RustLsp testables`, `:RustLsp debuggables`, `:RustLsp
 expandMacro`, and `:RustLsp hover actions` while a common target-selection
-interface is designed.
+interface is designed. Python exposes `:DapPythonTestClass` and
+`:DapPythonTestMethod` for nvim-dap-python's test targets.
 
 ==============================================================================
 GIT AND TOOL TABS               *dotfiles-nvim-git* *dotfiles-nvim-tool-tabs*
@@ -266,8 +268,8 @@ Health and diagnosis ~
 
 Use the root `install.sh` prerequisite check together with the exact Neovim
 0.12.4 startup guard. This Neovim workflow also requires `tree-sitter`,
-`lazygit`, and `hunk`; Python debugging additionally requires `uv`. See the
-root `README.md` for environment setup. Implementation and test guidance lives
+`lazygit`, and `hunk`; Mason provisions the Python debug adapter. See the root
+`README.md` for environment setup. Implementation and test guidance lives
 in `nvim/AGENTS.md`; architectural rationale lives under `docs/adr/`, and
 domain language lives in `CONTEXT.md`.
 

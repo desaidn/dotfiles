@@ -52,8 +52,8 @@ Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple 
 - **Git Integration**: gitsigns (in-editor signs, blame, local hunks); Hunk (working-tree and staged review); lazygit (Git transaction UI)
 - **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
 - **Formatting**: conform.nvim for auto-formatting
-- **Linting**: nvim-lint with eslint_d, ruff
-- **Debugging**: nvim-dap with project-root-aware `launch.json`, Java (nvim-jdtls + Mason debug/test bundles), Python (debugpy via uv), and Rust (rustaceanvim + Mason CodeLLDB)
+- **Linting**: nvim-lint with eslint_d; Ruff supplies Python diagnostics and actions through LSP
+- **Debugging**: nvim-dap with project-root-aware `launch.json`, Java (nvim-jdtls + Mason debug/test bundles), Python (Mason debugpy), and Rust (rustaceanvim + Mason CodeLLDB)
 - **UI**: which-key, mini.nvim (statusline, surround, text objects), undotree, todo-comments
 
 ### Key Bindings Structure
@@ -75,7 +75,9 @@ provide backend-specific commands, but must not claim a separate keymap
 namespace or override shared LSP mappings. Rustaceanvim's advanced actions are
 available through `:RustLsp runnables`, `:RustLsp testables`, `:RustLsp
 debuggables`, `:RustLsp expandMacro`, and `:RustLsp hover actions` while a
-common target-selection interface is designed.
+common target-selection interface is designed. Python's nvim-dap-python test
+actions are available through `:DapPythonTestClass` and
+`:DapPythonTestMethod`.
 
 ## Development Workflows
 
@@ -234,8 +236,8 @@ inventory:
   sessions rely on the OSC 52 fallback instead.
 - Hunk must be version 0.18.1 or newer for concurrent watch sessions.
 - Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, rustfmt, and rust-src, and
-  Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Python debugging
-  additionally requires the standalone `uv` CLI.
+  Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Mason owns Python's
+  debugpy adapter.
 - Haskell is an explicit ownership exception: the current Mason HLS recipe
   invokes `ghcup`, so `ghcup` must be available before Mason performs a clean
   inventory install.

@@ -357,7 +357,7 @@ validate_brew_dependencies() {
 
     for command_name in \
         git fish zsh nvim herdr tmux lazygit hunk mise atuin gh rg \
-        tree-sitter uv ghcup
+        tree-sitter ghcup
     do
         command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
     done

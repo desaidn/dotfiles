@@ -132,7 +132,6 @@ layer:
 | `gh` | GitHub issue workflows described under `docs/agents/` |
 | `ripgrep` | `rg`; Neovim Telescope grep |
 | `tree-sitter-cli` | `tree-sitter` 0.26.1 or newer; parser management |
-| `uv` | Python debugging through nvim-dap-python |
 | `ghcup` | Haskell Language Server installation; capability-specific |
 | `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
 

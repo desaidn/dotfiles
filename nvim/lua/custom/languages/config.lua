@@ -83,7 +83,14 @@ return {
     fish_lsp = {
       root_markers = { 'config.fish', '.git' },
     },
-    pyright = {},
+    basedpyright = {
+      settings = {
+        basedpyright = {
+          disableOrganizeImports = true,
+        },
+      },
+    },
+    ruff = { on_attach = capabilities.disable_ruff_overlap },
     jsonls = { init_options = { provideFormatter = false } },
     yamlls = { settings = { yaml = { keyOrdering = false } } },
     html = { init_options = { provideFormatter = false } },
@@ -106,8 +113,9 @@ return {
     'eslint_d',
     'rust-analyzer',
     'codelldb',
-    'pyright',
+    'basedpyright',
     'ruff',
+    'debugpy',
     'json-lsp',
     'yaml-language-server',
     'html-lsp',
@@ -153,13 +161,6 @@ return {
       root_profile = { markers = { 'Cargo.toml', 'rust-project.json', '.git' } },
       launch_types = { 'codelldb' },
     },
-    python = {
-      lsp_client = 'pyright',
-      root_profile = {
-        markers = { 'pyrightconfig.json', 'pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile', '.git' },
-      },
-      launch_types = { 'python' },
-    },
   },
 
   linters_by_ft = {
@@ -167,6 +168,5 @@ return {
     javascriptreact = { 'eslint_d' },
     typescript = { 'eslint_d' },
     typescriptreact = { 'eslint_d' },
-    python = { 'ruff' },
   },
 }

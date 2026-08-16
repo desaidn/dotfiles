@@ -45,13 +45,13 @@ The result will still not be a single proprietary, polyglot semantic index. LSP 
 
 `nvim/lua/custom/languages/lsp.lua` uses the Neovim 0.11+ `vim.lsp.config`/`vim.lsp.enable` API, merges Blink completion capabilities, attaches standard mappings, document highlights, and capability-gated inlay hints. This follows the current [Neovim LSP configuration model](https://neovim.io/doc/user/lsp/). `nvim-lspconfig` supplies executable, filetype, and root defaults.
 
-`nvim/lua/custom/languages/dap.lua` owns the shared lazy `nvim-dap`, `nvim-dap-ui`, and `nvim-nio` stack plus the common controls; [`python.lua`](../nvim/lua/custom/languages/python.lua) separately owns lazy `nvim-dap-python`/debugpy setup for Python buffers. [nvim-dap](https://github.com/mfussenegger/nvim-dap) supports the required generic launch, attach, breakpoint, stepping, inspection, and REPL operations; adapters are intentionally language-specific dependencies.
+`nvim/lua/custom/languages/dap.lua` owns the shared lazy `nvim-dap`, `nvim-dap-ui`, and `nvim-nio` stack plus the common controls; [`adapters/python.lua`](../nvim/lua/custom/languages/adapters/python.lua) separately owns lazy nvim-dap-python/debugpy setup for Python buffers. [nvim-dap](https://github.com/mfussenegger/nvim-dap) supports the required generic launch, attach, breakpoint, stepping, inspection, and REPL operations; adapters are intentionally language-specific dependencies.
 
 Provisioning boundaries are clear:
 
 - Mise pins Node 24.18.0, Python 3.14.6, Rust 1.97.1 with Clippy/rustfmt, and Amazon Corretto 21.0.12.8.1.
 - Mason owns editor servers, formatters, linters, and debuggers.
-- Homebrew owns standalone applications and `uv`, but none of the missing language adapters needs to move into the Brewfile.
+- Homebrew owns standalone applications, while Mason owns the Python adapter and language tools.
 - Conform is the save-format path; nvim-lint currently owns Ruff and `eslint_d` lint runs.
 
 ### Per-language state and gaps
@@ -61,7 +61,7 @@ Provisioning boundaries are clear:
 | Rust                  | Generic `rust_analyzer`; globally enables every Cargo feature and uses Clippy; Mason installs rust-analyzer            | No rust-analyzer extensions, runnable/test/debug target discovery, macro expansion UI, or DAP adapter. `allFeatures = true` can make mutually exclusive feature sets invalid and is not a faithful universal default. Mise lacks `rust-src`.                                             |
 | Java                  | nvim-jdtls starts Mason JDT LS per Java build root; Google Java Format via Conform; Mason Java debug/test bundles       | A real Gradle/Maven multi-module and JUnit/TestNG DAP fixture is still needed; the server and project JDK selection must remain visible when diagnosing build-model issues.                                                                                                              |
 | Kotlin                | Official `kotlin_lsp`; ktlint via Conform                                                                              | Server is alpha/JVM-focused. No configured DAP. Android is experimental, Kotlin Multiplatform is not yet supported, and official DAP is experimental and attach-only.                                                                                                                    |
-| Python                | `pyright`; Ruff both installed and invoked by nvim-lint; Conform runs Ruff fix/format/imports; dap-python invokes `uv` | Pyright's generic server omits capabilities available in Pylance or basedpyright. Default project diagnostics are not explicitly workspace-wide. Ruff is not used as an LSP, so continuous actions/fixes are weaker. Debug test mappings and deterministic adapter ownership are absent. |
+| Python                | BasedPyright semantic LSP; native Ruff LSP for diagnostics/actions; Conform runs Ruff fix/format/imports; Mason debugpy powers nvim-dap-python | Workspace diagnostics and mypy remain project-level choices; representative multi-package/test/attach fixtures are still needed. |
 | TypeScript/JavaScript | `ts_ls`; Mason `typescript-language-server`; prettier/prettierd; `eslint_d`; no DAP                                    | It selects the old TypeScript 6 tsserver bridge rather than TypeScript 7's first-party native LSP. No Node/browser debugger, source-map configuration, ESLint code-action LSP, or explicit Node-versus-browser project contract.                                                         |
 | Fish                  | Tree-sitter is not installed; no LSP, formatter, lint/action owner, or debugger                                                 | The primary interactive shell's functions, completions, abbreviations, and sourced configuration have no semantic navigation, diagnostics, or Fish-aware formatting.                                                                                                                      |
 | Bash/POSIX `sh`       | Tree-sitter `bash` only; no LSP, formatter, or diagnostics                                                                   | Shell scripts lack cross-file navigation, ShellCheck analysis, and an explicit formatting owner.                                                                                                                                                                                              |
@@ -282,7 +282,7 @@ Mise changes are intentionally small:
 - do not install TypeScript globally through Mise/npm; each project owns TypeScript 7 and any TypeScript 6 compatibility package;
 - do not make project Python environments or Java build toolchains global defaults.
 
-Homebrew needs no new LSP or DAP formula. Keep `uv` there and keep Mason as the debugger/server owner. Project repositories own Cargo manifests/toolchain overrides, Gradle/Maven wrappers and toolchains, Python dependency locks/environments/config, TypeScript/compiler/ESLint dependencies and configuration, browser bundler/source maps, and `.vscode/launch.json`.
+Homebrew needs no LSP or DAP formula. Mason owns debugger/server packages. Project repositories own Cargo manifests/toolchain overrides, Gradle/Maven wrappers and toolchains, Python dependency locks/environments/config, TypeScript/compiler/ESLint dependencies and configuration, browser bundler/source maps, and `.vscode/launch.json`.
 
 Neovim plugin changes are limited to rustaceanvim and nvim-jdtls. Pin them through the existing `vim.pack` lock workflow. No new generic DAP wrapper is required for JavaScript, Python, or Kotlin's pilot.
 

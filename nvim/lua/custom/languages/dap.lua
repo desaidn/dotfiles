@@ -46,10 +46,11 @@ local function replace_configuration_variables(value, variables)
   return setmetatable(replaced, getmetatable(value))
 end
 
-local function with_configuration_values(config, variables, root)
+local function with_configuration_values(config, variables, root, prepare)
   -- nvim-dap represents launch configurations with `inputs` as callable tables.
   -- Preserve that deferred expansion while freezing this buffer's values.
   local transformed = replace_configuration_variables(vim.deepcopy(config), variables)
+  transformed = prepare(transformed)
   transformed.cwd = transformed.cwd or root
   local metatable = getmetatable(config)
   if not metatable or type(metatable.__call) ~= 'function' then return transformed end
@@ -57,6 +58,7 @@ local function with_configuration_values(config, variables, root)
   local transformed_metatable = vim.deepcopy(metatable)
   transformed_metatable.__call = function(_, ...)
     local expanded = replace_configuration_variables(vim.deepcopy(config(...)), variables)
+    expanded = prepare(expanded)
     expanded.cwd = expanded.cwd or root
     return expanded
   end
@@ -99,7 +101,13 @@ local function project_launch_configs(bufnr)
   local filtered = {}
   for _, config in ipairs(configs) do
     if vim.tbl_contains(dap_config.launch_types, config.type) then
-      filtered[#filtered + 1] = with_configuration_values(config, configuration_variables(project), project.root)
+      local prepare = dap_config.prepare_launch or function(value) return value end
+      filtered[#filtered + 1] = with_configuration_values(
+        config,
+        configuration_variables(project),
+        project.root,
+        function(value) return prepare(value, project) end
+      )
     end
   end
   return filtered

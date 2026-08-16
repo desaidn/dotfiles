@@ -33,7 +33,7 @@ Keep provisioning ownership explicit:
   Neovim 0.12.4 stable, Herdr, tmux 3.7+, LazyGit 0.56+, Hunk 0.18.1+,
   Mise, Atuin, `gh`,
   ripgrep, tree-sitter CLI 0.26.1+, and capability-specific tools such as
-  `uv` and `ghcup`; on Linux it also owns `xclip` and `wl-clipboard`.
+  `ghcup`; on Linux it also owns `xclip` and `wl-clipboard`.
 - **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy/rustfmt/rust-src, and Amazon
   Corretto JDK 21 (`corretto-21.0.12.8.1`). The tracked manifest uses exact
   versions so reruns do not silently advance runtimes; update those pins

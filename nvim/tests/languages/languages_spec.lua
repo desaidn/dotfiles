@@ -60,6 +60,31 @@ check('declares Bash and POSIX shell tooling with one save formatter', function(
   assert(not client.server_capabilities.documentRangeFormattingProvider, 'BashLS range formatting must be disabled')
 end)
 
+check('separates Python semantics, lint actions, formatting, and debugging', function()
+  assert(languages.lsp_servers.pyright == nil, 'Pyright must not attach beside BasedPyright')
+  assert(languages.lsp_servers.basedpyright ~= nil, 'missing BasedPyright configuration')
+  assert(languages.lsp_servers.ruff ~= nil, 'missing Ruff language-server configuration')
+  assert(languages.lsp_servers.basedpyright.settings.basedpyright.disableOrganizeImports == true)
+  assert(contains(languages.mason_tools, 'basedpyright'), 'missing basedpyright Mason package')
+  assert(contains(languages.mason_tools, 'ruff'), 'missing Ruff Mason package')
+  assert(contains(languages.mason_tools, 'debugpy'), 'missing debugpy Mason package')
+  assert(not contains(languages.mason_tools, 'pyright'), 'Pyright Mason package must be removed')
+  assert(languages.linters_by_ft.python == nil, 'Ruff diagnostics must not be duplicated through nvim-lint')
+  assert(vim.deep_equal(languages.formatters_by_ft.python, { 'ruff_fix', 'ruff_format', 'ruff_organize_imports' }))
+
+  local client = {
+    server_capabilities = {
+      hoverProvider = true,
+      documentFormattingProvider = true,
+      documentRangeFormattingProvider = true,
+    },
+  }
+  languages.lsp_servers.ruff.on_attach(client)
+  assert(not client.server_capabilities.hoverProvider, 'Ruff hover must defer to BasedPyright')
+  assert(not client.server_capabilities.documentFormattingProvider, 'Ruff formatting must defer to Conform')
+  assert(not client.server_capabilities.documentRangeFormattingProvider, 'Ruff range formatting must defer to Conform')
+end)
+
 check('leaves Rust lifecycle to rustaceanvim and installs its debugger', function()
   assert(languages.lsp_servers.rust_analyzer == nil, 'rust-analyzer must not be enabled through the generic LSP inventory')
   assert(contains(languages.mason_tools, 'rust-analyzer'), 'missing rust-analyzer Mason package')
