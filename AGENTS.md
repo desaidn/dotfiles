@@ -104,6 +104,9 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 
 - Use `lazygit` for TUI operations (integrated with nvim via `<leader>gg`),
   with Hunk as its Diffing Solution and native LazyGit staging controls
+- Write commit subjects as short, imperative plain-language summaries (for
+  example, `Add shell LSP support`); do not use Conventional Commit prefixes
+  such as `feat:` or `fix:`.
 - Configured with custom theme matching development environment
 - Use direct Hunk from Neovim only for full stacked review: `<leader>gd` → `hunk diff --watch --mode stack` for the working tree, `<leader>gD` → the same review with `--staged`. Both inputs share one Tool Tab and one process, so exactly one session matches the repository and the `--repo .` selector on `hunk session` subcommands stays unambiguous.
 - Keep gitsigns keymaps hunk-local; buffer-wide stage/reset operations belong in lazygit.

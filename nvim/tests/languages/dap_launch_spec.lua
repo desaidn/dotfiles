@@ -28,6 +28,7 @@ local fake_dap = {
 }
 local launch_path
 local launch_name = 'Rust'
+local client_root
 local cwd_before = vim.fn.getcwd()
 local fixture = vim.fn.tempname()
 assert(vim.fn.mkdir(fixture .. '/rust-app/.vscode', 'p') == 1, 'failed to create launch fixture')
@@ -37,7 +38,10 @@ local rust_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[rust_buffer].filetype = 'rust'
 vim.pack.add = function() end
 vim.cmd.packadd = function() end
-vim.lsp.get_clients = function() return {} end
+vim.lsp.get_clients = function()
+  if client_root then return { { config = { root_dir = client_root } } } end
+  return {}
+end
 package.loaded.dap = fake_dap
 package.loaded.dapui = { setup = function() end }
 package.loaded['dap.ext.vscode'] = {
@@ -49,6 +53,10 @@ package.loaded['dap.ext.vscode'] = {
       cwd = '${workspaceFolder}',
       program = '${file}',
       args = { '${relativeFile}', '${workspaceFolderBasename}' },
+      environment = {
+        ['${workspaceFolder}/one'] = '${workspaceFolder}',
+        ['${workspaceFolder}/two'] = '${workspaceFolderBasename}',
+      },
     }
     setmetatable(rust, { __call = function() return { type = 'codelldb', cwd = '${workspaceFolder}' } end })
     return {
@@ -77,6 +85,8 @@ check('uses the initiating buffer root for launch.json without changing cwd', fu
   assert(configs[1].program == project_root .. '/src/main.rs', vim.inspect(configs[1]))
   assert(configs[1].args[1] == 'src/main.rs', vim.inspect(configs[1]))
   assert(configs[1].args[2] == 'rust-app', vim.inspect(configs[1]))
+  assert(configs[1].environment[project_root .. '/one'] == project_root, vim.inspect(configs[1]))
+  assert(configs[1].environment[project_root .. '/two'] == 'rust-app', vim.inspect(configs[1]))
   assert(configs[1]().cwd == project_root, 'workspace variables must survive launch.json input expansion')
   assert(configs[2].cwd == project_root, 'project root must be the default launch cwd')
   assert(vim.fn.getcwd() == cwd_before, 'DAP provider must not mutate current working directory')
@@ -87,6 +97,18 @@ check('does not fall back to a cwd launch configuration without project context'
   vim.bo[other_buffer].filetype = 'rust'
   assert(#fake_dap.providers.configs['dap.launch.json'](other_buffer) == 0)
   vim.api.nvim_buf_delete(other_buffer, { force = true })
+end)
+
+check('does not use a client root outside the initiating buffer path', function()
+  client_root = '/unrelated-project'
+  fake_dap.providers.configs['dap.launch.json'](rust_buffer)
+  assert(launch_path == project_root .. '/.vscode/launch.json', tostring(launch_path))
+  client_root = nil
+end)
+
+check('ignores missing or invalid provider buffers', function()
+  assert(#fake_dap.providers.configs['dap.launch.json']() == 0)
+  assert(#fake_dap.providers.configs['dap.launch.json'](-1) == 0)
 end)
 
 check('reads launch configurations again for each debug selection', function()

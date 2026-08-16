@@ -39,16 +39,16 @@ local function replace_configuration_variables(value, variables)
   end
   if type(value) ~= 'table' then return value end
 
+  local replaced = {}
   for key, child in pairs(value) do
-    local replacement_key = replace_configuration_variables(key, variables)
-    local replacement_value = replace_configuration_variables(child, variables)
-    if replacement_key ~= key then value[key] = nil end
-    value[replacement_key] = replacement_value
+    replaced[replace_configuration_variables(key, variables)] = replace_configuration_variables(child, variables)
   end
-  return value
+  return setmetatable(replaced, getmetatable(value))
 end
 
 local function with_configuration_values(config, variables, root)
+  -- nvim-dap represents launch configurations with `inputs` as callable tables.
+  -- Preserve that deferred expansion while freezing this buffer's values.
   local transformed = replace_configuration_variables(vim.deepcopy(config), variables)
   transformed.cwd = transformed.cwd or root
   local metatable = getmetatable(config)
@@ -74,11 +74,13 @@ local function dap_project(bufnr, dap_config)
   if not project then return nil end
 
   local lsp_root = project_root_from_client(bufnr, dap_config.lsp_client)
-  if lsp_root then project.root = lsp_root end
+  if lsp_root and vim.fs.relpath(lsp_root, project.path) then project.root = lsp_root end
   return project
 end
 
 local function project_launch_configs(bufnr)
+  if type(bufnr) ~= 'number' or not vim.api.nvim_buf_is_valid(bufnr) then return {} end
+
   local filetype = vim.bo[bufnr].filetype
   local dap_config = languages.dap_by_ft[filetype]
   if not dap_config then return {} end

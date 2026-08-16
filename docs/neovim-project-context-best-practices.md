@@ -103,10 +103,12 @@ Recommended implementation shape:
 2. Resolve the active buffer's project root through the applicable context
    profile and call `require('dap.ext.vscode').getconfigs(explicit_path)` for
    `<root>/.vscode/launch.json`.
-3. Deep-copy each returned configuration and recursively replace
-   `${workspaceFolder}` and `${workspaceFolderBasename}` with the resolved
-   root and its basename **before** nvim-dap's own expansion runs. Leave
-   `${file}`, `${env:...}`, and supported `${input:...}` behavior to nvim-dap.
+3. Deep-copy each returned configuration and recursively replace every
+   CWD-sensitive file and workspace variable (`${file*}`, `${relativeFile*}`,
+   `${workspaceFolder}`, and `${workspaceFolderBasename}`) from the initiating
+   buffer and resolved root **before** nvim-dap's own expansion runs. Leave
+   environment and supported `${input:...}` behavior to nvim-dap, preserving
+   callable configurations it uses for inputs.
 4. Filter/route configurations by an explicit adapter-type-to-filetype table
    owned by the corresponding language adapters, so unrelated launch types do
    not appear for the current buffer.

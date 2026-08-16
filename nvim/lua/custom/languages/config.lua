@@ -45,28 +45,6 @@ local function jdtls_command(dispatchers, config)
   })
 end
 
--- Use the nearest workspace manifest before rust-analyzer has attached. Avoid
--- running Cargo synchronously from a DAP configuration provider.
-local function cargo_workspace_root(path)
-  local crate_root = vim.fs.root(path, { 'Cargo.toml' })
-  if not crate_root then return vim.fs.root(path, { 'rust-project.json', '.git' }) end
-
-  local directory = crate_root
-  while directory do
-    local manifest = vim.fs.joinpath(directory, 'Cargo.toml')
-    if vim.uv.fs_stat(manifest) then
-      for _, line in ipairs(vim.fn.readfile(manifest)) do
-        if vim.trim(line) == '[workspace]' then return directory end
-      end
-    end
-
-    local parent = vim.fs.dirname(directory)
-    if parent == directory then break end
-    directory = parent
-  end
-  return crate_root
-end
-
 return {
   treesitter_parsers = {
     'bash',
@@ -193,7 +171,7 @@ return {
   dap_by_ft = {
     rust = {
       lsp_client = 'rust_analyzer',
-      root_profile = { markers = { 'Cargo.toml', 'rust-project.json', '.git' }, resolve = cargo_workspace_root },
+      root_profile = { markers = { 'Cargo.toml', 'rust-project.json', '.git' } },
       launch_types = { 'codelldb' },
     },
     python = {
