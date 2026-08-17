@@ -84,8 +84,12 @@ return {
       root_markers = { 'config.fish', '.git' },
     },
     basedpyright = {
+      -- Neovim 0.12 pull diagnostics expose every edit as work progress.
+      -- Push workspace diagnostics retain cross-file feedback and startup status.
+      init_options = { disablePullDiagnostics = true },
       settings = {
         basedpyright = {
+          analysis = { diagnosticMode = 'workspace' },
           disableOrganizeImports = true,
         },
       },

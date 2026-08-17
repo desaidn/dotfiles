@@ -61,14 +61,17 @@ discouraged and recommends an explicit `python.pythonPath` only when an editor
 must select an interpreter; it also defaults semantic analysis to its
 `recommended` rule set. [BasedPyright language-server settings](https://docs.basedpyright.com/latest/configuration/language-server-settings/)
 
-The global configuration should only set
+The global configuration should set
 `basedpyright.disableOrganizeImports = true`, because Conform/Ruff is the one
-import organizer. BasedPyright explicitly documents that setting as the way to
-avoid competing organizers. Leave language services, auto-import completions,
-and project analysis enabled. Workspace diagnostics are a project decision:
-`basedpyright.analysis.diagnosticMode` defaults to `openFilesOnly`, while a
-repository may elect `workspace` in its own configuration. [BasedPyright
-language-server settings](https://docs.basedpyright.com/latest/configuration/language-server-settings/)
+import organizer, and explicitly select workspace push diagnostics with
+`basedpyright.analysis.diagnosticMode = "workspace"` plus
+`init_options.disablePullDiagnostics = true`. This preserves immediate
+cross-file feedback while avoiding a work-done progress cycle for every edit
+under Neovim 0.12. Repositories should bound large workspaces through committed
+include/exclude and execution-environment configuration. Leave language
+services and auto-import completions enabled. [BasedPyright language-server
+settings](https://docs.basedpyright.com/latest/configuration/language-server-settings/),
+[BasedPyright progress research](neovim-basedpyright-fidget-progress-research.md)
 
 For DAP launch targets, use a small, testable project resolver rather than
 Neovim's process CWD:
