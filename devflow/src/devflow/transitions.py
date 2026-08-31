@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 from .domain import ChangeSetKind, Failure, Outcome, Success
 
 FEATURE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]*")
+type MainlineName = Literal["main", "mainline", "master"]
+MAINLINE_NAMES: tuple[MainlineName, ...] = ("main", "mainline", "master")
 
 
 def decide_feature_name(value: str) -> Outcome[str]:
@@ -84,15 +87,21 @@ def decide_review(current_branch: str | None, request: ReviewRequest) -> Outcome
 @dataclass(frozen=True, slots=True)
 class LandRequest:
     feature: str
+    target: MainlineName
     title: str
 
 
-def decide_land_request(feature: str, title: str) -> Outcome[LandRequest]:
+def decide_land_request(feature: str, target: str, title: str) -> Outcome[LandRequest]:
     if isinstance(outcome := decide_feature_name(feature), Failure):
         return outcome
+    match target:
+        case "main" | "mainline" | "master":
+            mainline = target
+        case _:
+            return Failure("invalid_landing_target", "Landing target must be main, mainline, or master.")
     if not title.strip() or "\n" in title or "\r" in title:
         return Failure("invalid_landing_title", "Landing title must be one non-empty line.")
-    return Success(LandRequest(feature, title))
+    return Success(LandRequest(feature, mainline, title))
 
 
 @dataclass(frozen=True, slots=True)

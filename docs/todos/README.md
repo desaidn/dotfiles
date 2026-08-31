@@ -45,3 +45,4 @@ Point an agent at one brief and ask it to take ownership of that item. The agent
 - [Add Pi integration](04-pi-integration.md)
 - [Add a local model](05-local-model.md)
 - [Unify Neovim language actions](06-unify-neovim-language-actions.md)
+- [Improve installer upgrade tolerance](07-installer-upgrade-tolerance.md)

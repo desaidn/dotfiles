@@ -113,15 +113,18 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 
 ### Agent Development Workflow
 
+- These rules govern coding-agent actions only. Human Git and LazyGit operations
+  are unrestricted and remain the user's transaction surface; agents must not
+  block, intercept, or reinterpret them as Workflow Exceptions.
 - Run `devflow` from the checkout where the work should remain. This may be the primary checkout or a user-created worktree; the Workflow Engine never creates, adopts, moves, repairs, prunes, locks, unlocks, or removes a worktree.
 - Start locally authored features with `devflow start <feature>` from a clean invoking checkout. It creates `wip/<feature>` exactly at current mainline or selects the existing branch without rewriting it. Development commits must only append history. Incorporate mainline changes with an ordinary merge, never by rebasing WIP. If the branch is checked out elsewhere, stop instead of moving or changing that checkout.
-- Treat every Git worktree lifecycle action as a Workflow Exception requiring explicit user approval. Devflow does not perform one even after approval; the user owns worktree topology.
-- Once repository guards are installed, symbolic checkout is restricted to `wip/*`; detached checkout remains available, while mainline, Review Branch, and unrelated symbolic checkout requires an explicit Workflow Exception.
+- Treat every agent-initiated Git worktree lifecycle action as a Workflow Exception requiring explicit user approval. Devflow does not perform one even after approval; the user owns worktree topology.
+- Devflow installs no repository hooks and reserves no ref or checkout against human activity. It validates the state visible to each `start`, `review`, or `land` invocation and fails when that state is stale or incompatible, but a concurrent human Git operation can race any preflight. Coordinate shared-checkout activity rather than assuming serialization.
 - Start local review with `devflow --json review` from a clean checkout on the matching WIP head. For externally authored code, provide the complete source, base, and review-name triple; the explicit form is always external and requires the clean invoking checkout to be exactly at the resolved source. Do not create WIP history for review-only work.
 - Keep the invoking checkout quiescent while its review is open: do not change `HEAD`, the index, or working-tree files. Hunk and Editor Handoff stay rooted there so `e` opens in the review tab's Neovim with normal project-root discovery and full language tooling, using that checkout's dependencies, generated artifacts, and build context. For local work, address feedback with append-only WIP commits; for external code, review a newly supplied source. Either way, any checkout change requires a fresh Review Snapshot.
 - During review, inspect the same immutable Hunk session as the user and add actionable findings through Hunk's session comment commands.
-- Treat approval as explicit and Review Snapshot-specific. Land only with `devflow land`, the exact review identifier, and a complete imperative feature title.
-- Any action outside the documented flow in `docs/agents/development-workflow.md` is a Workflow Exception and requires explicit user approval.
+- Treat approval as explicit and Review Snapshot-specific. Land only with `devflow land <feature> --target <main|mainline|master>`, the exact review identifier, and a complete imperative feature title; devflow never infers the target branch.
+- Any agent action outside the documented flow in `docs/agents/development-workflow.md` is a Workflow Exception and requires explicit user approval.
 
 ### Agent Harnesses
 
@@ -214,9 +217,9 @@ authority for its deterministic checks; agent instructions do not replace them.
 - After full Mise provisioning, install `dotfiles-devflow` through `uv` with
   the exact isolated `mise which python`, the private
   `~/.local/share/dotfiles/uv-tools` tool directory, and `~/.local/bin` for
-  entry points. A source-and-interpreter ownership receipt must make the
-  unchanged second run a no-op; never overwrite unreceipted or ambiguous tool
-  state and never use `--force`.
+  its `devflow` entry point. A source-and-interpreter ownership receipt must
+  make the unchanged second run a no-op; never overwrite unreceipted or
+  ambiguous tool state and never use `--force`.
 - Run every owned `uv tool` transaction with `--no-config` in a subshell that
   removes inherited `UV_*`, `PYTHON*`, `VIRTUAL_ENV*`, `CONDA_*`, and `PIP_*`
   variables before setting only the private tool and entry-point directories.
@@ -224,14 +227,14 @@ authority for its deterministic checks; agent instructions do not replace them.
 - Validate the private environment's `uv-receipt.toml` semantically with the
   exact receipted Python 3.14 interpreter and `tomllib`. Accept irrelevant TOML
   formatting, ordering, and comments, but require the exact editable source,
-  interpreter, distribution, and three owned entry points with no extra,
-  duplicate, missing, malformed, or non-string inventory. The receipt and
-  source marker must be regular files; public entry points must be the exact
-  owned symlinks.
+  interpreter, distribution, and single owned `devflow` entry point with no
+  extra, duplicate, missing, malformed, or non-string inventory. The receipt and
+  source marker must be regular files; the public entry point must be the exact
+  owned symlink.
 - Write an ownership-safe pending receipt before `uv` changes tool state. A
   rerun may retry an exact pending install only when no tool artifacts exist,
-  or finalize it without reinstalling only when its environment and every
-  entry point are fully valid; preserve and reject every partial mismatch.
+  or finalize it without reinstalling only when its environment and entry point
+  are fully valid; preserve and reject every partial mismatch.
 - Generic installation must not create or edit harness-global Codex or Claude
   guidance. Those adapters require an explicit `devflow harness install`
   invocation.
@@ -253,9 +256,9 @@ authority for its deterministic checks; agent instructions do not replace them.
   per-machine activation files, and unrelated state under
   `~/.local/share/dotfiles/` untouched. A successful second run is a no-op.
 - Remove the Workflow Engine only when its receipt, editable source,
-  interpreter record, private environment, and public entry points establish
-  unambiguous ownership. Preserve foreign or partial state and never uninstall
-  Homebrew's `uv` or Mise's Python.
+  interpreter record, private environment, and public entry point establish
+  unambiguous ownership of the single `devflow` entry point. Preserve foreign
+  or partial state, and never uninstall Homebrew's `uv` or Mise's Python.
 - Reuse the installer's exact semantic `uv-receipt.toml` ownership predicate
   independently inside `uninstall.sh`, and run the owned `uv tool uninstall`
   with the same config and environment isolation.

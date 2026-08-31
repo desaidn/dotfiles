@@ -90,7 +90,7 @@ then
     flag_state=""
     IFS= read -r first_line <"$1" || true
     IFS= read -r flag_state <"$flag" || true
-    if [[ "$first_line" == "dotfiles-devflow-v1" &&
+    if [[ "$first_line" == "dotfiles-devflow-v2" &&
         "$flag_state" == "interrupt" ]]
     then
         printf 'consumed\n' >"$flag"
@@ -455,13 +455,9 @@ case "${1:-} ${2:-}" in
             "python = \"$DOTFILES_TEST_FAKE_BIN/python\"" \
             'entrypoints = [' \
             "    { name = \"devflow\", install-path = \"$bin_dir/devflow\", from = \"dotfiles-devflow\" }," \
-            "    { name = \"devflow-pre-push\", install-path = \"$bin_dir/devflow-pre-push\", from = \"dotfiles-devflow\" }," \
-            "    { name = \"devflow-reference-transaction\", install-path = \"$bin_dir/devflow-reference-transaction\", from = \"dotfiles-devflow\" }," \
             ']' \
             >"$tool_dir/dotfiles-devflow/uv-receipt.toml"
-        for executable in \
-            devflow devflow-reference-transaction devflow-pre-push
-        do
+        for executable in devflow; do
             cp "$DOTFILES_TEST_GENERIC_TEMPLATE" \
                 "$tool_dir/dotfiles-devflow/bin/$executable"
             chmod +x "$tool_dir/dotfiles-devflow/bin/$executable"
@@ -481,11 +477,9 @@ case "${1:-} ${2:-}" in
         }
         printf 'uv tool uninstall|%s|%s|%s\n' "$tool_dir" "$bin_dir" "$*" \
             >>"$DOTFILES_TEST_LOG"
-        for executable in \
-            devflow devflow-reference-transaction devflow-pre-push
-        do
-            rm -f "$bin_dir/$executable"
-        done
+        if [[ -e "$tool_dir/dotfiles-devflow/bin/devflow" ]]; then
+            rm -f "$bin_dir/devflow"
+        fi
         rm -rf "$tool_dir/dotfiles-devflow"
         ;;
     *)
@@ -827,18 +821,15 @@ assert_common_links_removed() {
 }
 
 assert_devflow_installed() {
-    local executable
     local tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
     local receipt="$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
     local expected_uv_receipt="$FIXTURE_STATE/expected-uv-receipt.toml"
 
     assert_exists "$tool_environment"
-    for executable in devflow devflow-reference-transaction devflow-pre-push; do
-        assert_symlink \
-            "$FIXTURE_HOME/.local/bin/$executable" \
-            "$tool_environment/bin/$executable"
-    done
-    grep -Fxq 'dotfiles-devflow-v1' "$receipt" ||
+    assert_symlink \
+        "$FIXTURE_HOME/.local/bin/devflow" \
+        "$tool_environment/bin/devflow"
+    grep -Fxq 'dotfiles-devflow-v2' "$receipt" ||
         fail "Workflow Engine receipt has an unexpected format"
     grep -Fxq "$REPO_ROOT/devflow" "$receipt" ||
         fail "Workflow Engine receipt did not record its editable source"
@@ -857,15 +848,11 @@ assert_devflow_installed() {
 }
 
 assert_devflow_not_installed() {
-    local executable
-
     assert_not_exists \
         "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
     assert_not_exists \
         "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
-    for executable in devflow devflow-reference-transaction devflow-pre-push; do
-        assert_not_exists "$FIXTURE_HOME/.local/bin/$executable"
-    done
+    assert_not_exists "$FIXTURE_HOME/.local/bin/devflow"
 }
 
 assert_devflow_receipt_status() {
@@ -887,9 +874,7 @@ write_devflow_uv_receipt_fixture() {
             '[tool]' \
             "python = '$FIXTURE_FAKE_BIN/python' # pinned interpreter" \
             'entrypoints = [' \
-            "  { from = 'dotfiles-devflow', name = 'devflow-reference-transaction', install-path = '$FIXTURE_HOME/.local/bin/devflow-reference-transaction' }," \
             "  { install-path = '$FIXTURE_HOME/.local/bin/devflow', from = 'dotfiles-devflow', name = 'devflow' }," \
-            "  { name = 'devflow-pre-push', from = 'dotfiles-devflow', install-path = '$FIXTURE_HOME/.local/bin/devflow-pre-push' }," \
             ']' \
             'requirements = [' \
             "  { editable = '$REPO_ROOT/devflow', name = 'dotfiles-devflow' }," \
@@ -936,8 +921,6 @@ write_devflow_uv_receipt_fixture() {
         "python = \"$receipt_python\"" \
         'entrypoints = [' \
         "    { name = \"devflow\", install-path = \"$FIXTURE_HOME/.local/bin/devflow\", from = \"dotfiles-devflow\" }," \
-        "    { name = \"devflow-pre-push\", install-path = \"$FIXTURE_HOME/.local/bin/devflow-pre-push\", from = \"dotfiles-devflow\" }," \
-        "    { name = \"devflow-reference-transaction\", install-path = \"$FIXTURE_HOME/.local/bin/devflow-reference-transaction\", from = \"dotfiles-devflow\" }," \
         >>"$destination"
     if [[ "$inventory" == "extra-entrypoint" ]]; then
         printf '%s\n' \
@@ -1307,7 +1290,7 @@ test_skip_mise_runtimes_retains_existing_manifest() {
 }
 
 test_skip_mise_runtimes_preserves_foreign_devflow_state() {
-    local executable marker receipt
+    local marker receipt
 
     new_fixture skip-mise-foreign-devflow Darwin
     marker="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow/marker"
@@ -1317,10 +1300,8 @@ test_skip_mise_runtimes_preserves_foreign_devflow_state() {
         "$(dirname "$marker")"
     printf 'foreign private environment\nwith exact bytes\n' >"$marker"
     printf 'not a dotfiles receipt\n' >"$receipt"
-    for executable in devflow devflow-reference-transaction devflow-pre-push; do
-        printf 'foreign %s\nwith exact bytes\n' "$executable" \
-            >"$FIXTURE_HOME/.local/bin/$executable"
-    done
+    printf 'foreign devflow\nwith exact bytes\n' \
+        >"$FIXTURE_HOME/.local/bin/devflow"
 
     run_installer success --skip-mise-runtimes
 
@@ -1331,13 +1312,10 @@ test_skip_mise_runtimes_preserves_foreign_devflow_state() {
         fail "skip mode changed bytes in a foreign Workflow Engine environment"
     grep -Fxq 'not a dotfiles receipt' "$receipt" ||
         fail "skip mode changed a foreign Workflow Engine receipt"
-    for executable in devflow devflow-reference-transaction devflow-pre-push; do
-        grep -Fxq "foreign $executable" \
-            "$FIXTURE_HOME/.local/bin/$executable" ||
-            fail "skip mode changed a foreign Workflow Engine executable"
-        grep -Fxq 'with exact bytes' "$FIXTURE_HOME/.local/bin/$executable" ||
-            fail "skip mode changed bytes in a foreign Workflow Engine executable"
-    done
+    grep -Fxq 'foreign devflow' "$FIXTURE_HOME/.local/bin/devflow" ||
+        fail "skip mode changed a foreign Workflow Engine executable"
+    grep -Fxq 'with exact bytes' "$FIXTURE_HOME/.local/bin/devflow" ||
+        fail "skip mode changed bytes in a foreign Workflow Engine executable"
     assert_log_prefix_count 0 "uv tool install|" "$FIXTURE_LOG"
     assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
     pass "skip mode preserves foreign Workflow Engine state without validation"
@@ -1350,7 +1328,7 @@ test_devflow_install_failure_precedes_configuration_links() {
     run_installer failure
 
     assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
-    assert_devflow_receipt_status 'dotfiles-devflow-pending-v1'
+    assert_devflow_receipt_status 'dotfiles-devflow-pending-v2'
     assert_not_exists \
         "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
     assert_not_exists "$FIXTURE_HOME/.config"
@@ -1373,7 +1351,7 @@ test_devflow_resumes_after_uv_interruption() {
 
     run_installer failure
 
-    assert_devflow_receipt_status 'dotfiles-devflow-pending-v1'
+    assert_devflow_receipt_status 'dotfiles-devflow-pending-v2'
     assert_exists \
         "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
     assert_not_exists "$FIXTURE_HOME/.config"
@@ -1394,7 +1372,7 @@ test_devflow_resumes_after_finalization_interruption() {
 
     run_installer failure
 
-    assert_devflow_receipt_status 'dotfiles-devflow-pending-v1'
+    assert_devflow_receipt_status 'dotfiles-devflow-pending-v2'
     assert_exists \
         "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
     assert_not_exists "$FIXTURE_HOME/.config"
@@ -1439,7 +1417,7 @@ test_devflow_preflight_preserves_foreign_state() {
     new_fixture foreign-devflow-receipt Darwin
     mkdir -p "$FIXTURE_HOME/.local/share/dotfiles"
     printf '%s\n%s\n%s\n' \
-        'dotfiles-devflow-v1' \
+        'dotfiles-devflow-v2' \
         "$FIXTURE_ROOT/another-repository/devflow" \
         "$FIXTURE_FAKE_BIN/python" \
         >"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
@@ -1456,7 +1434,7 @@ test_devflow_preflight_preserves_foreign_state() {
         "$FIXTURE_HOME/.local/bin" \
         "$FIXTURE_HOME/.local/share/dotfiles"
     printf '%s\n%s\n%s\n' \
-        'dotfiles-devflow-pending-v1' \
+        'dotfiles-devflow-pending-v2' \
         "$REPO_ROOT/devflow" \
         "$FIXTURE_FAKE_BIN/python" \
         >"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
@@ -1468,7 +1446,7 @@ test_devflow_preflight_preserves_foreign_state() {
     grep -Fxq 'partial pending executable' \
         "$FIXTURE_HOME/.local/bin/devflow" ||
         fail "installer changed a partial pending Workflow Engine install"
-    assert_devflow_receipt_status 'dotfiles-devflow-pending-v1'
+    assert_devflow_receipt_status 'dotfiles-devflow-pending-v2'
     assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
     assert_log_prefix_count 0 "uv tool install|" "$FIXTURE_LOG"
     assert_not_exists "$FIXTURE_HOME/.config"
@@ -1479,7 +1457,7 @@ test_devflow_receipt_requires_the_exact_python() {
     new_fixture devflow-python-receipt Darwin
     run_installer
     printf '%s\n%s\n%s\n' \
-        'dotfiles-devflow-v1' \
+        'dotfiles-devflow-v2' \
         "$REPO_ROOT/devflow" \
         "$FIXTURE_ROOT/another-python" \
         >"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
@@ -1612,9 +1590,7 @@ test_devflow_uv_receipt_inventory_is_exact() {
             "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
         assert_injected_devflow_inventory_artifact \
             "$inventory" "$tool_environment"
-        for executable in \
-            devflow devflow-reference-transaction devflow-pre-push
-        do
+        for executable in devflow; do
             assert_symlink \
                 "$FIXTURE_HOME/.local/bin/$executable" \
                 "$tool_environment/bin/$executable"
@@ -1635,9 +1611,7 @@ test_devflow_uv_receipt_inventory_is_exact() {
             "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
         assert_injected_devflow_inventory_artifact \
             "$inventory" "$tool_environment"
-        for executable in \
-            devflow devflow-reference-transaction devflow-pre-push
-        do
+        for executable in devflow; do
             assert_symlink \
                 "$FIXTURE_HOME/.local/bin/$executable" \
                 "$tool_environment/bin/$executable"
@@ -1749,7 +1723,7 @@ test_generic_install_preserves_harness_configuration() {
 }
 
 test_uninstall_removes_only_owned_devflow() {
-    local executable tool_environment
+    local tool_environment
 
     new_fixture uninstall-owned-devflow Darwin
     run_installer
@@ -1765,19 +1739,15 @@ test_uninstall_removes_only_owned_devflow() {
         "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
     printf 'user-owned environment\n' \
         >"$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow/marker"
-    for executable in devflow devflow-reference-transaction devflow-pre-push; do
-        printf 'user-owned executable\n' >"$FIXTURE_HOME/.local/bin/$executable"
-    done
+    printf 'user-owned executable\n' >"$FIXTURE_HOME/.local/bin/devflow"
 
     run_uninstaller 0
 
     grep -Fxq 'user-owned environment' \
         "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow/marker" ||
         fail "uninstaller changed an unreceipted private tool environment"
-    for executable in devflow devflow-reference-transaction devflow-pre-push; do
-        grep -Fxq 'user-owned executable' "$FIXTURE_HOME/.local/bin/$executable" ||
-            fail "uninstaller changed a foreign Workflow Engine executable"
-    done
+    grep -Fxq 'user-owned executable' "$FIXTURE_HOME/.local/bin/devflow" ||
+        fail "uninstaller changed a foreign Workflow Engine executable"
     assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
 
     new_fixture uninstall-ambiguous-devflow Darwin

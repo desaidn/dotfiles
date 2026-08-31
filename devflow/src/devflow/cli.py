@@ -13,10 +13,10 @@ from .domain import Failure, JsonObject, Outcome, Success
 from .errors import DevflowError
 from .git import Repository
 from .harness import Harness, HarnessAction, HarnessResult, apply_harness
-from .hooks import install_hooks
 from .landing import LandingResult, land
 from .review import ReviewResult, change_set_json, review
 from .state import workflow_lock
+from .transitions import MAINLINE_NAMES
 
 
 @final
@@ -27,6 +27,7 @@ class RawArguments(argparse.Namespace):
     source: str | None
     base: str | None
     name: str | None
+    target: str | None
     approved: str | None
     title: str | None
     harness_action: str | None
@@ -41,15 +42,11 @@ class RawArguments(argparse.Namespace):
         self.source = None
         self.base = None
         self.name = None
+        self.target = None
         self.approved = None
         self.title = None
         self.harness_action = None
         self.harness_name = None
-
-
-@dataclass(frozen=True, slots=True)
-class InitCommand:
-    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +64,7 @@ class ReviewCommand:
 @dataclass(frozen=True, slots=True)
 class LandCommand:
     feature: str
+    target: str
     approved: str
     title: str
 
@@ -77,7 +75,7 @@ class HarnessCommand:
     harness: Harness
 
 
-type CliCommand = InitCommand | StartCommand | ReviewCommand | LandCommand | HarnessCommand
+type CliCommand = StartCommand | ReviewCommand | LandCommand | HarnessCommand
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,16 +85,11 @@ class Invocation:
 
 
 @dataclass(frozen=True, slots=True)
-class InitializedResult:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class StartedResult:
     result: StartResult
 
 
-type ExecutionResult = InitializedResult | StartedResult | ReviewResult | LandingResult | HarnessResult
+type ExecutionResult = StartedResult | ReviewResult | LandingResult | HarnessResult
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -104,7 +97,6 @@ def _parser() -> argparse.ArgumentParser:
     _ = parser.add_argument("--json", action="store_true", dest="as_json")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    _ = commands.add_parser("init")
     start_command = commands.add_parser("start")
     _ = start_command.add_argument("feature")
     review_command = commands.add_parser("review")
@@ -113,6 +105,7 @@ def _parser() -> argparse.ArgumentParser:
     _ = review_command.add_argument("--name")
     land_command = commands.add_parser("land")
     _ = land_command.add_argument("feature")
+    _ = land_command.add_argument("--target", choices=MAINLINE_NAMES, required=True)
     _ = land_command.add_argument("--approved", required=True)
     _ = land_command.add_argument("--title", required=True)
     harness = commands.add_parser("harness")
@@ -135,14 +128,17 @@ def _argument_failure() -> Failure:
 
 def _decode_arguments(raw: RawArguments) -> Outcome[Invocation]:
     match raw.command:
-        case "init":
-            return Success(Invocation(raw.as_json, InitCommand()))
         case "start" if raw.feature is not None:
             return Success(Invocation(raw.as_json, StartCommand(raw.feature)))
         case "review":
             return Success(Invocation(raw.as_json, ReviewCommand(raw.source, raw.base, raw.name)))
-        case "land" if raw.feature is not None and raw.approved is not None and raw.title is not None:
-            return Success(Invocation(raw.as_json, LandCommand(raw.feature, raw.approved, raw.title)))
+        case "land" if (
+            raw.feature is not None
+            and raw.target is not None
+            and raw.approved is not None
+            and raw.title is not None
+        ):
+            return Success(Invocation(raw.as_json, LandCommand(raw.feature, raw.target, raw.approved, raw.title)))
         case "harness":
             match raw.harness_action, raw.harness_name:
                 case (("install" | "remove" | "status" as action), ("codex" | "claude" as harness)):
@@ -158,28 +154,19 @@ def _execute(command: CliCommand) -> ExecutionResult:
         return apply_harness(command.action, command.harness)
     repository = Repository.discover(Path.cwd())
     match command:
-        case InitCommand():
-            with workflow_lock(repository.common_dir):
-                install_hooks(repository.hooks_dir)
-            return InitializedResult()
         case StartCommand(feature):
             with workflow_lock(repository.common_dir):
-                install_hooks(repository.hooks_dir)
                 return StartedResult(start(repository, feature))
         case ReviewCommand(source, base, name):
             with workflow_lock(repository.common_dir):
-                install_hooks(repository.hooks_dir)
                 return review(repository, source=source, base=base, name=name)
-        case LandCommand(feature, approved, title):
+        case LandCommand(feature, target, approved, title):
             with workflow_lock(repository.common_dir):
-                install_hooks(repository.hooks_dir)
-                return land(repository, feature, approved, title)
+                return land(repository, feature, target, approved, title)
 
 
 def _result_json(result: ExecutionResult) -> JsonObject:
     match result:
-        case InitializedResult():
-            return {"initialized": True}
         case StartedResult(StartResult(branch, cwd, created)):
             return {
                 "branch": branch,
@@ -217,8 +204,6 @@ def _result_json(result: ExecutionResult) -> JsonObject:
 
 def _plain_result(result: ExecutionResult) -> str:
     match result:
-        case InitializedResult():
-            return "initialized"
         case StartedResult(StartResult(cwd=cwd)):
             return str(cwd)
         case ReviewResult(review_id=review_id):

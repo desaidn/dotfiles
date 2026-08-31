@@ -535,10 +535,10 @@ load_devflow_receipt() {
     done <"$DEVFLOW_RECEIPT"
     [[ ${#lines[@]} == 3 ]] || return 1
     case "${lines[0]}" in
-        dotfiles-devflow-v1)
+        dotfiles-devflow-v2)
             DEVFLOW_RECEIPT_STATUS="final"
             ;;
-        dotfiles-devflow-pending-v1)
+        dotfiles-devflow-pending-v2)
             DEVFLOW_RECEIPT_STATUS="pending"
             ;;
         *)
@@ -622,13 +622,8 @@ if not records_match(
     expected=frozenset({(distribution, expected_source)}),
 ):
     raise SystemExit(1)
-entrypoint_names = (
-    "devflow",
-    "devflow-pre-push",
-    "devflow-reference-transaction",
-)
 expected_entrypoints = frozenset(
-    (name, f"{bin_dir}/{name}", distribution) for name in entrypoint_names
+    {("devflow", f"{bin_dir}/devflow", distribution)}
 )
 if not records_match(
     tool["entrypoints"],
@@ -664,24 +659,31 @@ devflow_environment_matches() {
         "${source_lines[0]}" == "$expected_source/src" ]]
 }
 
+devflow_public_entrypoints_match() {
+    symlink_points_to \
+        "$DEVFLOW_BIN_DIR/devflow" \
+        "$DEVFLOW_TOOL_ENV/bin/devflow"
+}
+
+devflow_installation_matches() {
+    local expected_python="$1" expected_source="$2"
+
+    [[ -d "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] ||
+        return 1
+    devflow_environment_matches "$expected_python" "$expected_source" ||
+        return 1
+    devflow_public_entrypoints_match
+}
+
+devflow_installation_is_absent() {
+    [[ ! -e "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] ||
+        return 1
+    [[ ! -e "$DEVFLOW_BIN_DIR/devflow" && ! -L "$DEVFLOW_BIN_DIR/devflow" ]]
+}
+
 preflight_devflow_state() {
-    local executable executable_path
-    local existing_state=0
-
-    if [[ -e "$DEVFLOW_TOOL_ENV" || -L "$DEVFLOW_TOOL_ENV" ]]; then
-        existing_state=1
-    fi
-    for executable in \
-        devflow devflow-reference-transaction devflow-pre-push
-    do
-        executable_path="$DEVFLOW_BIN_DIR/$executable"
-        if [[ -e "$executable_path" || -L "$executable_path" ]]; then
-            existing_state=1
-        fi
-    done
-
     if [[ ! -e "$DEVFLOW_RECEIPT" && ! -L "$DEVFLOW_RECEIPT" ]]; then
-        (( existing_state == 0 )) ||
+        devflow_installation_is_absent ||
             die "existing Workflow Engine files have no dotfiles ownership receipt; preserve or remove them explicitly"
         DEVFLOW_INSTALL_STATE="absent"
         return 0
@@ -692,31 +694,28 @@ preflight_devflow_state() {
     [[ "$DEVFLOW_RECEIPT_SOURCE" == "$DEVFLOW_SOURCE" ]] ||
         die "the Workflow Engine ownership receipt belongs to a different source: $DEVFLOW_RECEIPT_SOURCE"
 
-    if [[ "$DEVFLOW_RECEIPT_STATUS" == "pending" &&
-        "$existing_state" == 0 ]]
-    then
-        DEVFLOW_INSTALL_STATE="pending-empty"
-        return 0
-    fi
-
-    [[ -d "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] ||
-        die "the owned Workflow Engine environment is missing or invalid: $DEVFLOW_TOOL_ENV"
-    devflow_environment_matches \
-        "$DEVFLOW_RECEIPT_PYTHON" "$DEVFLOW_RECEIPT_SOURCE" ||
-        die "the Workflow Engine environment does not match its ownership receipt"
-
-    for executable in \
-        devflow devflow-reference-transaction devflow-pre-push
-    do
-        executable_path="$DEVFLOW_BIN_DIR/$executable"
-        symlink_points_to "$executable_path" "$DEVFLOW_TOOL_ENV/bin/$executable" ||
-            die "the Workflow Engine executable is missing or not owned by this installation: $executable_path"
-    done
-    if [[ "$DEVFLOW_RECEIPT_STATUS" == "pending" ]]; then
-        DEVFLOW_INSTALL_STATE="pending-complete"
-    else
-        DEVFLOW_INSTALL_STATE="owned"
-    fi
+    case "$DEVFLOW_RECEIPT_STATUS" in
+        final)
+            devflow_installation_matches \
+                "$DEVFLOW_RECEIPT_PYTHON" "$DEVFLOW_RECEIPT_SOURCE" ||
+                die "the Workflow Engine environment does not match its ownership receipt"
+            DEVFLOW_INSTALL_STATE="owned"
+            ;;
+        pending)
+            if devflow_installation_is_absent; then
+                DEVFLOW_INSTALL_STATE="pending-empty"
+            elif devflow_installation_matches \
+                "$DEVFLOW_RECEIPT_PYTHON" "$DEVFLOW_RECEIPT_SOURCE"
+            then
+                DEVFLOW_INSTALL_STATE="pending-complete"
+            else
+                die "the pending Workflow Engine installation is partial or does not match its ownership receipt"
+            fi
+            ;;
+        *)
+            die "internal error: unsupported Workflow Engine receipt state"
+            ;;
+    esac
 }
 
 resolve_mise_python_path() (
@@ -759,7 +758,7 @@ write_devflow_receipt() {
 }
 
 install_devflow() {
-    local executable python_path
+    local python_path
 
     section "Installing Workflow Engine"
     python_path="$(resolve_mise_python_path)" ||
@@ -780,7 +779,7 @@ install_devflow() {
     case "$DEVFLOW_INSTALL_STATE" in
         absent)
             write_devflow_receipt \
-                "dotfiles-devflow-pending-v1" "$python_path"
+                "dotfiles-devflow-pending-v2" "$python_path"
             ;;
         pending-empty|pending-complete)
             [[ "$DEVFLOW_RECEIPT_PYTHON" == "$python_path" ]] ||
@@ -794,7 +793,7 @@ install_devflow() {
     if [[ "$DEVFLOW_INSTALL_STATE" == "pending-complete" ]]; then
         "$DEVFLOW_BIN_DIR/devflow" --help >/dev/null 2>&1 ||
             die "the pending Workflow Engine executable is not runnable"
-        write_devflow_receipt "dotfiles-devflow-v1" "$python_path"
+        write_devflow_receipt "dotfiles-devflow-v2" "$python_path"
         echo "Workflow Engine installation resumed."
         return 0
     fi
@@ -808,18 +807,14 @@ install_devflow() {
         die "uv completed without creating the Workflow Engine environment"
     devflow_environment_matches "$python_path" "$DEVFLOW_SOURCE" ||
         die "uv created a Workflow Engine environment with unexpected provenance"
-    for executable in \
-        devflow devflow-reference-transaction devflow-pre-push
-    do
-        symlink_points_to \
-            "$DEVFLOW_BIN_DIR/$executable" \
-            "$DEVFLOW_TOOL_ENV/bin/$executable" ||
-            die "uv completed without creating the expected Workflow Engine executable: $executable"
-    done
+    symlink_points_to \
+        "$DEVFLOW_BIN_DIR/devflow" \
+        "$DEVFLOW_TOOL_ENV/bin/devflow" ||
+        die "uv completed without creating the expected Workflow Engine executable: devflow"
     "$DEVFLOW_BIN_DIR/devflow" --help >/dev/null 2>&1 ||
         die "uv installed a Workflow Engine executable that is not runnable"
 
-    write_devflow_receipt "dotfiles-devflow-v1" "$python_path"
+    write_devflow_receipt "dotfiles-devflow-v2" "$python_path"
 }
 
 link() {

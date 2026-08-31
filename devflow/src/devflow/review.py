@@ -458,7 +458,7 @@ def review(
     checkout = repository.cwd
     _ensure_no_hunk_session(checkout)
     if old_oid != change_set.head_oid:
-        repository.update_ref(review_ref, change_set.head_oid, old_oid, authorize=True)
+        repository.update_ref(review_ref, change_set.head_oid, old_oid)
     tab_id, pane_id, session_id = _launch_review(checkout, review_name, change_set, workspace, poll_settings)
     result = ReviewResult(review_id, review_name, review_ref, change_set, checkout, tab_id, pane_id, session_id)
     record = ReviewRecord(1, review_id, review_name, review_ref, change_set, str(checkout), tab_id, pane_id, session_id)

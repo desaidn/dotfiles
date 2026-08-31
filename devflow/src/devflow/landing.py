@@ -85,8 +85,8 @@ def _require_review_checkout(
     require_clean(checkout_repository.cwd)
 
 
-def land(repository: Repository, feature: str, approved_id: str, title: str) -> LandingResult:
-    match decide_land_request(feature, title):
+def land(repository: Repository, feature: str, target: str, approved_id: str, title: str) -> LandingResult:
+    match decide_land_request(feature, target, title):
         case Failure(code, message):
             raise DevflowError(code, message)
         case Success(request):
@@ -119,11 +119,14 @@ def land(repository: Repository, feature: str, approved_id: str, title: str) -> 
     review_checkout = Path(stored.checkout)
     _require_review_checkout(repository, review_checkout, plan.wip_ref, plan.reviewed_head_oid)
 
-    main_name, main_oid = repository.mainline()
+    main_name = request.target
+    main_ref = f"refs/heads/{main_name}"
+    main_oid = repository.ref_oid(main_ref)
+    if main_oid is None:
+        raise DevflowError("mainline_not_found", f"Landing target {main_name} does not exist.")
     ancestry = repository.git("merge-base", "--is-ancestor", stored.change_set.base_oid, main_oid, check=False)
     if ancestry.returncode != 0:
         raise DevflowError("mainline_history_changed", "Current mainline no longer descends from the reviewed base.")
-    main_ref = f"refs/heads/{main_name}"
     main_checkout = checked_out_path(repository, main_ref)
     if main_checkout is not None:
         raise DevflowError(
@@ -151,7 +154,7 @@ def land(repository: Repository, feature: str, approved_id: str, title: str) -> 
         ):
             raise DevflowError("approval_stale", "WIP or review state changed during landing.")
         if repository.ref_oid(main_ref) != main_oid:
-            raise DevflowError("ref_update_rejected", "Mainline changed concurrently during landing.")
+            raise DevflowError("ref_update_rejected", "The landing target changed concurrently during landing.")
         raise DevflowError(
             "ref_update_rejected",
             updated.stderr.strip() or updated.stdout.strip() or "The atomic landing transaction was rejected.",

@@ -1,14 +1,18 @@
 # Agent development workflow
 
-`devflow` is the harness-neutral Workflow Engine for agent-authored development and review. Git remains the repository authority; `devflow` validates the agreed transitions, installs repository-local accident guards, and coordinates the existing Herdr, Neovim, and Hunk surfaces.
+`devflow` is the harness-neutral Workflow Engine for agent-authored development and review. Git remains the repository authority; `devflow` validates the transitions it owns and coordinates the existing Herdr, Neovim, and Hunk surfaces.
+
+This contract governs coding agents only. Human Git and LazyGit operations are wholly unrestricted: devflow installs no repository hooks, changes no Git policy configuration, and never blocks or rewrites a human command. Harness guidance constrains agents; it does not turn the user's transaction surface into part of the agent workflow.
 
 ## Invoking checkout
 
 Devflow operates only in the checkout containing the command's current working directory. That Invoking Checkout may be a repository's primary checkout or a worktree the user created; the same rules apply to both. Devflow never creates, adopts, moves, repairs, prunes, locks, unlocks, or removes a worktree, and it never chooses a different checkout on the user's behalf. If a required branch is already checked out elsewhere, the command reports that location and stops.
 
-Worktree topology remains user-owned. A worktree lifecycle action is outside the guarded flow and requires explicit approval as a Workflow Exception. Even after approval, it is performed separately rather than delegated to devflow.
+Worktree topology remains user-owned. An agent-initiated worktree lifecycle action is outside the guarded flow and requires explicit approval as a Workflow Exception. Even after approval, it is performed separately rather than delegated to devflow. The user may operate worktrees directly without agent approval.
 
-Every engine-driven branch switch asks Git not to overwrite ignored files. If an ignored user artifact collides with a path tracked by the target revision, the transition fails without changing the checkout, ref, or file. Non-colliding ignored artifacts remain in place. Once the guards are installed, symbolic `HEAD` may select only a valid `wip/*` branch unless an exact Workflow Exception is authorized. Detached full object IDs remain allowed; symbolic checkout of mainline, Review Branches, or unrelated branches is denied, including a concurrent checkout attempted after an engine preflight.
+Every engine-driven branch switch asks Git not to overwrite ignored files. If an ignored user artifact collides with a path tracked by the target revision, the transition fails without changing the checkout, ref, or file. Non-colliding ignored artifacts remain in place. Devflow may refuse its own transition when an observed ref is already checked out elsewhere; it never prevents or changes the human checkout.
+
+No preflight reserves repository state. A human may change a ref, checkout, index, or working tree immediately after validation. Compare-and-swap updates protect the exact refs in a devflow transaction, but cannot serialize another worktree's files or a later agent command. Agents must coordinate shared-checkout activity and rerun devflow validation after concurrent human Git operations.
 
 ## Locally authored feature
 
@@ -18,7 +22,7 @@ Create or resume local WIP:
 devflow start <feature>
 ```
 
-The Invoking Checkout must be clean. The command creates a new `wip/<feature>` exactly at the current Mainline Branch revision or selects the existing WIP Branch in the Invoking Checkout; it never opens another checkout or rewrites an existing branch. The resulting WIP history is append-only. Once devflow has selected WIP, ordinary `git commit` operations and an ordinary merge of current mainline into WIP are normal append-only transactions. Add logically grouped commits. Never amend, rebase, reset, force-update, delete, or force-push WIP. If mainline advances, merge it into WIP with an ordinary merge commit and resolve and test that integration on WIP.
+The Invoking Checkout must be clean. The command creates a new `wip/<feature>` exactly at the current Mainline Branch revision or selects the existing WIP Branch in the Invoking Checkout; it never opens another checkout or rewrites an existing branch. Agents extend WIP only through append-only history. Once devflow has selected WIP, ordinary `git commit` operations and an ordinary merge of current mainline into WIP are normal append-only agent transactions. Add logically grouped commits. Agents never amend, rebase, reset, force-update, delete, or force-push WIP. If mainline advances, merge it into WIP with an ordinary merge commit and resolve and test that integration on WIP. These restrictions do not constrain the user's direct Git or LazyGit actions.
 
 When the complete feature is ready, launch its Review Flow:
 
@@ -38,15 +42,15 @@ hunk session review <session-id> --include-patch --include-notes --json
 
 After confirming that the session belongs to the returned checkout, the agent reviews the full change set and attaches every actionable finding to that same session with `hunk session comment add <session-id> ... --json` before waiting for the user's decision.
 
-Keep the Invoking Checkout quiescent while the review is open: do not change `HEAD`, the index, or working-tree files. Hunk's `e` action therefore opens the selected file in the review tab's Neovim with normal project-root discovery and full language tooling, using the Invoking Checkout's dependencies, generated artifacts, and build context. Feedback is addressed with new WIP commits after the review; any checkout change requires a new Review Snapshot and invalidates prior approval. Mainline may continue moving after review; if landing integration requires a WIP change, append it and review again.
+The agent keeps the Invoking Checkout quiescent while the review is open: it does not change `HEAD`, the index, or working-tree files. Hunk's `e` action therefore opens the selected file in the review tab's Neovim with normal project-root discovery and full language tooling, using the Invoking Checkout's dependencies, generated artifacts, and build context. Feedback is addressed with new WIP commits after the review; any checkout change requires a new Review Snapshot and invalidates prior approval. Mainline may continue moving after review; if landing integration requires a WIP change, append it and review again. A human remains free to change the checkout, but doing so crosses the coordination boundary and makes the agent obtain a fresh validated snapshot before continuing.
 
-After the user explicitly approves the latest complete Review Snapshot, land it with its exact identifier and a short imperative title that describes the complete feature:
+After the user explicitly approves the latest complete Review Snapshot, land it with its exact identifier, explicit target, and a short imperative title that describes the complete feature:
 
 ```sh
-devflow land <feature> --approved <review-id> --title "<complete feature title>"
+devflow land <feature> --target <main|mainline|master> --approved <review-id> --title "<complete feature title>"
 ```
 
-Landing creates one single-parent squash commit on the current Mainline Branch, leaves WIP and its Review Snapshot unchanged, and never pushes. Mainline must not be checked out in any worktree; explicitly switch or detach that checkout first. The engine performs a ref-only landing and never aligns a user worktree. Its single atomic reference transaction verifies the exact approved WIP and Review Branch heads while compare-and-swap advancing mainline. A conflict, concurrent source change, concurrent mainline change, or stale approval stops without advancing mainline.
+Landing creates one single-parent squash commit on exactly the named target, leaves WIP and its Review Snapshot unchanged, and never pushes. Devflow never infers a target or falls back among `main`, `mainline`, and `master`. If the target is observed checked out in any worktree, devflow refuses its own transition without changing that checkout; the user remains free to operate it. The engine performs a ref-only landing and never aligns a user worktree. Its single atomic reference transaction verifies the exact approved WIP and Review Branch heads while compare-and-swap advancing the explicit target. A conflict, concurrent source change, concurrent target change, or stale approval stops without advancing the target. A human checkout racing after the preflight remains outside devflow's control.
 
 ## Review-only change set
 
@@ -58,19 +62,11 @@ devflow --json review --source <revision> --base <revision> --name <review-name>
 
 The complete explicit triple always selects external review, even when `--source` names a `wip/*` branch. The resolved base must be an ancestor of the source so `BASE...HEAD` preserves the supplied Change Set. The Invoking Checkout must be clean and its `HEAD` must equal the resolved source revision; devflow never switches or detaches it to satisfy the request. A mismatch fails before ref, record, or UI effects.
 
-This creates or advances only the read-only `review/<review-name>` snapshot and opens the same in-place Herdr, Neovim, Hunk, and Agent Review Loop. Review-only snapshots cannot land through `devflow land`.
+For agent work, this creates or advances only the read-only `review/<review-name>` snapshot and opens the same in-place Herdr, Neovim, Hunk, and Agent Review Loop. Human Git remains unrestricted. Review-only snapshots cannot land through `devflow land`.
 
-## Legacy managed checkouts
+## Agent contract and exceptions
 
-Older devflow versions could create workflow-owned WIP and review worktrees under their state directory. Current devflow may observe those registrations during read-only conflict checks, but it does not identify, adopt, reuse, move, or delete them as workflow-owned checkouts. A legacy checkout participates only when the user explicitly invokes devflow from it. Cleanup remains separate and requires explicit approval after confirming that no active WIP or review depends on it.
-
-The superseded clone-local `devflow.worktree-mode` value is inert: current devflow neither reads it as authorization nor rewrites it during normal commands. It may be removed together with legacy checkout state only as part of that explicitly approved cleanup.
-
-## Guards and exceptions
-
-The first mutating invocation installs owned `reference-transaction` and `pre-push` hook links in the repository's effective hooks directory. Local WIP creation and fast-forward movement are allowed; Review Branch and Mainline Branch movement requires the engine's exact transition authorization. Symbolic `HEAD` movement is independently restricted to WIP so ref preflights cannot be defeated by a concurrent checkout. Any other local `refs/heads/*` creation, update, deletion, or symbolic checkout requires an exact explicitly approved exception. WIP deletion and non-fast-forward pushes are rejected, Review Branch pushes are always rejected, and other remote branch targets are denied by default. An existing remote Mainline Branch accepts only a non-deleting fast-forward from the exact same-named local guarded Mainline Branch at its current OID, which prevents a WIP or arbitrary refspec from publishing directly to mainline. Foreign hooks are preserved and block registration rather than being overwritten.
-
-These hooks and the Workflow Engine are deterministic accident rails, not a security boundary. Git has no hook that intercepts every worktree lifecycle command, and a caller with repository access can deliberately bypass the flow. Global agent adapters therefore prohibit direct worktree and branch-flow bypasses as well. Any operation outside this document requires explicit user approval before execution.
+Harness guidance requires coding agents to use devflow for `start`, `review`, and `land`, to keep WIP append-only, and to request explicit approval for an agent action outside this document. Devflow validates only its own transitions. It does not deny direct human branch, ref, push, checkout, reset, rebase, or worktree operations, and the user's Git Transaction Surface remains LazyGit and ordinary Git.
 
 Harness-global adapters are installed explicitly and non-destructively:
 

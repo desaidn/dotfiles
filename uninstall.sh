@@ -88,8 +88,8 @@ load_devflow_receipt() {
     while IFS= read -r line; do
         lines+=("$line")
     done <"$DEVFLOW_RECEIPT"
-    [[ ${#lines[@]} == 3 && "${lines[0]}" == "dotfiles-devflow-v1" ]] ||
-        return 1
+    [[ ${#lines[@]} == 3 ]] || return 1
+    [[ "${lines[0]}" == "dotfiles-devflow-v2" ]] || return 1
     [[ "${lines[1]}" == "$DEVFLOW_SOURCE" && -n "${lines[2]}" ]] ||
         return 1
     DEVFLOW_RECEIPT_SOURCE="${lines[1]}"
@@ -167,13 +167,8 @@ if not records_match(
     expected=frozenset({(distribution, expected_source)}),
 ):
     raise SystemExit(1)
-entrypoint_names = (
-    "devflow",
-    "devflow-pre-push",
-    "devflow-reference-transaction",
-)
 expected_entrypoints = frozenset(
-    (name, f"{bin_dir}/{name}", distribution) for name in entrypoint_names
+    {("devflow", f"{bin_dir}/devflow", distribution)}
 )
 if not records_match(
     tool["entrypoints"],
@@ -210,38 +205,23 @@ devflow_environment_matches() {
 }
 
 devflow_state_exists() {
-    local executable executable_path
-
     if [[ -e "$DEVFLOW_RECEIPT" || -L "$DEVFLOW_RECEIPT" ||
         -e "$DEVFLOW_TOOL_ENV" || -L "$DEVFLOW_TOOL_ENV" ]]
     then
         return 0
     fi
-    for executable in \
-        devflow devflow-reference-transaction devflow-pre-push
-    do
-        executable_path="$DEVFLOW_BIN_DIR/$executable"
-        if [[ -e "$executable_path" || -L "$executable_path" ]]; then
-            return 0
-        fi
-    done
-    return 1
+    [[ -e "$DEVFLOW_BIN_DIR/devflow" || -L "$DEVFLOW_BIN_DIR/devflow" ]]
 }
 
 devflow_state_is_owned() {
-    local executable
-
     load_devflow_receipt || return 1
     [[ -d "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] || return 1
     devflow_environment_matches \
-        "$DEVFLOW_RECEIPT_PYTHON" "$DEVFLOW_RECEIPT_SOURCE" || return 1
-    for executable in \
-        devflow devflow-reference-transaction devflow-pre-push
-    do
-        symlink_points_to \
-            "$DEVFLOW_BIN_DIR/$executable" \
-            "$DEVFLOW_TOOL_ENV/bin/$executable" || return 1
-    done
+        "$DEVFLOW_RECEIPT_PYTHON" \
+        "$DEVFLOW_RECEIPT_SOURCE" || return 1
+    symlink_points_to \
+        "$DEVFLOW_BIN_DIR/devflow" \
+        "$DEVFLOW_TOOL_ENV/bin/devflow"
 }
 
 run_devflow_uv() (
@@ -252,8 +232,6 @@ run_devflow_uv() (
 )
 
 remove_owned_devflow() {
-    local executable
-
     if ! devflow_state_exists; then
         echo "  not installed:    $DEVFLOW_DISTRIBUTION"
         return 0
@@ -280,17 +258,13 @@ remove_owned_devflow() {
         RESTORE_STATUS=1
         return 0
     fi
-    for executable in \
-        devflow devflow-reference-transaction devflow-pre-push
-    do
-        if [[ -e "$DEVFLOW_BIN_DIR/$executable" ||
-            -L "$DEVFLOW_BIN_DIR/$executable" ]]
-        then
-            echo "  removal blocked:  Workflow Engine executable remains: $DEVFLOW_BIN_DIR/$executable"
-            RESTORE_STATUS=1
-            return 0
-        fi
-    done
+    if [[ -e "$DEVFLOW_BIN_DIR/devflow" ||
+        -L "$DEVFLOW_BIN_DIR/devflow" ]]
+    then
+        echo "  removal blocked:  Workflow Engine executable remains: $DEVFLOW_BIN_DIR/devflow"
+        RESTORE_STATUS=1
+        return 0
+    fi
 
     rm "$DEVFLOW_RECEIPT"
     echo "  removed:          $DEVFLOW_DISTRIBUTION"

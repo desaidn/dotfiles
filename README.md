@@ -41,7 +41,7 @@ This repo keeps the interface to code agent-harness agnostic:
 - Prefer upstream defaults unless a deviation directly supports the uniform code interface.
 - Keep Codex, Claude Code, and future harnesses as adapters over the same files, commands, and review surfaces.
 
-Harness-specific files should only bridge into the shared workflow. They should not introduce a second review model, separate Git transaction surface, or different way to open code. Global Git behavior stays outside this contract unless the repo explicitly starts managing Git config.
+Harness-specific files should only bridge into the shared workflow. They should not introduce a second review model, separate Git transaction surface, or different way to open code. The workflow contract governs coding agents only: human Git and LazyGit are unrestricted, and devflow installs no repository hooks or Git configuration that intercepts them.
 
 ## Quick start
 
@@ -109,8 +109,8 @@ These are top-level alternatives. Plain `herdr` starts or reattaches the daily w
 
 ## Agent development workflow
 
-The full install exposes `devflow`, `devflow-reference-transaction`, and
-`devflow-pre-push` from `~/.local/bin`. The `dotfiles-devflow` distribution
+The full install exposes `devflow` from `~/.local/bin`. The
+`dotfiles-devflow` distribution
 lives in the private `~/.local/share/dotfiles/uv-tools/` tool directory and
 uses the exact Python selected by the tracked Mise manifest. An ownership
 receipt binds that environment to this repository source and interpreter, so
@@ -125,6 +125,8 @@ comments are accepted, while any extra, missing, duplicate, malformed, or
 mismatched inventory is preserved and rejected. Install and uninstall invoke
 `uv --no-config` with inherited uv, Python-environment, Conda, and pip settings
 removed; network proxy and TLS/CA settings remain available.
+The owned public inventory contains only the `devflow` entry point; partial or
+foreign tool state is left intact.
 
 Harness-global guidance is separate from installing the shared Workflow
 Engine. Opt in explicitly for each harness used on a machine:
@@ -145,10 +147,21 @@ append-only WIP branch in that checkout. Review requires the same checkout to be
 clean and exactly at the reviewed source, then keeps Herdr, Neovim, Hunk, and
 editor handoff rooted there so `e` opens with normal project-root discovery and
 full language tooling, using the checkout's dependencies, generated files, and
-build context. Any worktree lifecycle action is a separately approved Workflow
-Exception. See
+build context. Any agent-initiated worktree lifecycle action is a separately
+approved Workflow Exception. See
 [`docs/agents/development-workflow.md`](docs/agents/development-workflow.md)
 for the branch, review, approval, and landing contract.
+
+Those restrictions apply to coding agents, not to the developer. Human Git and
+LazyGit remain wholly unrestricted. Devflow may refuse one of its own
+transitions when it observes a conflicting checkout or stale ref, but it cannot
+reserve repository state or prevent a human operation after that check; shared
+checkout activity therefore requires ordinary coordination. Landing always
+names its integration branch explicitly:
+
+```bash
+devflow land <feature> --target <main|mainline|master> --approved <review-id> --title "<complete feature title>"
+```
 
 ## Dependency ownership
 

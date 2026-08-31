@@ -59,7 +59,6 @@ class RepoCase(unittest.TestCase):
         git(self.repo, "add", "README.md")
         git(self.repo, "commit", "-m", "Initial")
         self.env = {
-            "DEVFLOW_HOOK_BIN_DIR": str(BIN_DIR),
             "XDG_STATE_HOME": str(self.root / "state"),
         }
 
@@ -178,275 +177,20 @@ class RepoCase(unittest.TestCase):
             "DEVFLOW_HUNK_POLL_INTERVAL": "0.01",
         }, log
 
-    def install_worktree_race(
-        self,
-        *,
-        trigger: list[str],
-        target_ref: str,
-        target_branch: str,
-        target_oid: str,
-    ) -> tuple[dict[str, str], Path, Path]:
-        real_git = shutil.which("git")
-        self.assertIsNotNone(real_git)
-        race_path = self.root / f"raced-{target_branch.replace('/', '-')}"
-        race_log = self.root / f"race-{target_branch.replace('/', '-')}.json"
-        wrapper = self.root / "fake-bin" / "git"
-        wrapper.write_text(
-            textwrap.dedent(
-                f"""\
-                #!{sys.executable}
-                import json, os, pathlib, subprocess, sys
-                real = os.environ["DEVFLOW_REAL_GIT"]
-                trigger = json.loads(os.environ["DEVFLOW_RACE_TRIGGER"])
-                log = pathlib.Path(os.environ["DEVFLOW_RACE_LOG"])
-                if sys.argv[1:] == trigger and not log.exists():
-                    race_env = os.environ.copy()
-                    race_env["DEVFLOW_REF_UPDATES"] = os.environ["DEVFLOW_RACE_AUTHORIZATION"]
-                    raced = subprocess.run(
-                        [real, "worktree", "add", os.environ["DEVFLOW_RACE_PATH"],
-                         os.environ["DEVFLOW_RACE_BRANCH"]],
-                        cwd=os.getcwd(), env=race_env, text=True, capture_output=True, check=False,
-                    )
-                    log.write_text(json.dumps({{
-                        "returncode": raced.returncode, "stdout": raced.stdout, "stderr": raced.stderr,
-                    }}))
-                os.execv(real, [real, *sys.argv[1:]])
-                """
-            )
-        )
-        wrapper.chmod(0o755)
-        authorization = json.dumps(
-            [
-                {"ref": target_ref, "old": target_oid, "new": "0" * len(target_oid)},
-                {"ref": target_ref, "old": target_oid, "new": target_oid},
-            ],
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        return (
-            {
-                "DEVFLOW_REAL_GIT": str(real_git),
-                "DEVFLOW_RACE_TRIGGER": json.dumps(trigger),
-                "DEVFLOW_RACE_LOG": str(race_log),
-                "DEVFLOW_RACE_PATH": str(race_path),
-                "DEVFLOW_RACE_BRANCH": target_branch,
-                "DEVFLOW_RACE_AUTHORIZATION": authorization,
-            },
-            race_path,
-            race_log,
-        )
-
-
-class InitializationTests(RepoCase):
-    def test_init_installs_owned_hooks_without_checkout_policy(self) -> None:
-        initialized = self.devflow("--json", "init")
-        self.assertEqual(initialized.returncode, 0, initialized.stderr)
-        self.assertTrue(json_output(initialized)["initialized"])
-        missing = run(["git", "config", "--local", "--get", "devflow.worktree-mode"], cwd=self.repo)
-        self.assertNotEqual(missing.returncode, 0)
-
-        common = Path(git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
-        for name in ("reference-transaction", "pre-push"):
-            hook = common / "hooks" / name
-            self.assertTrue(hook.is_symlink())
-            self.assertEqual(hook.resolve(), (BIN_DIR / f"devflow-{name}").resolve())
-
-    def test_hooks_use_effective_path_and_foreign_hooks_fail_before_initialization(self) -> None:
-        common = Path(git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
-        effective = common / "guard-hooks"
-        git(self.repo, "config", "--local", "core.hooksPath", str(effective))
-        effective.mkdir()
-        foreign = effective / "pre-push"
-        foreign.write_text("#!/bin/sh\nexit 0\n")
-        foreign.chmod(0o755)
-
-        refused = self.devflow("--json", "init")
-
-        self.assertEqual(refused.returncode, 2)
-        self.assertEqual(json_output(refused)["error"]["code"], "hook_conflict")
-        self.assertEqual(foreign.read_text(), "#!/bin/sh\nexit 0\n")
-
-    def test_external_and_relative_hook_paths_fail_without_being_modified(self) -> None:
-        external = self.root / "shared-hooks"
-        external.mkdir()
-        sentinel = external / "sentinel"
-        sentinel.write_text("untouched\n")
-        git(self.repo, "config", "--local", "core.hooksPath", str(external))
-
-        outside = self.devflow("--json", "init")
-
-        self.assertEqual(outside.returncode, 2)
-        self.assertEqual(json_output(outside)["error"]["code"], "hooks_path_outside_repository")
-        self.assertEqual(list(external.iterdir()), [sentinel])
-        self.assertEqual(sentinel.read_text(), "untouched\n")
-
-        relative = self.repo / ".relative-hooks"
-        git(self.repo, "config", "--local", "core.hooksPath", ".relative-hooks")
-        refused = self.devflow("--json", "init")
-        self.assertEqual(refused.returncode, 2)
-        self.assertEqual(json_output(refused)["error"]["code"], "relative_hooks_path_unsupported")
-        self.assertFalse(relative.exists())
-
+class StartTests(RepoCase):
     def test_repository_state_directory_symlink_fails_without_external_writes(self) -> None:
         common = Path(git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
         external = self.root / "external-state"
         external.mkdir()
         (common / "devflow").symlink_to(external)
 
-        refused = self.devflow("--json", "init")
+        refused = self.devflow("--json", "start", "unsafe-state")
 
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(json_output(refused)["error"]["code"], "workflow_state_unsafe")
+        self.assertEqual(git(self.repo, "branch", "--show-current"), "main")
         self.assertEqual(list(external.iterdir()), [])
 
-
-class HookTests(RepoCase):
-    def test_hooks_enforce_branch_roles_and_push_invariants(self) -> None:
-        initial = git(self.repo, "rev-parse", "HEAD")
-        git(self.repo, "branch", "unrelated", initial)
-        git(self.repo, "branch", "review/existing", initial)
-        initialized = self.devflow("init")
-        self.assertEqual(initialized.returncode, 0, initialized.stderr)
-
-        unrelated_create = run(["git", "branch", "another", initial], cwd=self.repo, env=self.env)
-        self.assertNotEqual(unrelated_create.returncode, 0)
-
-        git(self.repo, "switch", "-c", "wip/hooks")
-        (self.repo / "feature.txt").write_text("feature\n")
-        git(self.repo, "add", "feature.txt")
-        git(self.repo, "commit", "-m", "Feature")
-        feature = git(self.repo, "rev-parse", "HEAD")
-
-        unrelated_update = run(
-            ["git", "update-ref", "refs/heads/unrelated", feature, initial],
-            cwd=self.repo,
-            env=self.env,
-        )
-        self.assertNotEqual(unrelated_update.returncode, 0)
-        authorization = json.dumps(
-            [{"ref": "refs/heads/unrelated", "old": initial, "new": feature}],
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        authorized_update = run(
-            ["git", "update-ref", "refs/heads/unrelated", feature, initial],
-            cwd=self.repo,
-            env=self.env | {"DEVFLOW_REF_UPDATES": authorization},
-        )
-        self.assertEqual(authorized_update.returncode, 0, authorized_update.stderr)
-
-        rewrite = run(
-            ["git", "update-ref", "refs/heads/wip/hooks", initial, feature],
-            cwd=self.repo,
-            env=self.env,
-        )
-        self.assertNotEqual(rewrite.returncode, 0)
-        self.assertIn("protected ref update rejected", rewrite.stderr)
-        self.assertEqual(git(self.repo, "rev-parse", "refs/heads/wip/hooks"), feature)
-
-        for protected in ("main", "review/existing", "unrelated"):
-            checkout = run(["git", "switch", protected], cwd=self.repo, env=self.env)
-            self.assertNotEqual(checkout.returncode, 0)
-            self.assertIn("protected ref update rejected: HEAD", checkout.stderr)
-            self.assertEqual(git(self.repo, "branch", "--show-current"), "wip/hooks")
-
-        git(self.repo, "switch", "--detach", "main")
-        self.assertEqual(git(self.repo, "branch", "--show-current"), "")
-        git(self.repo, "switch", "wip/hooks")
-        self.assertEqual(git(self.repo, "branch", "--show-current"), "wip/hooks")
-        git(self.repo, "switch", "--detach", "main")
-        deletion = run(["git", "branch", "-D", "wip/hooks"], cwd=self.repo, env=self.env)
-        self.assertNotEqual(deletion.returncode, 0)
-        self.assertIn("protected ref update rejected", deletion.stderr)
-
-        review = run(["git", "branch", "review/hooks", feature], cwd=self.repo, env=self.env)
-        self.assertNotEqual(review.returncode, 0)
-
-        pre_push = BIN_DIR / "devflow-pre-push"
-        review_push = run(
-            [str(pre_push), "origin", "unused"],
-            cwd=self.repo,
-            env=self.env,
-            stdin=f"refs/heads/review/hooks {feature} refs/heads/review/hooks {'0' * 40}\n",
-        )
-        self.assertNotEqual(review_push.returncode, 0)
-
-        wip_rewrite = run(
-            [str(pre_push), "origin", "unused"],
-            cwd=self.repo,
-            env=self.env,
-            stdin=f"refs/heads/wip/hooks {initial} refs/heads/wip/hooks {feature}\n",
-        )
-        self.assertNotEqual(wip_rewrite.returncode, 0)
-
-        wip_fast_forward = run(
-            [str(pre_push), "origin", "unused"],
-            cwd=self.repo,
-            env=self.env,
-            stdin=f"refs/heads/wip/hooks {feature} refs/heads/wip/hooks {initial}\n",
-        )
-        self.assertEqual(wip_fast_forward.returncode, 0, wip_fast_forward.stderr)
-
-        arbitrary_main_source = run(
-            [str(pre_push), "origin", "unused"],
-            cwd=self.repo,
-            env=self.env,
-            stdin=f"refs/heads/wip/hooks {feature} refs/heads/main {initial}\n",
-        )
-        self.assertNotEqual(arbitrary_main_source.returncode, 0)
-
-        arbitrary_remote_branch = run(
-            [str(pre_push), "origin", "unused"],
-            cwd=self.repo,
-            env=self.env,
-            stdin=f"refs/heads/wip/hooks {feature} refs/heads/topic {'0' * 40}\n",
-        )
-        self.assertNotEqual(arbitrary_remote_branch.returncode, 0)
-
-    def test_mainline_push_accepts_only_the_same_named_landed_ref_fast_forward(self) -> None:
-        initial = git(self.repo, "rev-parse", "main")
-        self.assertEqual(self.devflow("start", "publish-main").returncode, 0)
-        (self.repo / "feature.txt").write_text("complete\n")
-        git(self.repo, "add", "feature.txt")
-        git(self.repo, "commit", "-m", "Complete feature")
-        wip_oid = git(self.repo, "rev-parse", "HEAD")
-        review_env, _ = self.fake_review_tools()
-        reviewed = self.devflow("--json", "review", env=review_env)
-        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
-        review_id = json_output(reviewed)["review_id"]
-        landed = self.devflow(
-            "--json", "land", "publish-main", "--approved", review_id, "--title", "Publish complete feature"
-        )
-        self.assertEqual(landed.returncode, 0, landed.stderr)
-        main_oid = git(self.repo, "rev-parse", "main")
-        pre_push = BIN_DIR / "devflow-pre-push"
-
-        valid = run(
-            [str(pre_push), "origin", "unused"],
-            cwd=self.repo,
-            env=self.env,
-            stdin=f"refs/heads/main {main_oid} refs/heads/main {initial}\n",
-        )
-        self.assertEqual(valid.returncode, 0, valid.stderr)
-
-        deletion = run(
-            [str(pre_push), "origin", "unused"],
-            cwd=self.repo,
-            env=self.env,
-            stdin=f"(delete) {'0' * 40} refs/heads/main {main_oid}\n",
-        )
-        self.assertNotEqual(deletion.returncode, 0)
-
-        non_fast_forward = run(
-            [str(pre_push), "origin", "unused"],
-            cwd=self.repo,
-            env=self.env,
-            stdin=f"refs/heads/main {main_oid} refs/heads/main {wip_oid}\n",
-        )
-        self.assertNotEqual(non_fast_forward.returncode, 0)
-
-
-class StartTests(RepoCase):
     def test_start_uses_only_the_invoking_checkout_without_a_policy(self) -> None:
         git(self.repo, "config", "--local", "devflow.worktree-mode", "managed")
         worktrees_before = git(self.repo, "worktree", "list", "--porcelain")
@@ -942,39 +686,6 @@ class ReviewTests(RepoCase):
         self.assertEqual(json_output(reviewed)["change_set"]["head_oid"], head)
         self.assertEqual(git(user_review, "rev-parse", "HEAD"), head)
 
-    def test_review_rejects_concurrent_worktree_checkout_before_advancing_snapshot(self) -> None:
-        self.assertEqual(self.devflow("start", "review-head-race").returncode, 0)
-        (self.repo / "feature.txt").write_text("first\n")
-        git(self.repo, "add", "feature.txt")
-        git(self.repo, "commit", "-m", "First snapshot")
-        review_env, _ = self.fake_review_tools()
-        first = self.devflow("--json", "review", env=review_env)
-        self.assertEqual(first.returncode, 0, first.stderr)
-        old_review = git(self.repo, "rev-parse", "review/review-head-race")
-        Path(review_env["FAKE_REVIEW_STARTED"]).unlink()
-        (self.repo / "feature.txt").write_text("second\n")
-        git(self.repo, "add", "feature.txt")
-        git(self.repo, "commit", "-m", "Second snapshot")
-        new_head = git(self.repo, "rev-parse", "HEAD")
-        race_env, race_path, race_log = self.install_worktree_race(
-            trigger=["update-ref", "refs/heads/review/review-head-race", new_head, old_review],
-            target_ref="refs/heads/review/review-head-race",
-            target_branch="review/review-head-race",
-            target_oid=old_review,
-        )
-
-        reviewed = self.devflow("--json", "review", env=review_env | race_env)
-
-        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
-        race = json.loads(race_log.read_text())
-        self.assertNotEqual(race["returncode"], 0)
-        self.assertIn("protected ref update rejected: HEAD", race["stderr"])
-        self.assertFalse(race_path.exists())
-        self.assertNotIn(str(race_path), git(self.repo, "worktree", "list", "--porcelain"))
-        self.assertEqual(git(self.repo, "rev-parse", "review/review-head-race"), new_head)
-        self.assertEqual(git(self.repo, "branch", "--show-current"), "wip/review-head-race")
-        self.assertEqual(git(self.repo, "status", "--porcelain"), "")
-
     def test_plain_review_output_is_the_approval_identifier(self) -> None:
         self.assertEqual(self.devflow("start", "plain-review").returncode, 0)
         (self.repo / "feature.txt").write_text("plain\n")
@@ -1001,19 +712,7 @@ class ReviewTests(RepoCase):
         git(self.repo, "add", "concurrent.txt")
         git(self.repo, "commit", "-m", "Advance main")
         advanced_main = git(self.repo, "rev-parse", "HEAD")
-        authorization = json.dumps(
-            [{"ref": "refs/heads/main", "old": old_main, "new": advanced_main}],
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        git(
-            self.repo,
-            "update-ref",
-            "refs/heads/main",
-            advanced_main,
-            old_main,
-            env=self.env | {"DEVFLOW_REF_UPDATES": authorization},
-        )
+        git(self.repo, "update-ref", "refs/heads/main", advanced_main, old_main)
         git(self.repo, "switch", "wip/main-merge")
         review_env, _ = self.fake_review_tools()
 
@@ -1071,6 +770,60 @@ class LandingTests(RepoCase):
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         return json_output(reviewed)["review_id"], head, review_env
 
+    def test_landing_requires_an_explicit_target(self) -> None:
+        review_id, _, _ = self._reviewed_feature()
+        main_before = git(self.repo, "rev-parse", "main")
+
+        missing = self.devflow(
+            "--json", "land", "landing", "--approved", review_id, "--title", "Land explicit feature"
+        )
+
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn("--target", missing.stderr)
+        self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
+
+    def test_landing_updates_only_the_explicit_target_when_multiple_mainlines_exist(self) -> None:
+        review_id, _, _ = self._reviewed_feature()
+        main_before = git(self.repo, "rev-parse", "main")
+        git(self.repo, "branch", "mainline", main_before)
+
+        landed = self.devflow(
+            "--json",
+            "land",
+            "landing",
+            "--target",
+            "mainline",
+            "--approved",
+            review_id,
+            "--title",
+            "Land explicit feature",
+        )
+
+        self.assertEqual(landed.returncode, 0, landed.stderr)
+        self.assertEqual(json_output(landed)["mainline_ref"], "refs/heads/mainline")
+        self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
+        self.assertNotEqual(git(self.repo, "rev-parse", "mainline"), main_before)
+
+    def test_landing_does_not_fall_back_when_the_explicit_target_is_missing(self) -> None:
+        review_id, _, _ = self._reviewed_feature()
+        main_before = git(self.repo, "rev-parse", "main")
+
+        refused = self.devflow(
+            "--json",
+            "land",
+            "landing",
+            "--target",
+            "master",
+            "--approved",
+            review_id,
+            "--title",
+            "Land explicit feature",
+        )
+
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(json_output(refused)["error"]["code"], "mainline_not_found")
+        self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
+
     def test_landing_applies_approved_snapshot_to_advanced_main_as_one_commit(self) -> None:
         review_id, wip_head, _ = self._reviewed_feature()
         review_head = git(self.repo, "rev-parse", "review/landing")
@@ -1083,22 +836,18 @@ class LandingTests(RepoCase):
         git(concurrent, "commit", "-m", "Concurrent change")
         advanced_main = git(concurrent, "rev-parse", "HEAD")
         git(self.repo, "worktree", "remove", str(concurrent))
-        authorization = json.dumps(
-            [{"ref": "refs/heads/main", "old": old_main, "new": advanced_main}],
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        git(
-            self.repo,
-            "update-ref",
-            "refs/heads/main",
-            advanced_main,
-            old_main,
-            env=self.env | {"DEVFLOW_REF_UPDATES": authorization},
-        )
+        git(self.repo, "update-ref", "refs/heads/main", advanced_main, old_main)
 
         landed = self.devflow(
-            "--json", "land", "landing", "--approved", review_id, "--title", "Add deterministic workflow engine"
+            "--json",
+            "land",
+            "landing",
+            "--target",
+            "main",
+            "--approved",
+            review_id,
+            "--title",
+            "Add deterministic workflow engine",
         )
 
         self.assertEqual(landed.returncode, 0, landed.stderr)
@@ -1119,7 +868,9 @@ class LandingTests(RepoCase):
         git(self.repo, "commit", "-m", "Change after review")
         main_before = git(self.repo, "rev-parse", "main")
 
-        refused = self.devflow("--json", "land", "landing", "--approved", review_id, "--title", "Stale")
+        refused = self.devflow(
+            "--json", "land", "landing", "--target", "main", "--approved", review_id, "--title", "Stale"
+        )
 
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(json_output(refused)["error"]["code"], "approval_stale")
@@ -1135,6 +886,8 @@ class LandingTests(RepoCase):
             "--json",
             "land",
             "landing",
+            "--target",
+            "main",
             "--approved",
             review_id,
             "--title",
@@ -1155,6 +908,8 @@ class LandingTests(RepoCase):
             "--json",
             "land",
             "landing",
+            "--target",
+            "main",
             "--approved",
             review_id,
             "--title",
@@ -1215,6 +970,8 @@ class LandingTests(RepoCase):
             "--json",
             "land",
             "landing",
+            "--target",
+            "main",
             "--approved",
             review_id,
             "--title",
@@ -1228,37 +985,67 @@ class LandingTests(RepoCase):
         self.assertEqual(git(self.repo, "rev-parse", "review/landing"), reviewed_head)
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
 
-    def test_landing_rejects_concurrent_main_worktree_checkout_before_atomic_update(self) -> None:
-        review_id, wip_head, review_env = self._reviewed_feature()
+    def test_target_advance_during_atomic_landing_is_preserved(self) -> None:
+        review_id, reviewed_head, review_env = self._reviewed_feature()
         main_before = git(self.repo, "rev-parse", "main")
-        race_env, race_path, race_log = self.install_worktree_race(
-            trigger=["update-ref", "--stdin"],
-            target_ref="refs/heads/main",
-            target_branch="main",
-            target_oid=main_before,
+        main_tree = git(self.repo, "rev-parse", f"{main_before}^{{tree}}")
+        raced_commit = run(
+            ["git", "commit-tree", main_tree, "-p", main_before],
+            cwd=self.repo,
+            env=self.env,
+            stdin="Advance target during landing\n",
         )
+        self.assertEqual(raced_commit.returncode, 0, raced_commit.stderr)
+        raced_head = raced_commit.stdout.strip()
 
-        landed = self.devflow(
+        real_git = shutil.which("git")
+        self.assertIsNotNone(real_git)
+        git_wrapper = self.root / "fake-bin" / "git"
+        git_wrapper.write_text(
+            textwrap.dedent(
+                f"""\
+                #!{sys.executable}
+                import os, subprocess, sys
+                real = os.environ["DEVFLOW_REAL_GIT"]
+                if sys.argv[1:] == ["update-ref", "--stdin"]:
+                    raced = subprocess.run(
+                        [real, "update-ref", os.environ["DEVFLOW_RACE_REF"], os.environ["DEVFLOW_RACE_NEW"],
+                         os.environ["DEVFLOW_RACE_OLD"]],
+                        cwd=os.getcwd(), env=os.environ.copy(), text=True, capture_output=True, check=False,
+                    )
+                    if raced.returncode != 0:
+                        sys.stderr.write(raced.stderr)
+                        raise SystemExit(raced.returncode)
+                os.execv(real, [real, *sys.argv[1:]])
+                """
+            )
+        )
+        git_wrapper.chmod(0o755)
+        race_env = review_env | {
+            "DEVFLOW_REAL_GIT": str(real_git),
+            "DEVFLOW_RACE_REF": "refs/heads/main",
+            "DEVFLOW_RACE_OLD": main_before,
+            "DEVFLOW_RACE_NEW": raced_head,
+        }
+
+        refused = self.devflow(
             "--json",
             "land",
             "landing",
+            "--target",
+            "main",
             "--approved",
             review_id,
             "--title",
-            "Land despite rejected checkout race",
-            env=review_env | race_env,
+            "Reject concurrent target advance",
+            env=race_env,
         )
 
-        self.assertEqual(landed.returncode, 0, landed.stderr)
-        race = json.loads(race_log.read_text())
-        self.assertNotEqual(race["returncode"], 0)
-        self.assertIn("protected ref update rejected: HEAD", race["stderr"])
-        self.assertFalse(race_path.exists())
-        self.assertNotIn(str(race_path), git(self.repo, "worktree", "list", "--porcelain"))
-        self.assertNotEqual(git(self.repo, "rev-parse", "main"), main_before)
-        self.assertEqual(git(self.repo, "rev-parse", "wip/landing"), wip_head)
-        self.assertEqual(git(self.repo, "branch", "--show-current"), "wip/landing")
-        self.assertEqual(git(self.repo, "status", "--porcelain"), "")
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(json_output(refused)["error"]["code"], "ref_update_rejected")
+        self.assertEqual(git(self.repo, "rev-parse", "main"), raced_head)
+        self.assertEqual(git(self.repo, "rev-parse", "wip/landing"), reviewed_head)
+        self.assertEqual(git(self.repo, "rev-parse", "review/landing"), reviewed_head)
 
     def test_landing_refuses_to_disturb_main_checked_out_in_a_user_worktree(self) -> None:
         (self.repo / ".gitignore").write_text("ignored.txt\n")
@@ -1283,7 +1070,16 @@ class LandingTests(RepoCase):
         head_before = git(self.repo, "rev-parse", "HEAD")
 
         landed = self.devflow(
-            "--json", "land", "align-main", "--approved", review_id, "--title", "Align main checkout", cwd=wip
+            "--json",
+            "land",
+            "align-main",
+            "--target",
+            "main",
+            "--approved",
+            review_id,
+            "--title",
+            "Align main checkout",
+            cwd=wip,
         )
 
         self.assertEqual(landed.returncode, 2)
@@ -1309,21 +1105,19 @@ class LandingTests(RepoCase):
         git(concurrent, "commit", "-m", "Main edit")
         advanced_main = git(concurrent, "rev-parse", "HEAD")
         git(self.repo, "worktree", "remove", str(concurrent))
-        authorization = json.dumps(
-            [{"ref": "refs/heads/main", "old": old_main, "new": advanced_main}],
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        git(
-            self.repo,
-            "update-ref",
-            "refs/heads/main",
-            advanced_main,
-            old_main,
-            env=self.env | {"DEVFLOW_REF_UPDATES": authorization},
-        )
+        git(self.repo, "update-ref", "refs/heads/main", advanced_main, old_main)
 
-        refused = self.devflow("--json", "land", "conflict", "--approved", review_id, "--title", "Conflicting feature")
+        refused = self.devflow(
+            "--json",
+            "land",
+            "conflict",
+            "--target",
+            "main",
+            "--approved",
+            review_id,
+            "--title",
+            "Conflicting feature",
+        )
 
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(json_output(refused)["error"]["code"], "landing_conflict")
@@ -1331,12 +1125,16 @@ class LandingTests(RepoCase):
 
     def test_same_approval_cannot_land_twice(self) -> None:
         review_id, _, _ = self._reviewed_feature()
-        first = self.devflow("land", "landing", "--approved", review_id, "--title", "Land once")
+        first = self.devflow(
+            "land", "landing", "--target", "main", "--approved", review_id, "--title", "Land once"
+        )
         self.assertEqual(first.returncode, 0, first.stderr)
         main_after_first = git(self.repo, "rev-parse", "main")
         self.assertEqual(first.stdout.strip(), main_after_first)
 
-        repeated = self.devflow("--json", "land", "landing", "--approved", review_id, "--title", "Land twice")
+        repeated = self.devflow(
+            "--json", "land", "landing", "--target", "main", "--approved", review_id, "--title", "Land twice"
+        )
 
         self.assertEqual(repeated.returncode, 2)
         self.assertEqual(json_output(repeated)["error"]["code"], "landing_already_applied")

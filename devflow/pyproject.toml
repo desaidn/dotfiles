@@ -17,8 +17,6 @@ dev = [
 
 [project.scripts]
 devflow = "devflow.cli:main"
-devflow-reference-transaction = "devflow.hooks:reference_transaction_main"
-devflow-pre-push = "devflow.hooks:pre_push_main"
 
 [tool.uv]
 package = true

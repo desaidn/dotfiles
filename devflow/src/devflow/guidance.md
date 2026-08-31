@@ -1,4 +1,7 @@
-Use `devflow` as the only transaction surface for the guarded branch workflow.
+These instructions govern coding-agent actions only. The user's own Git and
+LazyGit operations are unrestricted; never block, intercept, or reinterpret
+them as Workflow Exceptions. Use `devflow` as the agent's transaction surface
+for the guarded branch workflow.
 
 `devflow` operates only in the checkout where it is invoked, including when that
 checkout is a user-created worktree. It never creates, adopts, moves, repairs,
@@ -6,6 +9,12 @@ prunes, locks, unlocks, or removes a worktree. Never bypass `devflow` with direc
 ref, branch, reset, rebase, force-push, review-ref, or mainline mutations. Any
 worktree lifecycle action or other action outside the guarded flow is a Workflow
 Exception and requires the user's explicit approval.
+
+Devflow installs no repository hooks and never reserves refs or checkouts against
+human activity. It may refuse its own transition when it observes a conflicting
+human checkout, but it never blocks or changes that checkout. Repository state
+can change after any preflight, so coordinate concurrent work in a shared
+checkout and rerun validation after a human Git operation.
 
 Use `devflow start <feature>` from a clean invoking checkout for local WIP work.
 It creates a new WIP exactly at current mainline or selects the existing branch
@@ -38,5 +47,7 @@ that same session with:
 Use `--old-line` instead when the finding belongs to removed code. Add comments
 before waiting for the user's decision. If WIP advances, start a new review; any
 prior approval is stale and the older snapshot cannot land. A review does not
-imply approval. Invoke `devflow land` only after the user explicitly approves the
-exact returned review ID and supplies the complete-feature squash title.
+imply approval. Invoke
+`devflow land <feature> --target <main|mainline|master> --approved <review-id> --title <complete-feature-title>`
+only after the user explicitly approves the exact returned review ID. Never
+infer the landing target.

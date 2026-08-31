@@ -29,15 +29,15 @@ A focused place for inspecting complete changesets before deciding what to keep,
 _Avoid_: Diff viewer, pager
 
 **WIP Branch**:
-The append-only development history for one feature. Feedback extends it with new commits, and landing never rewrites or deletes it.
+The development history for one feature. Coding agents extend it only with append-only commits; human Git remains unrestricted, and landing never rewrites or deletes it.
 _Avoid_: Feature branch, topic branch, mutable work branch
 
 **WIP Guard**:
-A repository-local safeguard that permits a WIP Branch to be created and advanced while preventing its history from being rewritten or deleted, including during push.
-_Avoid_: Global Git policy, security boundary, advisory rule
+The agent-only rule that WIP changes append history. Harness guidance constrains agent actions and devflow validates transitions it owns; no repository hook constrains human Git or LazyGit.
+_Avoid_: Repository hook, global Git policy, security boundary
 
 **Work Flow**:
-The branch lifecycle that creates and extends a WIP Branch. It can supply a Change Set to the Review Flow but is not required by it.
+The coding-agent branch lifecycle that creates and extends a WIP Branch. It can supply a Change Set to the Review Flow but is not required by it.
 _Avoid_: WIP workflow, development flow, review workflow
 
 **Workflow Engine**:
@@ -69,7 +69,7 @@ The invariant that Work Flow and Review Flow use only the Invoking Checkout and 
 _Avoid_: Checkout mode, no-worktree repository, automatic checkout
 
 **Review Branch**:
-A read-only `review/*` ref that exposes a Review Snapshot without being checked out by the Workflow Engine. Only the Review Flow may create or advance it to the selected Change Set revision; development changes never originate there.
+A `review/*` ref that exposes a Review Snapshot without being checked out by the Workflow Engine. Coding agents treat it as read-only outside Review Flow; human Git remains unrestricted, and agent development changes never originate there.
 _Avoid_: Staging branch, second WIP branch, review copy
 
 **Review Approval**:
@@ -77,7 +77,7 @@ Explicit authorization that the latest Review Snapshot represents the complete f
 _Avoid_: Base approval, branch approval, blanket approval
 
 **Mainline Branch**:
-The shared integration history named `main`, `mainline`, or `master`. It advances only through a Squash Landing of the latest reviewed and approved complete feature.
+The shared integration history explicitly selected as `main`, `mainline`, or `master`. Coding agents advance it only through a Squash Landing of the latest reviewed and approved complete feature; human Git remains unrestricted.
 _Avoid_: Base branch, development branch, direct-commit branch
 
 **Landing Candidate**:
@@ -85,11 +85,11 @@ The prospective result of applying an approved Review Snapshot to the current Ma
 _Avoid_: Merge result, squash branch, release candidate
 
 **Squash Landing**:
-The single-commit integration of the latest reviewed and approved complete feature into the Mainline Branch. It leaves the WIP Branch unchanged.
+The single-commit integration of the latest reviewed and approved complete feature into an explicitly selected Mainline Branch. It leaves the WIP Branch unchanged.
 _Avoid_: Merge commit, partial landing, direct mainline commit
 
 **Workflow Exception**:
-Any branch or worktree action outside the Work Flow, Review Flow, and Squash Landing contract. It requires explicit user approval before execution.
+Any coding-agent branch or worktree action outside the Work Flow, Review Flow, and Squash Landing contract. It requires explicit user approval before execution and never classifies the user's own Git or LazyGit actions.
 _Avoid_: Edge case, implicit permission, automatic recovery
 
 **Diffing Solution**:
