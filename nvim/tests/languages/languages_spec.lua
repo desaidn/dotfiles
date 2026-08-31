@@ -28,6 +28,18 @@ local function contains(items, expected)
   return false
 end
 
+local function assert_formatting_disabled(on_attach, server, server_capabilities)
+  server_capabilities = server_capabilities or {}
+  server_capabilities.documentFormattingProvider = true
+  server_capabilities.documentRangeFormattingProvider = true
+  local client = { server_capabilities = server_capabilities }
+
+  on_attach(client)
+  assert(not server_capabilities.documentFormattingProvider, server .. ' formatting must be disabled')
+  assert(not server_capabilities.documentRangeFormattingProvider, server .. ' range formatting must be disabled')
+  return client
+end
+
 check('declares Fish parsing and language-server support', function()
   assert(contains(languages.treesitter_parsers, 'fish'), 'missing Fish Tree-sitter parser')
   assert(languages.lsp_servers.fish_lsp ~= nil, 'missing fish_lsp configuration')
@@ -49,15 +61,22 @@ check('declares Bash and POSIX shell tooling with one save formatter', function(
   assert(languages.linters_by_ft.bash == nil, 'Bash diagnostics must not be duplicated through nvim-lint')
   assert(languages.linters_by_ft.sh == nil, 'POSIX sh diagnostics must not be duplicated through nvim-lint')
 
-  local client = {
-    server_capabilities = {
-      documentFormattingProvider = true,
-      documentRangeFormattingProvider = true,
-    },
-  }
-  languages.lsp_servers.bashls.on_attach(client)
-  assert(not client.server_capabilities.documentFormattingProvider, 'BashLS formatting must be disabled')
-  assert(not client.server_capabilities.documentRangeFormattingProvider, 'BashLS range formatting must be disabled')
+  assert_formatting_disabled(languages.lsp_servers.bashls.on_attach, 'BashLS')
+end)
+
+check('declares project-owned TypeScript and JavaScript tooling', function()
+  assert(languages.lsp_servers.tsc ~= nil, 'missing TypeScript 7 native LSP configuration')
+  assert(languages.lsp_servers.ts_ls ~= nil, 'missing mutually exclusive pre-TypeScript-7 compatibility client')
+  assert_formatting_disabled(languages.lsp_servers.tsc.on_attach, 'TypeScript')
+  assert_formatting_disabled(languages.lsp_servers.ts_ls.on_init, 'TypeScript compatibility')
+  assert(not contains(languages.mason_tools, 'tsc'), 'Mason must not own the project TypeScript compiler')
+  assert(contains(languages.mason_tools, 'typescript-language-server'), 'missing pre-TypeScript-7 compatibility wrapper')
+  assert(contains(languages.mason_tools, 'js-debug-adapter'), 'missing JavaScript debug adapter')
+  assert(contains(languages.mason_tools, 'eslint_d'), 'eslint_d must remain the JavaScript diagnostic owner')
+  assert(vim.deep_equal(languages.linters_by_ft.javascript, { 'eslint_d' }))
+  assert(vim.deep_equal(languages.linters_by_ft.typescript, { 'eslint_d' }))
+  assert(vim.deep_equal(languages.formatters_by_ft.javascript, { 'prettierd', 'prettier', stop_after_first = true }))
+  assert(vim.deep_equal(languages.formatters_by_ft.typescript, { 'prettierd', 'prettier', stop_after_first = true }))
 end)
 
 check('separates Python semantics, lint actions, formatting, and debugging', function()
@@ -74,17 +93,8 @@ check('separates Python semantics, lint actions, formatting, and debugging', fun
   assert(languages.linters_by_ft.python == nil, 'Ruff diagnostics must not be duplicated through nvim-lint')
   assert(vim.deep_equal(languages.formatters_by_ft.python, { 'ruff_fix', 'ruff_format', 'ruff_organize_imports' }))
 
-  local client = {
-    server_capabilities = {
-      hoverProvider = true,
-      documentFormattingProvider = true,
-      documentRangeFormattingProvider = true,
-    },
-  }
-  languages.lsp_servers.ruff.on_attach(client)
+  local client = assert_formatting_disabled(languages.lsp_servers.ruff.on_attach, 'Ruff', { hoverProvider = true })
   assert(not client.server_capabilities.hoverProvider, 'Ruff hover must defer to BasedPyright')
-  assert(not client.server_capabilities.documentFormattingProvider, 'Ruff formatting must defer to Conform')
-  assert(not client.server_capabilities.documentRangeFormattingProvider, 'Ruff range formatting must defer to Conform')
 end)
 
 check('leaves Rust lifecycle to rustaceanvim and installs its debugger', function()

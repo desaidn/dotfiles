@@ -4,6 +4,7 @@ vim.g.mapleader = ' '
 local fixture = assert(vim.env.HUNK_RENDER_FIXTURE, 'HUNK_RENDER_FIXTURE is required')
 local second_fixture = assert(vim.env.HUNK_RENDER_SECOND_FIXTURE, 'HUNK_RENDER_SECOND_FIXTURE is required')
 local repo_root = assert(vim.env.DOTFILES_REPO_ROOT, 'DOTFILES_REPO_ROOT is required')
+local start_mode = vim.env.HUNK_RENDER_START_MODE or 'manual'
 vim.cmd.cd(vim.fn.fnameescape(fixture))
 vim.opt.runtimepath:prepend(repo_root .. '/nvim')
 package.path = table.concat({
@@ -55,7 +56,10 @@ function _G.HunkRenderTerminalPids()
   return pids
 end
 
-vim.defer_fn(function()
-  require 'custom.plugins.hunk'
-  invoke_hunk()
-end, 100)
+require 'custom.plugins.hunk'
+
+if start_mode == 'manual' then
+  vim.defer_fn(invoke_hunk, 100)
+elseif start_mode ~= 'startup' then
+  error('unknown HUNK_RENDER_START_MODE: ' .. start_mode)
+end

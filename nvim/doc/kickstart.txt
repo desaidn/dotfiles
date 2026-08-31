@@ -29,7 +29,7 @@ ORIENTATION                                      *dotfiles-nvim-orientation*
 require a Nerd Font; plugin UI and the custom colorscheme intentionally use
 text and plain symbols.
 
-This revision requires exactly Neovim 0.12.4; startup stops on any other
+This revision requires exactly Neovim 0.12.5; startup stops on any other
 version so upstream baseline changes are adopted deliberately.
 
 The main workflow boundaries are:
@@ -267,7 +267,7 @@ Health and diagnosis ~
     Review startup, package-build, formatter, linter, and tool notifications.
 
 Use the root `install.sh` prerequisite check together with the exact Neovim
-0.12.4 startup guard. This Neovim workflow also requires `tree-sitter`,
+0.12.5 startup guard. This Neovim workflow also requires `tree-sitter`,
 `lazygit`, and `hunk`; Mason provisions the Python debug adapter. See the root
 `README.md` for environment setup. Implementation and test guidance lives
 in `nvim/AGENTS.md`; architectural rationale lives under `docs/adr/`, and

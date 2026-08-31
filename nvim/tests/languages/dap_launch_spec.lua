@@ -29,6 +29,7 @@ local fake_dap = {
 local launch_path
 local launch_name = 'Rust'
 local java_launch_name = 'Java'
+local javascript_launch_name = 'Node'
 local client_root
 local cwd_before = vim.fn.getcwd()
 local fixture = vim.fn.tempname()
@@ -36,12 +37,17 @@ assert(vim.fn.mkdir(fixture .. '/rust-app/.vscode', 'p') == 1, 'failed to create
 assert(vim.fn.writefile({}, fixture .. '/rust-app/.vscode/launch.json') == 0, 'failed to create launch file')
 assert(vim.fn.mkdir(fixture .. '/java-app/.vscode', 'p') == 1, 'failed to create Java launch fixture')
 assert(vim.fn.writefile({}, fixture .. '/java-app/.vscode/launch.json') == 0, 'failed to create Java launch file')
+assert(vim.fn.mkdir(fixture .. '/web-app/.vscode', 'p') == 1, 'failed to create JavaScript launch fixture')
+assert(vim.fn.writefile({}, fixture .. '/web-app/.vscode/launch.json') == 0, 'failed to create JavaScript launch file')
 local project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/rust-app', ':p'))
 local java_project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/java-app', ':p'))
+local javascript_project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/web-app', ':p'))
 local rust_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[rust_buffer].filetype = 'rust'
 local java_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[java_buffer].filetype = 'java'
+local javascript_buffer = vim.api.nvim_create_buf(true, false)
+vim.bo[javascript_buffer].filetype = 'javascript'
 vim.pack.add = function() end
 vim.cmd.packadd = function() end
 vim.lsp.get_clients = function()
@@ -57,6 +63,14 @@ package.loaded['dap.ext.vscode'] = {
       return {
         { name = java_launch_name, type = 'java', cwd = '${workspaceFolder}' },
         { name = 'Rust', type = 'codelldb' },
+        { name = 'Python', type = 'python' },
+      }
+    end
+    if path == javascript_project_root .. '/.vscode/launch.json' then
+      return {
+        { name = javascript_launch_name, type = 'node', program = '${file}', args = { '${relativeFile}' } },
+        { name = 'Chrome', type = 'pwa-chrome', webRoot = '${workspaceFolder}/src' },
+        { name = 'Edge', type = 'msedge', cwd = '${workspaceFolder}' },
         { name = 'Python', type = 'python' },
       }
     end
@@ -83,6 +97,7 @@ package.loaded['custom.languages.context'] = {
   for_buffer = function(bufnr)
     if bufnr == rust_buffer then return { root = project_root, path = project_root .. '/src/main.rs' } end
     if bufnr == java_buffer then return { root = java_project_root, path = java_project_root .. '/src/Main.java' } end
+    if bufnr == javascript_buffer then return { root = javascript_project_root, path = javascript_project_root .. '/src/index.js' } end
     return nil
   end,
 }
@@ -95,6 +110,7 @@ dap.register_project('java', {
   root_profile = { markers = { 'pom.xml' } },
   launch_types = { 'java' },
 })
+dap.register_project('javascript', require('custom.languages.config').dap_by_ft.javascript)
 
 check('uses the initiating buffer root for launch.json without changing cwd', function()
   local configs = fake_dap.providers.configs['dap.launch.json'](rust_buffer)
@@ -147,6 +163,23 @@ check('filters Java launch configurations and reads their changes afresh', funct
   assert(#configs == 1 and configs[1].name == 'Updated Java', vim.inspect(configs))
 end)
 
+check('filters and expands Node and browser launch configurations from the JavaScript project', function()
+  local configs = fake_dap.providers.configs['dap.launch.json'](javascript_buffer)
+  assert(launch_path == javascript_project_root .. '/.vscode/launch.json', tostring(launch_path))
+  assert(#configs == 3, vim.inspect(configs))
+  assert(configs[1].type == 'pwa-node' and configs[1].program == javascript_project_root .. '/src/index.js', vim.inspect(configs[1]))
+  assert(configs[1].args[1] == 'src/index.js', vim.inspect(configs[1]))
+  assert(configs[1].cwd == javascript_project_root, 'omitted Node cwd must default to the project root')
+  assert(configs[2].type == 'pwa-chrome' and configs[2].webRoot == javascript_project_root .. '/src', vim.inspect(configs[2]))
+  assert(configs[2].cwd == javascript_project_root, 'omitted browser cwd must default to the project root')
+  assert(configs[3].type == 'pwa-msedge' and configs[3].cwd == javascript_project_root, vim.inspect(configs[3]))
+  assert(vim.fn.getcwd() == cwd_before, 'JavaScript launch selection must not change Neovim cwd')
+
+  javascript_launch_name = 'Updated Node'
+  configs = fake_dap.providers.configs['dap.launch.json'](javascript_buffer)
+  assert(configs[1].name == 'Updated Node', vim.inspect(configs))
+end)
+
 vim.pack.add = original_pack_add
 vim.cmd.packadd = original_cmd_packadd
 package.loaded.dap = original_dap
@@ -156,6 +189,7 @@ package.loaded['custom.languages.context'] = original_context
 vim.lsp.get_clients = original_get_clients
 vim.api.nvim_buf_delete(rust_buffer, { force = true })
 vim.api.nvim_buf_delete(java_buffer, { force = true })
+vim.api.nvim_buf_delete(javascript_buffer, { force = true })
 vim.fn.delete(fixture, 'rf')
 
 if #failures > 0 then error(string.format('%d DAP launch check(s) failed: %s', #failures, table.concat(failures, ', '))) end

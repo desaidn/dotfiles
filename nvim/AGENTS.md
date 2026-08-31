@@ -28,7 +28,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `capabilities.lua` - shared LSP capability policy, including single-owner formatting
   - `lsp.lua`, `treesitter.lua`, `format.lua`, `lint.lua`, and `dap.lua` - shared language surfaces
   - `dap.lua` - shared lazy DAP lifecycle, UI, controls, buffer-specific debugger registration, and root-aware `launch.json` provider
-  - `adapters/java.lua`, `adapters/python.lua`, and `adapters/rust.lua` - language-specific adapters
+  - `adapters/java.lua`, `adapters/javascript.lua`, `adapters/python.lua`, and `adapters/rust.lua` - language-specific adapters
 - `lua/custom/plugins/` - Repository-owned plugin modules, explicitly required by `lua/custom/plugins/init.lua`:
   - `init.lua` - Custom plugin imports
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
@@ -36,9 +36,10 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
   - `hunk.lua` - Thin Hunk stacked review launcher over `lua/custom/lib/terminal_tool.lua`; declares its working-tree and staged input variants (owns `<leader>gd` and `<leader>gD`)
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
+- `tests/flatten_swap_spec.lua` - Two-Neovim regression proving that a live swap collision cannot abort a production Flatten handoff after Neovim installs the requested buffer
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
-- `tests/languages/` - Headless language-tooling regression harnesses for configuration, project context, JDTLS, linting, DAP, Python, and Rust behavior
+- `tests/languages/` - Headless language-tooling regression harnesses for configuration, project context, JDTLS, linting, DAP, JavaScript/TypeScript, Python, and Rust behavior
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
@@ -46,14 +47,14 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 
 Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple and idiomatic: call `vim.pack.add()` for the package(s) they own, configure them directly, and avoid recreating lazy.nvim's trigger DSL. Prefer native Neovim APIs before adding plugins, and keep each plugin responsible for a clear capability that is not already covered by core Neovim or a local helper. Core plugins include:
 
-- **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ server configuration lives in `lua/custom/languages/`.
+- **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ server configuration lives in `lua/custom/languages/`; TypeScript semantics are project-owned and version-routed from a recognized root-local installation: 7+ uses native `tsc`, while earlier versions use Mason's `typescript-language-server` transport with the exact project `tsserver.js`.
 - **Completion**: blink.cmp with LuaSnip for snippets
 - **Fuzzy Finding**: fff.nvim for files and live grep (`<leader>sf`, `<leader>sg`); Telescope with fzf-native for help, keymaps, diagnostics, buffers, LSP symbols, and word-under-cursor grep
 - **Git Integration**: gitsigns (in-editor signs, blame, local hunks); Hunk (working-tree and staged review); lazygit (Git transaction UI)
 - **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
 - **Formatting**: conform.nvim for auto-formatting
 - **Linting**: nvim-lint with eslint_d; Ruff supplies Python diagnostics and actions through LSP
-- **Debugging**: nvim-dap with project-root-aware `launch.json`, Java (nvim-jdtls + Mason debug/test bundles), Python (Mason debugpy), and Rust (rustaceanvim + Mason CodeLLDB)
+- **Debugging**: nvim-dap with project-root-aware `launch.json`, JavaScript/TypeScript (Mason js-debug), Java (nvim-jdtls + Mason debug/test bundles), Python (Mason debugpy), and Rust (rustaceanvim + Mason CodeLLDB)
 - **UI**: which-key, mini.nvim (statusline, surround, text objects), undotree, todo-comments
 
 ### Key Bindings Structure
@@ -129,6 +130,26 @@ Common language configuration lives in `lua/custom/languages/config.lua`; shared
 
 Java and Rust are intentional lifecycle exceptions: nvim-jdtls and rustaceanvim own their respective language-server startup, so neither server appears in generic `vim.lsp.enable` configuration. Java's adapter starts JDTLS per project and initializes its DAP integration before attachment.
 
+TypeScript is a semantic-ownership exception rather than a lifecycle exception.
+Generic native LSP startup enables two mutually exclusive routes after the
+shared JavaScript/TypeScript profile finds a package-manager/Git root and
+excludes a nearer Deno project: a parseable root-local TypeScript 7+ starts its
+exact `node_modules/.bin/tsc`, while an earlier version with root-local
+`node_modules/typescript/lib/tsserver.js` starts Mason's
+`typescript-language-server` transport pointed at that exact language service.
+The compatibility client accepts only the expected `$/typescriptVersion`
+report from `user-setting` and terminates wrapper fallbacks or mismatches.
+Missing, unparseable, unowned, and Deno projects receive neither client. Mason
+owns the compatibility transport, js-debug, and `eslint_d`; projects own
+TypeScript, ESLint, runtime semantics, and non-trivial Node/browser
+`.vscode/launch.json` files.
+
+This personal configuration explicitly assumes opened development repositories
+are trusted. JavaScript/TypeScript startup executes the root-local compiler to
+select a semantic route, and lint configuration may execute project code. Keep
+debug launches user-triggered and loopback-bound; do not add automatic project
+tasks or silent trust expansion.
+
 To add a new language server:
 
 1. Add the server's nvim-lspconfig name and native configuration to `lsp_servers` in `lua/custom/languages/config.lua`; use an empty table when nvim-lspconfig defaults are sufficient.
@@ -170,6 +191,13 @@ require('custom.lib.terminal_tool').create {
 }
 ```
 
+A variant may also declare an `ex_command` when an external workflow needs a
+deterministic Neovim entry point. The command and key invoke the exact same
+private toggle callback; declarations still receive no lifecycle controller.
+Keys and Ex commands must be unclaimed when the declaration loads. Ex command
+names follow Neovim's uppercase-leading alphanumeric syntax, and registration
+is atomic so a rejected declaration preserves existing mappings and commands.
+
 - Start one persistent Neovim terminal job and Tool Tab per selected tool instance. Invoking a tool selects its existing Tool Tab; invoking its running variant's toggle from that tab returns directly to the latest non-tool Host Window. Before Neovim exits, the shared module stops and briefly waits for every active terminal-tool job across all instances.
 - Variants share one Tool Tab, one process slot, one `env`, and one handoff identity within each instance. Selecting a variant other than the running one restarts that instance's job in place; only the running variant's own key hides the Tool Tab. Prefer variants over a second tool id when one CLI's inputs are alternative views of the same review, since duplicate processes within a repository make session selectors ambiguous.
 - A `variants` list must be a gapless list of two or more entries with distinct keys and distinct commands; use a top-level `command` for a single input. These are load-time assertions because a silently dropped entry would leave a documented key doing nothing.
@@ -177,6 +205,7 @@ require('custom.lib.terminal_tool').create {
 - Use `instances = 'cwd'` only when a tool should retain concurrent instances selected by canonical Host Window working directory. Hunk uses this policy so reviews in different repositories or worktrees remain live together.
 - Keep every Tool Tab instance independent. Switching tools or contexts must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window. Native `:tabclose` hides only that instance's live terminal buffer; the next invocation recreates its Tool Tab, while process exit removes only that instance.
 - Let the shared module install the normal-mode mapping; declarations do not receive or inspect mutable buffer, window, tab, or job state. Terminal input stays untouched, so use `<Esc><Esc>` before a normal-mode tool key.
+- Let the shared module register an optional variant `ex_command`; do not duplicate a mapping's launch behavior in plugin-specific command callbacks. If an external workflow invokes that shared callback during Neovim startup, the module coalesces requests and waits until after `UIEnter` before starting the terminal job so automatic terminal-capability detection matches an interactive mapping.
 - Use ordinary full-tab windows inside and outside tmux. This keeps sizing native and, when using the tmux fallback, keeps the host tmux client upstream so its prefix, session picker, and pane navigation remain available while the tool is running.
 - Pass through shell-owned `EDITOR`, `VISUAL`, and `GIT_EDITOR`; do not override the editor contract in tool-specific config.
 - Keep tool-specific environment exceptions declarative in `env`; reserved editor and handoff variables are rejected so the source marker and shell-owned editor contract cannot be replaced.
@@ -190,7 +219,7 @@ Focused on in-editor git context and full review of the working tree and the ind
 
 - **gitsigns**: In-editor git signs, blame, and hunk navigation
 - `<leader>gg` - Toggle lazygit's Git transaction Tool Tab (custom plugin: `lua/custom/plugins/lazygit.lua`)
-- `<leader>gd` / `<leader>gD` - Toggle Hunk's stacked review Tool Tab on the working tree or the index (custom plugin: `lua/custom/plugins/hunk.lua`). Each working directory owns one instance; both keys drive that instance's Tool Tab and process, and pressing the other input's key retargets the review in place. This keeps `--watch` live and keeps the `--repo .` selector on `hunk session` subcommands matching exactly one session per repository for agent notes.
+- `<leader>gd` / `<leader>gD` - Toggle Hunk's stacked review Tool Tab on the working tree or the index (custom plugin: `lua/custom/plugins/hunk.lua`). Each working directory owns one instance; both keys drive that instance's Tool Tab and process, and pressing the other input's key retargets the review in place. This keeps `--watch` live and keeps the `--repo .` selector on `hunk session` subcommands matching exactly one session per repository for agent notes. When the Workflow Engine supplies a validated base and head object ID, `<leader>gd` and `:HunkReview` instead share the aggregate `BASE...HEAD` review toggle. The Workflow Engine roots the process in its Invoking Checkout; the Neovim adapter only consumes the immutable object IDs and fails before registration if either is absent or malformed. Hunk's `e` action therefore returns through flatten.nvim to the review tab's Neovim, with normal project-root discovery and full language tooling using that checkout's project state.
 - Lazygit and Hunk use the shell-owned global editor contract (`EDITOR=nvim`) for native Editor Handoff; flatten.nvim returns nested Neovim invocations to the Host Window while preserving the originating Tool Tab.
 - `<leader>tb` - Toggle git blame line
 - `<leader>td` - Toggle inline git diff (deleted lines + word diff)
@@ -228,7 +257,7 @@ Neo-tree file explorer is enabled with right-side positioning and minimal stylin
 Keep installation ownership aligned with the repository-level dependency
 inventory:
 
-- The host provides exactly stable Neovim 0.12.4, `git`, `curl`, `tar`,
+- The host provides exactly stable Neovim 0.12.5, `git`, `curl`, `tar`,
   `gzip`, `unzip`, `diff`, a C compiler, `rg`, and tree-sitter CLI 0.26.1 or
   newer.
 - The host also provides `lazygit` and `hunk` for their production Tool Tabs,

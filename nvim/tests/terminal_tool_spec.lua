@@ -20,6 +20,8 @@ end
 
 local function fake_vim(options)
   options = options or {}
+  local vim_did_enter = options.vim_did_enter
+  if vim_did_enter == nil then vim_did_enter = 1 end
   local fixture = {
     geometry = { width = 80, height = 24 },
     cwd = options.cwd or '/repo/one',
@@ -36,10 +38,14 @@ local function fake_vim(options)
     job_results = real_vim.deepcopy(options.job_results or {}),
     buffer_results = real_vim.deepcopy(options.buffer_results or {}),
     synchronous_exits = real_vim.deepcopy(options.synchronous_exits or {}),
+    mapping_results = real_vim.deepcopy(options.mapping_results or {}),
+    command_results = real_vim.deepcopy(options.command_results or {}),
     job_attempts = {},
     jobs = {},
     waits = {},
     mappings = {},
+    user_commands = real_vim.deepcopy(options.user_commands or {}),
+    scheduled = {},
     deferred = {},
     notifications = {},
     sends = {},
@@ -91,6 +97,7 @@ local function fake_vim(options)
       GIT_EDITOR = 'nvim',
     },
     log = { levels = { ERROR = 4, WARN = 3 } },
+    v = { vim_did_enter = vim_did_enter },
     cmd = {
       diffthis = function() end,
       startinsert = function() end,
@@ -104,7 +111,13 @@ local function fake_vim(options)
     },
     pack = { add = function() end },
     deepcopy = deepcopy,
-    schedule = function(callback) callback() end,
+    schedule = function(callback)
+      if options.queue_schedules then
+        fixture.scheduled[#fixture.scheduled + 1] = callback
+      else
+        callback()
+      end
+    end,
     defer_fn = function(callback, delay) fixture.deferred[#fixture.deferred + 1] = { callback = callback, delay = delay } end,
     notify = function(message, level, notify_options)
       fixture.notifications[#fixture.notifications + 1] = {
@@ -115,15 +128,31 @@ local function fake_vim(options)
     end,
     keymap = {
       set = function(mode, lhs, callback, map_options)
+        if table.remove(fixture.mapping_results, 1) == false then error 'injected mapping registration failure' end
         local buf = map_options and map_options.buf or nil
         fixture.mappings[mapping_key(mode, lhs, buf)] = {
           callback = callback,
           options = deepcopy(map_options or {}),
         }
       end,
+      del = function(mode, lhs, map_options)
+        local buf = map_options and map_options.buffer or nil
+        fixture.mappings[mapping_key(mode, lhs, buf)] = nil
+      end,
     },
     fn = {
       getcwd = function() return fixture.windows[fixture.current_win].cwd or fixture.cwd end,
+      maparg = function(lhs, mode, abbreviation, dictionary)
+        assert(abbreviation == false and dictionary == true, 'the fake only supports dictionary mapping lookup')
+        local mapping = fixture.mappings[mapping_key(mode, lhs, nil)]
+        if mapping == nil then return {} end
+        return {
+          callback = mapping.callback,
+          desc = mapping.options.desc,
+          lhs = lhs,
+          mode = mode,
+        }
+      end,
       chansend = function(job_id, input)
         local job = fixture.jobs[job_id]
         if not job or not job.running then return 0 end
@@ -276,10 +305,28 @@ local function fake_vim(options)
           fixture.autocmds[name][#fixture.autocmds[name] + 1] = autocmd_options.callback
         end
       end,
+      nvim_get_commands = function(command_options)
+        assert(command_options.builtin == false, 'the fake only supports querying user commands')
+        return deepcopy(fixture.user_commands)
+      end,
+      nvim_create_user_command = function(name, callback, command_options)
+        assert(name:match '^[A-Z][A-Za-z0-9]*$' and name ~= 'Next', 'invalid user command name: ' .. name)
+        if table.remove(fixture.command_results, 1) == false then error 'injected command registration failure' end
+        assert(command_options.force ~= false or fixture.user_commands[name] == nil, 'user command already exists: ' .. name)
+        fixture.user_commands[name] = {
+          callback = callback,
+          options = deepcopy(command_options or {}),
+        }
+      end,
+      nvim_del_user_command = function(name)
+        assert(fixture.user_commands[name] ~= nil, 'user command does not exist: ' .. name)
+        fixture.user_commands[name] = nil
+      end,
     },
   }
 
   function fixture.fire(event)
+    if event == 'UIEnter' then fake.v.vim_did_enter = 1 end
     for _, callback in ipairs(fixture.autocmds[event] or {}) do
       callback()
     end
@@ -291,6 +338,11 @@ local function fake_vim(options)
     local mapping = fixture.mapping(mode, lhs, buf)
     assert(mapping, string.format('missing %s-mode mapping for %s', mode, lhs))
     return mapping.callback()
+  end
+
+  function fixture.invoke_command(name)
+    local command = assert(fixture.user_commands[name], 'missing user command :' .. name)
+    return command.callback {}
   end
 
   function fixture.surface()
@@ -333,6 +385,14 @@ local function fake_vim(options)
     fixture.deferred = {}
     for _, item in ipairs(deferred) do
       item.callback()
+    end
+  end
+
+  function fixture.run_scheduled()
+    local scheduled = fixture.scheduled
+    fixture.scheduled = {}
+    for _, callback in ipairs(scheduled) do
+      callback()
     end
   end
 
@@ -381,6 +441,198 @@ check('declaration owns mappings without exposing lifecycle state', function()
   fixture.invoke('n', '<leader>gg')
   local surface = assert(fixture.surface(), 'expected a terminal surface')
   assert(not fixture.mapping('t', '<leader>gg', surface.buf), 'terminal mapping would delay ordinary Space input in the TUI')
+end)
+
+check('a variant Ex command and key invoke the exact same toggle', function()
+  local fake, fixture = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local result = terminal_tool.create {
+    id = 'hunk',
+    variants = {
+      { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = 'HunkReview' },
+      { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk diff (staged)' },
+    },
+  }
+  local mapping = assert(fixture.mapping('n', '<leader>gd'), 'expected create to install the normal-mode mapping')
+  local command = assert(fixture.user_commands.HunkReview, 'expected create to install the Ex command')
+
+  assert(result == nil, 'create exposed a controller after registering an Ex command')
+  assert(mapping.callback == command.callback, 'the Ex command and key were wired to different toggle callbacks')
+  assert(command.options.force == false, 'the Ex command could overwrite a command registered after preflight')
+  fixture.invoke_command 'HunkReview'
+  assert(#fixture.job_attempts == 1, 'the Ex command did not launch the declared tool')
+  assert(table.concat(fixture.job_attempts[1].command, ' ') == 'hunk diff', 'the Ex command launched the wrong argv')
+end)
+
+check('a startup Ex command waits for the UI and coalesces repeated requests', function()
+  -- VimEnter sets vim_did_enter before the builtin TUI emits UIEnter.
+  local fake, fixture = fake_vim { vim_did_enter = 0, queue_schedules = true }
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  terminal_tool.create {
+    id = 'hunk',
+    variants = {
+      { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = 'HunkReview' },
+      { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk diff (staged)' },
+    },
+  }
+  local mapping = assert(fixture.mapping('n', '<leader>gd'), 'expected create to install the normal-mode mapping')
+  local command = assert(fixture.user_commands.HunkReview, 'expected create to install the Ex command')
+
+  assert(mapping.callback == command.callback, 'startup handling split the shared key and Ex-command callback')
+  fake.v.vim_did_enter = 1
+  fixture.invoke_command 'HunkReview'
+  fixture.invoke_command 'HunkReview'
+  assert(#fixture.job_attempts == 0, 'the startup Ex command launched before Neovim entered the UI')
+
+  fixture.fire 'UIEnter'
+  assert(#fixture.job_attempts == 0, 'the startup Ex command launched inside UIEnter instead of on the next scheduled tick')
+  fixture.invoke_command 'HunkReview'
+  assert(#fixture.job_attempts == 0, 'a request bypassed the pending launch between UIEnter and the scheduled tick')
+  fixture.run_scheduled()
+
+  assert(#fixture.job_attempts == 1, 'repeated startup requests did not coalesce to one launch')
+  assert(table.concat(fixture.job_attempts[1].command, ' ') == 'hunk diff', 'the deferred Ex command launched the wrong argv')
+  assert(fixture.current_win ~= 1, 'repeated startup requests toggled the Tool Tab closed after launch')
+end)
+
+check('variant Ex commands must be usable Neovim user-command names', function()
+  for _, ex_command in ipairs { 'hunkReview', 'Hunk_Review', 'Hunk Review', 'Next' } do
+    local fake, fixture = fake_vim()
+    _G.vim = fake
+    local terminal_tool = dofile(terminal_tool_path)
+    local ok, err = pcall(
+      function()
+        terminal_tool.create {
+          id = 'hunk',
+          variants = {
+            { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = ex_command },
+            { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged' },
+          },
+        }
+      end
+    )
+
+    assert(not ok and tostring(err):match 'Ex command', ex_command .. ' did not fail with an Ex-command declaration error')
+    assert(fixture.mapping('n', '<leader>gd') == nil, ex_command .. ' left a partial mapping')
+    assert(fixture.user_commands[ex_command] == nil, ex_command .. ' left a partial command')
+  end
+end)
+
+check('variant Ex commands are unique within a declaration', function()
+  local fake, fixture = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local ok, err = pcall(
+    function()
+      terminal_tool.create {
+        id = 'hunk',
+        variants = {
+          { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = 'HunkReview' },
+          { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged', ex_command = 'HunkReview' },
+        },
+      }
+    end
+  )
+
+  assert(not ok and tostring(err):match 'more than once', 'a repeated Ex command did not fail during preflight')
+  assert(fixture.mapping('n', '<leader>gd') == nil and fixture.mapping('n', '<leader>gD') == nil, 'a repeated Ex command left mappings')
+  assert(fixture.user_commands.HunkReview == nil, 'a repeated Ex command was registered')
+end)
+
+check('variant Ex commands cannot claim an existing Neovim command', function()
+  local existing_callback = function() return 'existing' end
+  local fake, fixture = fake_vim {
+    user_commands = { HunkReview = { callback = existing_callback, options = {} } },
+  }
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local ok, err = pcall(
+    function()
+      terminal_tool.create {
+        id = 'hunk',
+        variants = {
+          { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = 'HunkReview' },
+          { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged' },
+        },
+      }
+    end
+  )
+
+  assert(not ok and tostring(err):match 'already registered', 'an existing Neovim command did not block the declaration')
+  assert(fixture.user_commands.HunkReview.callback == existing_callback, 'the existing Neovim command was overwritten')
+  assert(fixture.mapping('n', '<leader>gd') == nil and fixture.mapping('n', '<leader>gD') == nil, 'the rejected declaration left mappings')
+end)
+
+check("a variant Ex command cannot collide with another tool's command", function()
+  local fake, fixture = fake_vim()
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  terminal_tool.create {
+    id = 'hunk',
+    variants = {
+      { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = 'HunkReview' },
+      { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged' },
+    },
+  }
+
+  local ok, err = pcall(
+    function()
+      terminal_tool.create {
+        id = 'other',
+        variants = {
+          { command = { 'other', 'review' }, key = '<leader>or', desc = 'Other review', ex_command = 'HunkReview' },
+          { command = { 'other', 'status' }, key = '<leader>os', desc = 'Other status' },
+        },
+      }
+    end
+  )
+
+  assert(not ok and tostring(err):match 'already registered by hunk', 'a cross-tool Ex command collision was not attributed to its owner')
+  assert(fixture.mapping('n', '<leader>or') == nil and fixture.mapping('n', '<leader>os') == nil, 'the rejected second tool left mappings')
+  assert(fixture.user_commands.HunkReview.callback == fixture.mapping('n', '<leader>gd').callback, 'the first tool lost its command')
+end)
+
+check('registration failures leave no partial Ex commands or mappings', function()
+  local failure_options = {
+    { command_results = { true, false } },
+    { mapping_results = { true, false } },
+  }
+
+  for _, options in ipairs(failure_options) do
+    local fake, fixture = fake_vim(options)
+    _G.vim = fake
+    local terminal_tool = dofile(terminal_tool_path)
+    local ok = pcall(
+      function()
+        terminal_tool.create {
+          id = 'hunk',
+          variants = {
+            { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = 'HunkReview' },
+            { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged', ex_command = 'HunkStagedReview' },
+          },
+        }
+      end
+    )
+
+    assert(not ok, 'the injected registration failure unexpectedly succeeded')
+    assert(next(fixture.user_commands) == nil, 'a failed declaration left a partial Ex command')
+    assert(fixture.mapping('n', '<leader>gd') == nil and fixture.mapping('n', '<leader>gD') == nil, 'a failed declaration left a partial mapping')
+
+    local retry_ok, retry_error = pcall(
+      function()
+        terminal_tool.create {
+          id = 'hunk',
+          variants = {
+            { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = 'HunkReview' },
+            { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged', ex_command = 'HunkStagedReview' },
+          },
+        }
+      end
+    )
+    assert(retry_ok, 'a failed declaration could not be retried: ' .. tostring(retry_error))
+  end
 end)
 
 check('terminal job persists when its Tool Tab is left and revisited', function()
@@ -585,6 +837,20 @@ local function setup_variants(overrides, fake_options)
 end
 
 local function launched(fixture, index) return table.concat(fixture.job_attempts[index].command, ' ') end
+
+local function load_production_hunk(review_env)
+  local fake, fixture = fake_vim()
+  for name, value in pairs(review_env or {}) do
+    fake.env[name] = value
+  end
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+  local previous = package.loaded['custom.lib.terminal_tool']
+  package.loaded['custom.lib.terminal_tool'] = terminal_tool
+  local loaded, load_error = pcall(dofile, hunk_path)
+  package.loaded['custom.lib.terminal_tool'] = previous
+  return fixture, loaded, load_error
+end
 
 check('input variants share one Tool Tab and one process slot', function()
   local fixture = setup_variants()
@@ -791,6 +1057,34 @@ check("a variant key cannot collide with another tool's key", function()
   assert(fixture.invoke('n', '<leader>gD'), 'the corrected declaration could not launch')
 end)
 
+check('a declaration cannot overwrite an existing Neovim mapping', function()
+  local fake, fixture = fake_vim()
+  local existing_callback = function() return 'existing mapping' end
+  fake.keymap.set('n', '<leader>gd', existing_callback, { desc = 'Existing mapping' })
+  local existing_mapping = fixture.mapping('n', '<leader>gd')
+  _G.vim = fake
+  local terminal_tool = dofile(terminal_tool_path)
+
+  local ok, err = pcall(
+    function()
+      terminal_tool.create {
+        id = 'hunk',
+        variants = {
+          { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk diff', ex_command = 'HunkReview' },
+          { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged' },
+        },
+      }
+    end
+  )
+
+  assert(not ok and tostring(err):match 'already mapped', 'an existing Neovim mapping did not block the declaration')
+  local preserved = fixture.mapping('n', '<leader>gd')
+  assert(preserved == existing_mapping, 'the rejected declaration replaced the existing mapping record')
+  assert(preserved.callback == existing_callback, 'the rejected declaration changed the existing mapping callback')
+  assert(preserved.options.desc == 'Existing mapping', 'the rejected declaration changed the existing mapping options')
+  assert(fixture.user_commands.HunkReview == nil, 'a mapping collision left a partial Ex command')
+end)
+
 check('a declaration cannot repeat a variant key', function()
   local fake = fake_vim()
   _G.vim = fake
@@ -840,21 +1134,65 @@ check('a variant restarts in a new effective working directory', function()
 end)
 
 check('production Hunk declaration owns both review inputs', function()
-  local fake, fixture = fake_vim()
-  _G.vim = fake
-  local terminal_tool = dofile(terminal_tool_path)
-  local previous = package.loaded['custom.lib.terminal_tool']
-  package.loaded['custom.lib.terminal_tool'] = terminal_tool
-  local loaded, load_error = pcall(function() dofile(hunk_path) end)
-  package.loaded['custom.lib.terminal_tool'] = previous
+  local fixture, loaded, load_error = load_production_hunk()
   assert(loaded, load_error)
 
   fixture.invoke('n', '<leader>gd')
   assert(table.concat(fixture.job_attempts[1].command, ' ') == 'hunk diff --watch --mode stack', 'production working-tree review lost its watch or layout')
+  assert(fixture.user_commands.HunkReview == nil, 'ordinary Hunk context unexpectedly registered :HunkReview')
 
   fixture.invoke('n', '<leader>gD')
   assert(table.concat(fixture.job_attempts[2].command, ' ') == 'hunk diff --staged --watch --mode stack', 'production staged review lost its watch or layout')
   assert(fixture.job_attempts[2].options.env.OPENTUI_GRAPHICS == 'false', 'production staged review lost its render fix')
+end)
+
+check('production Hunk review context exposes the aggregate Change Set through one toggle', function()
+  for _, oid_length in ipairs { 40, 64 } do
+    local base_oid = string.rep('a', oid_length)
+    local head_oid = string.rep('b', oid_length)
+    local fixture, loaded, load_error = load_production_hunk {
+      DEVFLOW_REVIEW_BASE_OID = base_oid,
+      DEVFLOW_REVIEW_HEAD_OID = head_oid,
+    }
+    assert(loaded, load_error)
+
+    local mapping = assert(fixture.mapping('n', '<leader>gd'), 'review context lost the Hunk diff key')
+    local command = assert(fixture.user_commands.HunkReview, 'review context did not register :HunkReview')
+    assert(mapping.callback == command.callback, ':HunkReview and <leader>gd do not share one toggle callback')
+
+    fixture.invoke_command 'HunkReview'
+    assert(
+      table.concat(fixture.job_attempts[1].command, ' ') == 'hunk diff ' .. base_oid .. '...' .. head_oid .. ' --watch --mode stack',
+      ':HunkReview did not launch the immutable aggregate diff'
+    )
+  end
+end)
+
+check('production Hunk fails closed for incomplete or malformed review identity', function()
+  local valid_oid = string.rep('a', 40)
+  local invalid_contexts = {
+    { name = 'base only', base = valid_oid },
+    { name = 'head only', head = valid_oid },
+    { name = 'empty values', base = '', head = '' },
+    { name = 'short base', base = string.rep('a', 39), head = valid_oid },
+    { name = 'long head', base = valid_oid, head = string.rep('b', 65) },
+    { name = 'SHA-1 base with SHA-256 head', base = valid_oid, head = string.rep('b', 64) },
+    { name = 'SHA-256 base with SHA-1 head', base = string.rep('a', 64), head = valid_oid },
+    { name = 'uppercase base', base = string.rep('A', 40), head = valid_oid },
+    { name = 'non-hex head', base = valid_oid, head = string.rep('g', 40) },
+  }
+
+  for _, context in ipairs(invalid_contexts) do
+    local fixture, loaded, load_error = load_production_hunk {
+      DEVFLOW_REVIEW_BASE_OID = context.base,
+      DEVFLOW_REVIEW_HEAD_OID = context.head,
+    }
+
+    assert(not loaded, context.name .. ' review context unexpectedly loaded Hunk')
+    assert(tostring(load_error):match 'DEVFLOW review context', context.name .. ' failed without a clear review-context error')
+    assert(fixture.mapping('n', '<leader>gd') == nil, context.name .. ' registered a Hunk mapping before failing')
+    assert(fixture.user_commands.HunkReview == nil, context.name .. ' registered :HunkReview before failing')
+  end
 end)
 
 check('tool environment extends the shell-owned editor contract', function()
@@ -1158,7 +1496,9 @@ check('editor exit stops and briefly waits for every terminal tool job', functio
   local wait = assert(fixture.waits[1], 'editor exit did not wait for the stopped jobs')
   assert(#fixture.waits == 1 and #wait.jobs == 2, 'editor exit did not wait once for every stopped job')
   local waited = {}
-  for _, job in ipairs(wait.jobs) do waited[job] = true end
+  for _, job in ipairs(wait.jobs) do
+    waited[job] = true
+  end
   assert(waited[1] and waited[2], 'editor exit waited for the wrong jobs')
   assert(wait.timeout > 0 and wait.timeout <= 1000, 'editor exit used an unbounded shutdown wait')
 end)

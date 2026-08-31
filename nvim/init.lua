@@ -30,11 +30,11 @@ Kickstart Guide:
 -- ============================================================
 do
   local version = vim.version()
-  local has_supported_version = version.major == 0 and version.minor == 12 and version.patch == 4 and not version.prerelease
+  local has_supported_version = version.major == 0 and version.minor == 12 and version.patch == 5 and not version.prerelease
   if not has_supported_version then
     vim.api.nvim_echo({
-      { ("Unsupported Neovim version: '%s'. Install Neovim 0.12.4.\n"):format(version), 'ErrorMsg' },
-      { 'This config follows the latest kickstart.nvim mainline baseline and requires exactly Neovim 0.12.4.' },
+      { ("Unsupported Neovim version: '%s'. Install Neovim 0.12.5.\n"):format(version), 'ErrorMsg' },
+      { 'This config follows the latest kickstart.nvim mainline baseline and requires exactly Neovim 0.12.5.' },
     }, true, {})
     vim.fn.getchar()
     os.exit(1)

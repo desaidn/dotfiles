@@ -47,6 +47,15 @@ HOME_DIRECTORY="$(cd -P -- "$HOME" 2>/dev/null && pwd -P)" ||
     die "do not run this uninstaller as root; run it as the user whose dotfiles are being removed"
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_DIR="$HOME/.local/share/dotfiles"
+DEVFLOW_SOURCE="$REPO_ROOT/devflow"
+DEVFLOW_DISTRIBUTION="dotfiles-devflow"
+DEVFLOW_TOOL_DIR="$LOCAL_DIR/uv-tools"
+DEVFLOW_TOOL_ENV="$DEVFLOW_TOOL_DIR/$DEVFLOW_DISTRIBUTION"
+DEVFLOW_BIN_DIR="$HOME/.local/bin"
+DEVFLOW_RECEIPT="$LOCAL_DIR/devflow-tool.receipt"
+DEVFLOW_RECEIPT_SOURCE=""
+DEVFLOW_RECEIPT_PYTHON=""
 
 symlink_points_to() {
     [[ -L "$1" && "$1" -ef "$2" ]]
@@ -69,6 +78,222 @@ remove_owned() {
     fi
     rm "$dst"
     echo "  removed:          $dst"
+}
+
+load_devflow_receipt() {
+    local line
+    local lines=()
+
+    [[ -f "$DEVFLOW_RECEIPT" && ! -L "$DEVFLOW_RECEIPT" ]] || return 1
+    while IFS= read -r line; do
+        lines+=("$line")
+    done <"$DEVFLOW_RECEIPT"
+    [[ ${#lines[@]} == 3 && "${lines[0]}" == "dotfiles-devflow-v1" ]] ||
+        return 1
+    [[ "${lines[1]}" == "$DEVFLOW_SOURCE" && -n "${lines[2]}" ]] ||
+        return 1
+    DEVFLOW_RECEIPT_SOURCE="${lines[1]}"
+    DEVFLOW_RECEIPT_PYTHON="${lines[2]}"
+}
+
+clear_devflow_resolver_environment() {
+    local variable
+
+    while IFS= read -r variable; do
+        case "$variable" in
+            UV_*|PYTHON*|VIRTUAL_ENV*|CONDA_*|PIP_*)
+                unset "$variable"
+                ;;
+        esac
+    done < <(compgen -e)
+}
+
+devflow_uv_receipt_matches() {
+    local expected_python="$1" expected_source="$2"
+
+    [[ -f "$DEVFLOW_TOOL_ENV/uv-receipt.toml" &&
+        ! -L "$DEVFLOW_TOOL_ENV/uv-receipt.toml" ]] || return 1
+    (
+        clear_devflow_resolver_environment
+        "$expected_python" - \
+            "$DEVFLOW_TOOL_ENV/uv-receipt.toml" \
+            "$expected_python" \
+            "$expected_source" \
+            "$DEVFLOW_BIN_DIR" \
+            "$DEVFLOW_DISTRIBUTION" <<'PYTHON'
+from __future__ import annotations
+
+import sys
+import tomllib
+from collections.abc import Mapping, Sequence
+
+
+def records_match(
+    value: object,
+    *,
+    keys: tuple[str, ...],
+    expected: frozenset[tuple[str, ...]],
+) -> bool:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return False
+    records: list[tuple[str, ...]] = []
+    for item in value:
+        if not isinstance(item, Mapping) or set(item) != set(keys):
+            return False
+        record = tuple(item[key] for key in keys)
+        if not all(isinstance(field, str) for field in record):
+            return False
+        records.append(record)
+    return len(records) == len(expected) and frozenset(records) == expected
+
+
+receipt_path, expected_python, expected_source, bin_dir, distribution = sys.argv[1:]
+try:
+    with open(receipt_path, "rb") as receipt_file:
+        receipt = tomllib.load(receipt_file)
+except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+    raise SystemExit(1) from None
+
+if set(receipt) != {"tool"} or not isinstance(receipt["tool"], Mapping):
+    raise SystemExit(1)
+tool = receipt["tool"]
+if set(tool) != {"requirements", "python", "entrypoints"}:
+    raise SystemExit(1)
+if tool["python"] != expected_python:
+    raise SystemExit(1)
+if not records_match(
+    tool["requirements"],
+    keys=("name", "editable"),
+    expected=frozenset({(distribution, expected_source)}),
+):
+    raise SystemExit(1)
+entrypoint_names = (
+    "devflow",
+    "devflow-pre-push",
+    "devflow-reference-transaction",
+)
+expected_entrypoints = frozenset(
+    (name, f"{bin_dir}/{name}", distribution) for name in entrypoint_names
+)
+if not records_match(
+    tool["entrypoints"],
+    keys=("name", "install-path", "from"),
+    expected=expected_entrypoints,
+):
+    raise SystemExit(1)
+PYTHON
+    )
+}
+
+devflow_environment_matches() {
+    local expected_python="$1" expected_source="$2"
+    local candidate line
+    local source_markers=() source_lines=()
+
+    devflow_uv_receipt_matches "$expected_python" "$expected_source" ||
+        return 1
+    symlink_points_to "$DEVFLOW_TOOL_ENV/bin/python" "$expected_python" ||
+        return 1
+
+    for candidate in \
+        "$DEVFLOW_TOOL_ENV"/lib/python*/site-packages/dotfiles_devflow.pth
+    do
+        [[ -f "$candidate" && ! -L "$candidate" ]] || continue
+        source_markers+=("$candidate")
+    done
+    [[ ${#source_markers[@]} == 1 ]] || return 1
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        source_lines+=("$line")
+    done <"${source_markers[0]}"
+    [[ ${#source_lines[@]} == 1 &&
+        "${source_lines[0]}" == "$expected_source/src" ]]
+}
+
+devflow_state_exists() {
+    local executable executable_path
+
+    if [[ -e "$DEVFLOW_RECEIPT" || -L "$DEVFLOW_RECEIPT" ||
+        -e "$DEVFLOW_TOOL_ENV" || -L "$DEVFLOW_TOOL_ENV" ]]
+    then
+        return 0
+    fi
+    for executable in \
+        devflow devflow-reference-transaction devflow-pre-push
+    do
+        executable_path="$DEVFLOW_BIN_DIR/$executable"
+        if [[ -e "$executable_path" || -L "$executable_path" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+devflow_state_is_owned() {
+    local executable
+
+    load_devflow_receipt || return 1
+    [[ -d "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] || return 1
+    devflow_environment_matches \
+        "$DEVFLOW_RECEIPT_PYTHON" "$DEVFLOW_RECEIPT_SOURCE" || return 1
+    for executable in \
+        devflow devflow-reference-transaction devflow-pre-push
+    do
+        symlink_points_to \
+            "$DEVFLOW_BIN_DIR/$executable" \
+            "$DEVFLOW_TOOL_ENV/bin/$executable" || return 1
+    done
+}
+
+run_devflow_uv() (
+    clear_devflow_resolver_environment
+    export UV_TOOL_DIR="$DEVFLOW_TOOL_DIR"
+    export UV_TOOL_BIN_DIR="$DEVFLOW_BIN_DIR"
+    uv --no-config "$@"
+)
+
+remove_owned_devflow() {
+    local executable
+
+    if ! devflow_state_exists; then
+        echo "  not installed:    $DEVFLOW_DISTRIBUTION"
+        return 0
+    fi
+    if ! devflow_state_is_owned; then
+        echo "  ownership unclear: $DEVFLOW_DISTRIBUTION (preserving)"
+        return 0
+    fi
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "  removal blocked:  uv is unavailable; preserving $DEVFLOW_DISTRIBUTION"
+        RESTORE_STATUS=1
+        return 0
+    fi
+
+    if ! run_devflow_uv tool uninstall "$DEVFLOW_DISTRIBUTION"
+    then
+        echo "  removal blocked:  uv could not uninstall $DEVFLOW_DISTRIBUTION"
+        RESTORE_STATUS=1
+        return 0
+    fi
+
+    if [[ -e "$DEVFLOW_TOOL_ENV" || -L "$DEVFLOW_TOOL_ENV" ]]; then
+        echo "  removal blocked:  Workflow Engine environment remains after uv completed"
+        RESTORE_STATUS=1
+        return 0
+    fi
+    for executable in \
+        devflow devflow-reference-transaction devflow-pre-push
+    do
+        if [[ -e "$DEVFLOW_BIN_DIR/$executable" ||
+            -L "$DEVFLOW_BIN_DIR/$executable" ]]
+        then
+            echo "  removal blocked:  Workflow Engine executable remains: $DEVFLOW_BIN_DIR/$executable"
+            RESTORE_STATUS=1
+            return 0
+        fi
+    done
+
+    rm "$DEVFLOW_RECEIPT"
+    echo "  removed:          $DEVFLOW_DISTRIBUTION"
 }
 
 find_latest_backup() {
@@ -307,6 +532,7 @@ restore_nested() {
 }
 
 RESTORE_STATUS=0
+remove_owned_devflow
 if (( RESTORE_BACKUPS == 1 )); then
     echo "Restoring the newest unambiguous backups:"
     restore_direct fish .config/fish
@@ -354,5 +580,5 @@ else
     echo "  (none)"
 fi
 echo
-echo "Per-machine files at \$HOME/.local/share/dotfiles/ were left untouched."
+echo "Other per-machine files at \$HOME/.local/share/dotfiles/ were left untouched."
 exit "$RESTORE_STATUS"

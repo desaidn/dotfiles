@@ -2,7 +2,7 @@
 
 Research date: 2026-08-16
 
-Scope: the planned Java vertical slice in this Neovim 0.12.4 configuration.
+Scope: the planned Java vertical slice in this Neovim 0.12.5 configuration.
 This note uses upstream Neovim, nvim-jdtls, Eclipse JDT LS, Mason Registry, and
 Microsoft Java-debug/test sources. It records implementation constraints rather
 than prescribing a second editor workflow.

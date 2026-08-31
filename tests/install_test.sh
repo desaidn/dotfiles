@@ -73,10 +73,32 @@ assert_log_prefix_count() {
 
 write_fake_commands() {
     local command_name command_path
-    for command_name in bash cat chmod cp date dirname env ln mkdir mv readlink; do
+    for command_name in bash cat chmod cp date dirname env ln mkdir readlink; do
         command_path="$(command -v "$command_name")"
         ln -s "$command_path" "$FIXTURE_FAKE_BIN/$command_name"
     done
+
+    cat >"$FIXTURE_FAKE_BIN/mv" <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+flag="$DOTFILES_TEST_STATE/receipt-finalize-interruption"
+if [[ -f "$flag" && "$#" == 2 &&
+    "$2" == "$HOME/.local/share/dotfiles/devflow-tool.receipt" ]]
+then
+    first_line=""
+    flag_state=""
+    IFS= read -r first_line <"$1" || true
+    IFS= read -r flag_state <"$flag" || true
+    if [[ "$first_line" == "dotfiles-devflow-v1" &&
+        "$flag_state" == "interrupt" ]]
+    then
+        printf 'consumed\n' >"$flag"
+        exit 6
+    fi
+fi
+exec "$DOTFILES_TEST_REAL_MV" "$@"
+SCRIPT
 
     cat >"$FIXTURE_FAKE_BIN/uname" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -237,7 +259,7 @@ case "${1:-}" in
                 printf '24.18.0\n'
                 ;;
             "tools.core:python")
-                printf '3.14.6\n'
+                printf '3.14.7\n'
                 ;;
             "tools.core:rust.version")
                 printf '1.97.1\n'
@@ -261,7 +283,7 @@ case "${1:-}" in
                     printf '24.18.0\n'
                     ;;
                 python)
-                    printf '3.14.6\n'
+                    printf '3.14.7\n'
                     ;;
                 rust)
                     printf '1.97.1\n'
@@ -323,7 +345,10 @@ case "${0##*/}" in
         printf '11.4.2\n'
         ;;
     python|python3)
-        printf 'Python 3.14.6\n'
+        if [[ "${1:-}" == "-" ]]; then
+            exec "$DOTFILES_TEST_REAL_PYTHON" "$@"
+        fi
+        printf 'Python 3.14.7\n'
         ;;
     rustc)
         if [[ " ${*:-} " == *' --print sysroot '* ]]; then
@@ -347,6 +372,129 @@ case "${0##*/}" in
 esac
 SCRIPT
 
+    cat >"$FIXTURE_UV_TEMPLATE" <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool_dir="${UV_TOOL_DIR:-}"
+bin_dir="${UV_TOOL_BIN_DIR:-}"
+expected_tool_dir="$HOME/.local/share/dotfiles/uv-tools"
+expected_bin_dir="$HOME/.local/bin"
+no_config=0
+
+if [[ "${1:-}" == "--no-config" ]]; then
+    no_config=1
+    shift
+fi
+
+if [[ -e "$DOTFILES_TEST_STATE/expect-uv-isolation" ]]; then
+    (( no_config == 1 )) || {
+        printf 'uv was not isolated from configuration files\n' >&2
+        exit 4
+    }
+    for variable in $(compgen -e); do
+        case "$variable" in
+            UV_TOOL_DIR|UV_TOOL_BIN_DIR)
+                ;;
+            UV_*|PYTHON*|VIRTUAL_ENV*|CONDA_*|PIP_*)
+                printf 'uv inherited forbidden environment variable: %s\n' \
+                    "$variable" >&2
+                exit 4
+                ;;
+        esac
+    done
+    [[ "${HTTP_PROXY:-}" == "http://proxy.example:8080" &&
+        "${HTTPS_PROXY:-}" == "https://proxy.example:8443" &&
+        "${NO_PROXY:-}" == "localhost,127.0.0.1" &&
+        "${SSL_CERT_FILE:-}" == "$DOTFILES_TEST_STATE/test-ca.pem" ]] || {
+        printf 'uv did not preserve proxy and CA environment\n' >&2
+        exit 4
+    }
+fi
+
+[[ "$tool_dir" == "$expected_tool_dir" ]] || {
+    printf 'uv received unexpected tool directory: %s\n' "${tool_dir:-unset}" >&2
+    exit 4
+}
+[[ "$bin_dir" == "$expected_bin_dir" ]] || {
+    printf 'uv received unexpected bin directory: %s\n' "${bin_dir:-unset}" >&2
+    exit 4
+}
+case " $* " in
+    *" --force "*)
+        printf 'uv received forbidden --force option\n' >&2
+        exit 4
+        ;;
+esac
+
+case "${1:-} ${2:-}" in
+    "tool install")
+        [[ "$#" == 7 &&
+            "${3:-}" == "--python" &&
+            "${4:-}" == "$DOTFILES_TEST_FAKE_BIN/python" &&
+            "${5:-}" == "--no-python-downloads" &&
+            "${6:-}" == "--editable" &&
+            "${7:-}" == "$DOTFILES_TEST_REPO_ROOT/devflow" ]] || {
+            printf 'unexpected uv tool install arguments: %s\n' "$*" >&2
+            exit 4
+        }
+        printf 'uv tool install|%s|%s|%s\n' "$tool_dir" "$bin_dir" "$*" \
+            >>"$DOTFILES_TEST_LOG"
+        [[ ! -e "$DOTFILES_TEST_STATE/uv-install-failure" ]] || exit 5
+        mkdir -p \
+            "$tool_dir/dotfiles-devflow/bin" \
+            "$tool_dir/dotfiles-devflow/lib/python3.14/site-packages" \
+            "$bin_dir"
+        ln -s "$DOTFILES_TEST_FAKE_BIN/python" \
+            "$tool_dir/dotfiles-devflow/bin/python"
+        printf '%s' "$DOTFILES_TEST_REPO_ROOT/devflow/src" \
+            >"$tool_dir/dotfiles-devflow/lib/python3.14/site-packages/dotfiles_devflow.pth"
+        printf '%s\n' \
+            '[tool]' \
+            "requirements = [{ name = \"dotfiles-devflow\", editable = \"$DOTFILES_TEST_REPO_ROOT/devflow\" }]" \
+            "python = \"$DOTFILES_TEST_FAKE_BIN/python\"" \
+            'entrypoints = [' \
+            "    { name = \"devflow\", install-path = \"$bin_dir/devflow\", from = \"dotfiles-devflow\" }," \
+            "    { name = \"devflow-pre-push\", install-path = \"$bin_dir/devflow-pre-push\", from = \"dotfiles-devflow\" }," \
+            "    { name = \"devflow-reference-transaction\", install-path = \"$bin_dir/devflow-reference-transaction\", from = \"dotfiles-devflow\" }," \
+            ']' \
+            >"$tool_dir/dotfiles-devflow/uv-receipt.toml"
+        for executable in \
+            devflow devflow-reference-transaction devflow-pre-push
+        do
+            cp "$DOTFILES_TEST_GENERIC_TEMPLATE" \
+                "$tool_dir/dotfiles-devflow/bin/$executable"
+            chmod +x "$tool_dir/dotfiles-devflow/bin/$executable"
+            ln -s "$tool_dir/dotfiles-devflow/bin/$executable" \
+                "$bin_dir/$executable"
+        done
+        if [[ -e "$DOTFILES_TEST_STATE/uv-interrupt-after-install" ]]; then
+            printf 'consumed\n' \
+                >"$DOTFILES_TEST_STATE/uv-interrupt-after-install"
+            exit 6
+        fi
+        ;;
+    "tool uninstall")
+        [[ "$#" == 3 && "${3:-}" == "dotfiles-devflow" ]] || {
+            printf 'unexpected uv tool uninstall arguments: %s\n' "$*" >&2
+            exit 4
+        }
+        printf 'uv tool uninstall|%s|%s|%s\n' "$tool_dir" "$bin_dir" "$*" \
+            >>"$DOTFILES_TEST_LOG"
+        for executable in \
+            devflow devflow-reference-transaction devflow-pre-push
+        do
+            rm -f "$bin_dir/$executable"
+        done
+        rm -rf "$tool_dir/dotfiles-devflow"
+        ;;
+    *)
+        printf 'unexpected uv command: %s\n' "$*" >&2
+        exit 4
+        ;;
+esac
+SCRIPT
+
     cat >"$FIXTURE_FORMULA_TEMPLATE" <<'SCRIPT'
 #!/usr/bin/env bash
 case "${0##*/}" in
@@ -360,7 +508,12 @@ case "${0##*/}" in
         fi
         ;;
     nvim)
-        printf 'NVIM v0.12.4\n'
+        if [[ -f "$DOTFILES_TEST_STATE/nvim-version" ]]; then
+            IFS= read -r nvim_version <"$DOTFILES_TEST_STATE/nvim-version"
+            printf '%s\n' "$nvim_version"
+        else
+            printf 'NVIM v0.12.5\n'
+        fi
         ;;
     tmux)
         printf 'tmux 3.7b\n'
@@ -392,12 +545,14 @@ SCRIPT
 #!/usr/bin/env bash
 install_formula_commands() {
     local command_name
-    for command_name in git fish zsh nvim herdr tmux lazygit atuin gh rg tree-sitter hunk uv ghcup wl-copy wl-paste xclip; do
+    for command_name in git fish zsh nvim herdr tmux lazygit atuin gh rg tree-sitter hunk ghcup wl-copy wl-paste xclip; do
         cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
         chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
     done
     cp "$DOTFILES_TEST_MISE_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/mise"
     chmod +x "$DOTFILES_TEST_FAKE_BIN/mise"
+    cp "$DOTFILES_TEST_UV_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/uv"
+    chmod +x "$DOTFILES_TEST_FAKE_BIN/uv"
 }
 
 cask_name() {
@@ -504,8 +659,10 @@ SCRIPT
         "$FIXTURE_FORMULA_TEMPLATE" \
         "$FIXTURE_GENERIC_TEMPLATE" \
         "$FIXTURE_MISE_TEMPLATE" \
+        "$FIXTURE_FAKE_BIN/mv" \
         "$FIXTURE_PACKAGE_TEMPLATE" \
-        "$FIXTURE_RUNTIME_TEMPLATE"
+        "$FIXTURE_RUNTIME_TEMPLATE" \
+        "$FIXTURE_UV_TEMPLATE"
 }
 
 new_fixture() {
@@ -523,11 +680,14 @@ new_fixture() {
     FIXTURE_GENERIC_TEMPLATE="$FIXTURE_ROOT/generic-template"
     FIXTURE_MISE_TEMPLATE="$FIXTURE_ROOT/mise-template"
     FIXTURE_RUNTIME_TEMPLATE="$FIXTURE_ROOT/runtime-template"
+    FIXTURE_UV_TEMPLATE="$FIXTURE_ROOT/uv-template"
     FIXTURE_PACKAGE_TEMPLATE="$FIXTURE_ROOT/package-template"
     FIXTURE_CALLER_DIR="$FIXTURE_ROOT/caller"
     FIXTURE_INSTALL_REPO_ROOT="$REPO_ROOT"
     FIXTURE_BREW_PREFIX="$FIXTURE_ROOT"
     FIXTURE_OS="$os_name"
+    FIXTURE_REAL_MV="$(command -v mv)"
+    FIXTURE_REAL_PYTHON="$(command -v python3)"
     if [[ -n "$package_manager" ]]; then
         FIXTURE_PACKAGE_MANAGER="$package_manager"
     elif [[ "$os_name" == "Linux" ]]; then
@@ -584,8 +744,11 @@ run_installer() {
             DOTFILES_TEST_MISE_TEMPLATE="$FIXTURE_MISE_TEMPLATE" \
             DOTFILES_TEST_OS="$FIXTURE_OS" \
             DOTFILES_TEST_REPO_ROOT="$FIXTURE_INSTALL_REPO_ROOT" \
+            DOTFILES_TEST_REAL_MV="$FIXTURE_REAL_MV" \
+            DOTFILES_TEST_REAL_PYTHON="$FIXTURE_REAL_PYTHON" \
             DOTFILES_TEST_RUNTIME_TEMPLATE="$FIXTURE_RUNTIME_TEMPLATE" \
             DOTFILES_TEST_STATE="$FIXTURE_STATE" \
+            DOTFILES_TEST_UV_TEMPLATE="$FIXTURE_UV_TEMPLATE" \
             "$FIXTURE_INSTALL_REPO_ROOT/install.sh" "$@"
     ) >"$FIXTURE_OUTPUT" 2>&1
     then
@@ -607,7 +770,15 @@ run_uninstaller() {
     local expected_status="$1"
     shift
 
-    if HOME="$FIXTURE_HOME" PATH="$FIXTURE_FAKE_BIN:/usr/bin:/bin" \
+    if HOME="$FIXTURE_HOME" \
+        PATH="$FIXTURE_FAKE_BIN:/usr/bin:/bin" \
+        DOTFILES_TEST_FAKE_BIN="$FIXTURE_FAKE_BIN" \
+        DOTFILES_TEST_GENERIC_TEMPLATE="$FIXTURE_GENERIC_TEMPLATE" \
+        DOTFILES_TEST_LOG="$FIXTURE_LOG" \
+        DOTFILES_TEST_REAL_MV="$FIXTURE_REAL_MV" \
+        DOTFILES_TEST_REAL_PYTHON="$FIXTURE_REAL_PYTHON" \
+        DOTFILES_TEST_REPO_ROOT="$REPO_ROOT" \
+        DOTFILES_TEST_STATE="$FIXTURE_STATE" \
         "$REPO_ROOT/uninstall.sh" "$@" >"$FIXTURE_ROOT/uninstall.out" 2>&1
     then
         actual_status=0
@@ -655,6 +826,182 @@ assert_common_links_removed() {
     assert_not_exists "$FIXTURE_HOME/.zshrc"
 }
 
+assert_devflow_installed() {
+    local executable
+    local tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    local receipt="$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+    local expected_uv_receipt="$FIXTURE_STATE/expected-uv-receipt.toml"
+
+    assert_exists "$tool_environment"
+    for executable in devflow devflow-reference-transaction devflow-pre-push; do
+        assert_symlink \
+            "$FIXTURE_HOME/.local/bin/$executable" \
+            "$tool_environment/bin/$executable"
+    done
+    grep -Fxq 'dotfiles-devflow-v1' "$receipt" ||
+        fail "Workflow Engine receipt has an unexpected format"
+    grep -Fxq "$REPO_ROOT/devflow" "$receipt" ||
+        fail "Workflow Engine receipt did not record its editable source"
+    grep -Fxq "$FIXTURE_FAKE_BIN/python" "$receipt" ||
+        fail "Workflow Engine receipt did not record Mise's exact Python"
+    assert_symlink \
+        "$tool_environment/bin/python" \
+        "$FIXTURE_FAKE_BIN/python"
+    grep -Fxq "$REPO_ROOT/devflow/src" \
+        "$tool_environment/lib/python3.14/site-packages/dotfiles_devflow.pth" ||
+        fail "Workflow Engine environment did not record its editable source"
+    write_devflow_uv_receipt_fixture "$expected_uv_receipt"
+    assert_file_bytes_equal \
+        "$expected_uv_receipt" "$tool_environment/uv-receipt.toml" \
+        "Workflow Engine uv receipt did not match the exact owned inventory"
+}
+
+assert_devflow_not_installed() {
+    local executable
+
+    assert_not_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    assert_not_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+    for executable in devflow devflow-reference-transaction devflow-pre-push; do
+        assert_not_exists "$FIXTURE_HOME/.local/bin/$executable"
+    done
+}
+
+assert_devflow_receipt_status() {
+    local expected="$1" actual
+
+    IFS= read -r actual \
+        <"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+    assert_eq "$expected" "$actual" "unexpected Workflow Engine receipt status"
+}
+
+write_devflow_uv_receipt_fixture() {
+    local destination="$1" inventory="${2:-exact}"
+    local receipt_python="$FIXTURE_FAKE_BIN/python"
+    local requirement_source="$REPO_ROOT/devflow"
+
+    if [[ "$inventory" == "reformatted" ]]; then
+        printf '%s\n' \
+            '# Equivalent uv metadata with deliberately different TOML syntax.' \
+            '[tool]' \
+            "python = '$FIXTURE_FAKE_BIN/python' # pinned interpreter" \
+            'entrypoints = [' \
+            "  { from = 'dotfiles-devflow', name = 'devflow-reference-transaction', install-path = '$FIXTURE_HOME/.local/bin/devflow-reference-transaction' }," \
+            "  { install-path = '$FIXTURE_HOME/.local/bin/devflow', from = 'dotfiles-devflow', name = 'devflow' }," \
+            "  { name = 'devflow-pre-push', from = 'dotfiles-devflow', install-path = '$FIXTURE_HOME/.local/bin/devflow-pre-push' }," \
+            ']' \
+            'requirements = [' \
+            "  { editable = '$REPO_ROOT/devflow', name = 'dotfiles-devflow' }," \
+            ']' \
+            >"$destination"
+        return
+    fi
+
+    if [[ "$inventory" == "wrong-python" ]]; then
+        receipt_python="$FIXTURE_ROOT/another-python"
+    fi
+    if [[ "$inventory" == "wrong-source" ]]; then
+        requirement_source="$FIXTURE_ROOT/another-source"
+    fi
+
+    printf '%s\n' '[tool]' >"$destination"
+    case "$inventory" in
+        exact|extra-entrypoint|duplicate-entrypoint|wrong-python|wrong-source)
+            printf '%s\n' \
+                "requirements = [{ name = \"dotfiles-devflow\", editable = \"$requirement_source\" }]" \
+                >>"$destination"
+            ;;
+        extra-requirement)
+            printf '%s\n' \
+                'requirements = [' \
+                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/devflow\" }," \
+                '    { name = "injected-package" },' \
+                ']' \
+                >>"$destination"
+            ;;
+        duplicate-requirement)
+            printf '%s\n' \
+                'requirements = [' \
+                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/devflow\" }," \
+                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/devflow\" }," \
+                ']' \
+                >>"$destination"
+            ;;
+        *)
+            fail "unknown uv receipt inventory fixture: $inventory"
+            ;;
+    esac
+    printf '%s\n' \
+        "python = \"$receipt_python\"" \
+        'entrypoints = [' \
+        "    { name = \"devflow\", install-path = \"$FIXTURE_HOME/.local/bin/devflow\", from = \"dotfiles-devflow\" }," \
+        "    { name = \"devflow-pre-push\", install-path = \"$FIXTURE_HOME/.local/bin/devflow-pre-push\", from = \"dotfiles-devflow\" }," \
+        "    { name = \"devflow-reference-transaction\", install-path = \"$FIXTURE_HOME/.local/bin/devflow-reference-transaction\", from = \"dotfiles-devflow\" }," \
+        >>"$destination"
+    if [[ "$inventory" == "extra-entrypoint" ]]; then
+        printf '%s\n' \
+            "    { name = \"unexpected-devflow-command\", install-path = \"$FIXTURE_HOME/.local/bin/unexpected-devflow-command\", from = \"dotfiles-devflow\" }," \
+            >>"$destination"
+    fi
+    if [[ "$inventory" == "duplicate-entrypoint" ]]; then
+        printf '%s\n' \
+            "    { name = \"devflow\", install-path = \"$FIXTURE_HOME/.local/bin/devflow\", from = \"dotfiles-devflow\" }," \
+            >>"$destination"
+    fi
+    printf '%s\n' ']' >>"$destination"
+}
+
+assert_file_bytes_equal() {
+    local expected="$1" actual="$2" message="$3"
+
+    cmp -s "$expected" "$actual" || fail "$message"
+}
+
+add_injected_devflow_inventory_artifact() {
+    local inventory="$1" tool_environment="$2"
+
+    case "$inventory" in
+        extra-requirement)
+            mkdir -p \
+                "$tool_environment/lib/python3.14/site-packages/injected_package"
+            printf 'injected package data\nwith exact bytes\n' \
+                >"$tool_environment/lib/python3.14/site-packages/injected_package/marker"
+            ;;
+        extra-entrypoint)
+            cp "$FIXTURE_GENERIC_TEMPLATE" \
+                "$tool_environment/bin/unexpected-devflow-command"
+            chmod +x "$tool_environment/bin/unexpected-devflow-command"
+            ln -s "$tool_environment/bin/unexpected-devflow-command" \
+                "$FIXTURE_HOME/.local/bin/unexpected-devflow-command"
+            ;;
+    esac
+}
+
+assert_injected_devflow_inventory_artifact() {
+    local inventory="$1" tool_environment="$2"
+
+    case "$inventory" in
+        extra-requirement)
+            grep -Fxq 'injected package data' \
+                "$tool_environment/lib/python3.14/site-packages/injected_package/marker" ||
+                fail "ambiguous injected package data was changed"
+            grep -Fxq 'with exact bytes' \
+                "$tool_environment/lib/python3.14/site-packages/injected_package/marker" ||
+                fail "ambiguous injected package bytes were changed"
+            ;;
+        extra-entrypoint)
+            assert_symlink \
+                "$FIXTURE_HOME/.local/bin/unexpected-devflow-command" \
+                "$tool_environment/bin/unexpected-devflow-command"
+            cmp -s \
+                "$FIXTURE_GENERIC_TEMPLATE" \
+                "$tool_environment/bin/unexpected-devflow-command" ||
+                fail "ambiguous extra entrypoint bytes were changed"
+            ;;
+    esac
+}
+
 test_macos_fresh_and_second_run() {
     new_fixture macos Darwin
     printf 'original zsh config\n' >"$FIXTURE_HOME/.zshrc"
@@ -662,6 +1009,9 @@ test_macos_fresh_and_second_run() {
     run_installer
 
     assert_common_links
+    assert_devflow_installed
+    assert_not_exists "$FIXTURE_HOME/.codex"
+    assert_not_exists "$FIXTURE_HOME/.claude"
     assert_symlink "$FIXTURE_HOME/.config/ghostty" "$REPO_ROOT/ghostty"
     assert_eq "1" "$(count_zsh_backups)" "the original zsh config should be backed up exactly once"
     for ZSH_BACKUP in "$FIXTURE_HOME"/.zshrc.bak.*; do
@@ -673,6 +1023,7 @@ test_macos_fresh_and_second_run() {
     assert_log_count 1 "brew cask install ghostty" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
     assert_log_count 0 "apt-get update" "$FIXTURE_LOG"
 
     run_installer
@@ -682,9 +1033,11 @@ test_macos_fresh_and_second_run() {
     assert_log_count 1 "brew cask install ghostty" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
     assert_log_prefix_count 0 "apt-get " "$FIXTURE_LOG"
     assert_eq "1" "$(count_zsh_backups)" "a second run should not create another zsh backup"
     assert_common_links
+    assert_devflow_installed
     pass "fresh macOS provisioning, non-destructive linking, and second-run no-op"
 }
 
@@ -810,6 +1163,24 @@ test_incompatible_git_tool_versions_are_rejected_before_linking() {
     pass "Git tools below the configured integration floors are rejected before linking"
 }
 
+test_incompatible_neovim_versions_are_rejected_before_linking() {
+    local found fixture_name
+
+    for found in 'NVIM v0.12.4' 'NVIM v0.12.6' 'NVIM v0.12.5-dev'; do
+        fixture_name="incompatible-neovim-${found#NVIM v}"
+        new_fixture "$fixture_name" Darwin
+        printf '%s\n' "$found" >"$FIXTURE_STATE/nvim-version"
+
+        run_installer failure
+
+        grep -Fq "stable Neovim 0.12.5 is required (found '$found')" "$FIXTURE_OUTPUT" ||
+            fail "unsupported Neovim version failure was not actionable: $found"
+        assert_not_exists "$FIXTURE_HOME/.config"
+    done
+
+    pass "Neovim versions outside the exact stable pin are rejected before linking"
+}
+
 test_user_mise_config_does_not_override_bootstrap_manifest() {
     new_fixture mise-user-override Darwin
     mkdir -p "$FIXTURE_HOME/.config/mise"
@@ -895,6 +1266,7 @@ test_skip_mise_runtimes_completes_yum_setup() {
     run_installer success --skip-mise-runtimes
 
     assert_non_mise_links
+    assert_devflow_not_installed
     assert_not_exists "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml"
     grep -Fxq 'user mise config' "$FIXTURE_HOME/.config/mise/config.toml" ||
         fail "skip mode changed the user's main Mise config"
@@ -902,6 +1274,7 @@ test_skip_mise_runtimes_completes_yum_setup() {
     assert_log_count 0 "mise dry-run" "$FIXTURE_LOG"
     assert_log_count 0 "mise install" "$FIXTURE_LOG"
     assert_log_count 0 "mise activate" "$FIXTURE_LOG"
+    assert_log_prefix_count 0 "uv tool install|" "$FIXTURE_LOG"
     grep -Fq 'Mise runtime installation and validation skipped by request.' "$FIXTURE_OUTPUT" ||
         fail "skip mode did not report its degraded runtime state"
     grep -Fq 'Dotfiles installation complete with Mise runtime provisioning skipped.' "$FIXTURE_OUTPUT" ||
@@ -910,11 +1283,13 @@ test_skip_mise_runtimes_completes_yum_setup() {
     run_installer success --skip-mise-runtimes
 
     assert_non_mise_links
+    assert_devflow_not_installed
     assert_not_exists "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml"
     assert_linux_native_install_once yum
     assert_log_count 0 "mise dry-run" "$FIXTURE_LOG"
     assert_log_count 0 "mise install" "$FIXTURE_LOG"
     assert_log_count 0 "mise activate" "$FIXTURE_LOG"
+    assert_log_prefix_count 0 "uv tool install|" "$FIXTURE_LOG"
     pass "yum setup can skip Mise runtimes and remains idempotent"
 }
 
@@ -925,8 +1300,519 @@ test_skip_mise_runtimes_retains_existing_manifest() {
     run_installer success --skip-mise-runtimes
 
     assert_common_links
+    assert_devflow_installed
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
     pass "skip mode retains an existing managed Mise fragment"
+}
+
+test_skip_mise_runtimes_preserves_foreign_devflow_state() {
+    local executable marker receipt
+
+    new_fixture skip-mise-foreign-devflow Darwin
+    marker="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow/marker"
+    receipt="$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+    mkdir -p \
+        "$FIXTURE_HOME/.local/bin" \
+        "$(dirname "$marker")"
+    printf 'foreign private environment\nwith exact bytes\n' >"$marker"
+    printf 'not a dotfiles receipt\n' >"$receipt"
+    for executable in devflow devflow-reference-transaction devflow-pre-push; do
+        printf 'foreign %s\nwith exact bytes\n' "$executable" \
+            >"$FIXTURE_HOME/.local/bin/$executable"
+    done
+
+    run_installer success --skip-mise-runtimes
+
+    assert_non_mise_links
+    grep -Fxq 'foreign private environment' "$marker" ||
+        fail "skip mode changed a foreign Workflow Engine environment"
+    grep -Fxq 'with exact bytes' "$marker" ||
+        fail "skip mode changed bytes in a foreign Workflow Engine environment"
+    grep -Fxq 'not a dotfiles receipt' "$receipt" ||
+        fail "skip mode changed a foreign Workflow Engine receipt"
+    for executable in devflow devflow-reference-transaction devflow-pre-push; do
+        grep -Fxq "foreign $executable" \
+            "$FIXTURE_HOME/.local/bin/$executable" ||
+            fail "skip mode changed a foreign Workflow Engine executable"
+        grep -Fxq 'with exact bytes' "$FIXTURE_HOME/.local/bin/$executable" ||
+            fail "skip mode changed bytes in a foreign Workflow Engine executable"
+    done
+    assert_log_prefix_count 0 "uv tool install|" "$FIXTURE_LOG"
+    assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
+    pass "skip mode preserves foreign Workflow Engine state without validation"
+}
+
+test_devflow_install_failure_precedes_configuration_links() {
+    new_fixture devflow-install-failure Darwin
+    : >"$FIXTURE_STATE/uv-install-failure"
+
+    run_installer failure
+
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    assert_devflow_receipt_status 'dotfiles-devflow-pending-v1'
+    assert_not_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    grep -Fq 'Installing Workflow Engine' "$FIXTURE_OUTPUT" ||
+        fail "Workflow Engine install failure did not identify its phase"
+
+    mv "$FIXTURE_STATE/uv-install-failure" \
+        "$FIXTURE_STATE/uv-install-failure.consumed"
+    run_installer
+
+    assert_devflow_installed
+    assert_common_links
+    assert_log_prefix_count 2 "uv tool install|" "$FIXTURE_LOG"
+    pass "empty pending Workflow Engine installation retries before linking"
+}
+
+test_devflow_resumes_after_uv_interruption() {
+    new_fixture devflow-uv-interruption Darwin
+    : >"$FIXTURE_STATE/uv-interrupt-after-install"
+
+    run_installer failure
+
+    assert_devflow_receipt_status 'dotfiles-devflow-pending-v1'
+    assert_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+
+    run_installer
+
+    assert_devflow_installed
+    assert_common_links
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    pass "complete pending Workflow Engine install resumes without reinstalling"
+}
+
+test_devflow_resumes_after_finalization_interruption() {
+    new_fixture devflow-finalization-interruption Darwin
+    printf 'interrupt\n' \
+        >"$FIXTURE_STATE/receipt-finalize-interruption"
+
+    run_installer failure
+
+    assert_devflow_receipt_status 'dotfiles-devflow-pending-v1'
+    assert_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+
+    run_installer
+
+    assert_devflow_installed
+    assert_common_links
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    pass "post-validation interruption finalizes without reinstalling"
+}
+
+test_devflow_preflight_preserves_foreign_state() {
+    new_fixture foreign-devflow-executable Darwin
+    mkdir -p "$FIXTURE_HOME/.local/bin"
+    printf 'user-owned devflow\n' >"$FIXTURE_HOME/.local/bin/devflow"
+
+    run_installer failure
+
+    grep -Fxq 'user-owned devflow' "$FIXTURE_HOME/.local/bin/devflow" ||
+        fail "installer changed a foreign devflow executable"
+    grep -Fq 'no dotfiles ownership receipt' "$FIXTURE_OUTPUT" ||
+        fail "foreign devflow executable failure was not actionable"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+
+    new_fixture foreign-devflow-environment Darwin
+    mkdir -p \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    printf 'user-owned environment\n' \
+        >"$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow/marker"
+
+    run_installer failure
+
+    grep -Fxq 'user-owned environment' \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow/marker" ||
+        fail "installer changed a foreign private tool environment"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+
+    new_fixture foreign-devflow-receipt Darwin
+    mkdir -p "$FIXTURE_HOME/.local/share/dotfiles"
+    printf '%s\n%s\n%s\n' \
+        'dotfiles-devflow-v1' \
+        "$FIXTURE_ROOT/another-repository/devflow" \
+        "$FIXTURE_FAKE_BIN/python" \
+        >"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+
+    run_installer failure
+
+    grep -Fq 'belongs to a different source' "$FIXTURE_OUTPUT" ||
+        fail "foreign Workflow Engine receipt failure was not actionable"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+
+    new_fixture partial-pending-devflow Darwin
+    mkdir -p \
+        "$FIXTURE_HOME/.local/bin" \
+        "$FIXTURE_HOME/.local/share/dotfiles"
+    printf '%s\n%s\n%s\n' \
+        'dotfiles-devflow-pending-v1' \
+        "$REPO_ROOT/devflow" \
+        "$FIXTURE_FAKE_BIN/python" \
+        >"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+    printf 'partial pending executable\n' \
+        >"$FIXTURE_HOME/.local/bin/devflow"
+
+    run_installer failure
+
+    grep -Fxq 'partial pending executable' \
+        "$FIXTURE_HOME/.local/bin/devflow" ||
+        fail "installer changed a partial pending Workflow Engine install"
+    assert_devflow_receipt_status 'dotfiles-devflow-pending-v1'
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_log_prefix_count 0 "uv tool install|" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "Workflow Engine preflight preserves foreign executables and environments"
+}
+
+test_devflow_receipt_requires_the_exact_python() {
+    new_fixture devflow-python-receipt Darwin
+    run_installer
+    printf '%s\n%s\n%s\n' \
+        'dotfiles-devflow-v1' \
+        "$REPO_ROOT/devflow" \
+        "$FIXTURE_ROOT/another-python" \
+        >"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+
+    run_installer failure
+
+    grep -Fq 'environment does not match its ownership receipt' \
+        "$FIXTURE_OUTPUT" ||
+        fail "Workflow Engine Python receipt mismatch was not actionable"
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    assert_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    pass "Workflow Engine idempotence requires the exact receipted Python"
+}
+
+test_devflow_noop_rejects_a_replaced_environment() {
+    local tool_environment
+
+    new_fixture devflow-replaced-environment Darwin
+    run_installer
+    tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    mv "$tool_environment/bin/python" "$FIXTURE_STATE/owned-python-link"
+    cp "$FIXTURE_GENERIC_TEMPLATE" "$FIXTURE_STATE/replacement-python"
+    chmod +x "$FIXTURE_STATE/replacement-python"
+    ln -s "$FIXTURE_STATE/replacement-python" "$tool_environment/bin/python"
+    printf '%s\n' "$FIXTURE_ROOT/replacement-source" \
+        >"$tool_environment/lib/python3.14/site-packages/dotfiles_devflow.pth"
+
+    run_installer failure
+
+    grep -Fq 'environment does not match its ownership receipt' \
+        "$FIXTURE_OUTPUT" ||
+        fail "replaced Workflow Engine environment failure was not actionable"
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    assert_exists "$tool_environment"
+    pass "Workflow Engine no-op rejects a replaced environment"
+}
+
+test_devflow_accepts_uvs_unterminated_editable_source_marker() {
+    local expected_source_marker source_marker tool_environment
+
+    new_fixture devflow-unterminated-source-marker Darwin
+    run_installer
+    tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    source_marker="$tool_environment/lib/python3.14/site-packages/dotfiles_devflow.pth"
+    expected_source_marker="$FIXTURE_STATE/expected-dotfiles-devflow.pth"
+    printf '%s' "$REPO_ROOT/devflow/src" >"$expected_source_marker"
+    assert_file_bytes_equal \
+        "$expected_source_marker" "$source_marker" \
+        "fake uv did not mirror its unterminated editable source marker"
+
+    run_installer
+
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    run_uninstaller 0
+    assert_devflow_not_installed
+    assert_log_prefix_count 1 "uv tool uninstall|" "$FIXTURE_LOG"
+    pass "uv's unterminated editable source marker remains owned"
+}
+
+test_devflow_rejects_an_ambiguous_editable_source_marker() {
+    local snapshot source_marker tool_environment
+
+    new_fixture devflow-ambiguous-source-marker Darwin
+    run_installer
+    tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    source_marker="$tool_environment/lib/python3.14/site-packages/dotfiles_devflow.pth"
+    snapshot="$FIXTURE_STATE/ambiguous-dotfiles-devflow.pth"
+    printf '%s\n%s' \
+        "$REPO_ROOT/devflow/src" \
+        "$FIXTURE_ROOT/injected-source" \
+        >"$source_marker"
+    cp "$source_marker" "$snapshot"
+
+    run_installer failure
+
+    grep -Fq 'environment does not match its ownership receipt' \
+        "$FIXTURE_OUTPUT" ||
+        fail "ambiguous editable source marker failure was not actionable"
+    assert_file_bytes_equal \
+        "$snapshot" "$source_marker" \
+        "installer changed an ambiguous editable source marker"
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+
+    run_uninstaller 0
+
+    grep -Fq 'ownership unclear: dotfiles-devflow (preserving)' \
+        "$FIXTURE_ROOT/uninstall.out" ||
+        fail "uninstall did not report an ambiguous editable source marker"
+    assert_file_bytes_equal \
+        "$snapshot" "$source_marker" \
+        "uninstaller changed an ambiguous editable source marker"
+    assert_exists "$tool_environment"
+    assert_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+    assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
+    pass "ambiguous editable source markers remain preserved"
+}
+
+test_devflow_uv_receipt_inventory_is_exact() {
+    local executable inventory snapshot tool_environment uv_receipt
+
+    for inventory in \
+        extra-requirement \
+        extra-entrypoint \
+        duplicate-requirement \
+        duplicate-entrypoint \
+        wrong-python \
+        wrong-source
+    do
+        new_fixture "devflow-uv-receipt-$inventory" Darwin
+        run_installer
+        tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+        uv_receipt="$tool_environment/uv-receipt.toml"
+        snapshot="$FIXTURE_STATE/injected-uv-receipt.toml"
+        write_devflow_uv_receipt_fixture "$uv_receipt" "$inventory"
+        add_injected_devflow_inventory_artifact "$inventory" "$tool_environment"
+        cp "$uv_receipt" "$snapshot"
+
+        run_installer failure
+
+        grep -Fq 'environment does not match its ownership receipt' \
+            "$FIXTURE_OUTPUT" ||
+            fail "$inventory uv receipt failure was not actionable"
+        assert_file_bytes_equal \
+            "$snapshot" "$uv_receipt" \
+            "installer changed an ambiguous $inventory uv receipt"
+        assert_exists "$tool_environment"
+        assert_exists \
+            "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+        assert_injected_devflow_inventory_artifact \
+            "$inventory" "$tool_environment"
+        for executable in \
+            devflow devflow-reference-transaction devflow-pre-push
+        do
+            assert_symlink \
+                "$FIXTURE_HOME/.local/bin/$executable" \
+                "$tool_environment/bin/$executable"
+        done
+        assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+        assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
+
+        run_uninstaller 0
+
+        grep -Fq 'ownership unclear: dotfiles-devflow (preserving)' \
+            "$FIXTURE_ROOT/uninstall.out" ||
+            fail "uninstall did not report ambiguous $inventory inventory"
+        assert_file_bytes_equal \
+            "$snapshot" "$uv_receipt" \
+            "uninstaller changed an ambiguous $inventory uv receipt"
+        assert_exists "$tool_environment"
+        assert_exists \
+            "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+        assert_injected_devflow_inventory_artifact \
+            "$inventory" "$tool_environment"
+        for executable in \
+            devflow devflow-reference-transaction devflow-pre-push
+        do
+            assert_symlink \
+                "$FIXTURE_HOME/.local/bin/$executable" \
+                "$tool_environment/bin/$executable"
+        done
+        assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+        assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
+    done
+    pass "exact uv inventory gates installer no-ops and owned uninstall"
+}
+
+test_devflow_uv_receipt_accepts_equivalent_toml() {
+    local tool_environment uv_receipt
+
+    new_fixture devflow-uv-receipt-reformatted Darwin
+    run_installer
+    tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    uv_receipt="$tool_environment/uv-receipt.toml"
+    write_devflow_uv_receipt_fixture "$uv_receipt" reformatted
+
+    run_installer
+
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    assert_exists "$tool_environment"
+
+    run_uninstaller 0
+
+    assert_devflow_not_installed
+    assert_log_prefix_count 1 "uv tool uninstall|" "$FIXTURE_LOG"
+    pass "equivalent uv receipt TOML remains owned across install and uninstall"
+}
+
+test_devflow_uv_invocations_are_hermetic() {
+    local hostile_config
+
+    new_fixture devflow-uv-isolation Darwin
+    hostile_config="$FIXTURE_HOME/.config/uv/uv.toml"
+    mkdir -p "$(dirname "$hostile_config")"
+    printf '%s\n' \
+        'tool-dir = "/tmp/hostile-uv-tools"' \
+        'tool-bin-dir = "/tmp/hostile-uv-bin"' \
+        >"$hostile_config"
+    printf 'test CA\n' >"$FIXTURE_STATE/test-ca.pem"
+    : >"$FIXTURE_STATE/expect-uv-isolation"
+
+    (
+        export UV_CONFIG_FILE="$hostile_config"
+        export UV_TOOL_DIR="$FIXTURE_ROOT/hostile-tools"
+        export UV_TOOL_BIN_DIR="$FIXTURE_ROOT/hostile-bin"
+        export UV_PROJECT_ENVIRONMENT="$FIXTURE_ROOT/hostile-project"
+        export PYTHONHOME="$FIXTURE_ROOT/hostile-python-home"
+        export PYTHONPATH="$FIXTURE_ROOT/hostile-python-path"
+        export VIRTUAL_ENV="$FIXTURE_ROOT/hostile-venv"
+        export CONDA_PREFIX="$FIXTURE_ROOT/hostile-conda"
+        export PIP_INDEX_URL="https://packages.example/simple"
+        export HTTP_PROXY="http://proxy.example:8080"
+        export HTTPS_PROXY="https://proxy.example:8443"
+        export NO_PROXY="localhost,127.0.0.1"
+        export SSL_CERT_FILE="$FIXTURE_STATE/test-ca.pem"
+        run_installer
+    )
+
+    assert_devflow_installed
+    assert_not_exists "$FIXTURE_ROOT/hostile-tools"
+    assert_not_exists "$FIXTURE_ROOT/hostile-bin"
+
+    (
+        export UV_CONFIG_FILE="$hostile_config"
+        export UV_TOOL_DIR="$FIXTURE_ROOT/hostile-tools"
+        export UV_TOOL_BIN_DIR="$FIXTURE_ROOT/hostile-bin"
+        export UV_PROJECT_ENVIRONMENT="$FIXTURE_ROOT/hostile-project"
+        export PYTHONHOME="$FIXTURE_ROOT/hostile-python-home"
+        export PYTHONPATH="$FIXTURE_ROOT/hostile-python-path"
+        export VIRTUAL_ENV="$FIXTURE_ROOT/hostile-venv"
+        export CONDA_PREFIX="$FIXTURE_ROOT/hostile-conda"
+        export PIP_INDEX_URL="https://packages.example/simple"
+        export HTTP_PROXY="http://proxy.example:8080"
+        export HTTPS_PROXY="https://proxy.example:8443"
+        export NO_PROXY="localhost,127.0.0.1"
+        export SSL_CERT_FILE="$FIXTURE_STATE/test-ca.pem"
+        run_uninstaller 0
+    )
+
+    assert_devflow_not_installed
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    assert_log_prefix_count 1 "uv tool uninstall|" "$FIXTURE_LOG"
+    pass "uv tool changes ignore inherited resolver state but preserve networking"
+}
+
+test_generic_install_preserves_harness_configuration() {
+    new_fixture preserve-harness-configuration Darwin
+    mkdir -p "$FIXTURE_HOME/.codex" "$FIXTURE_HOME/.claude"
+    printf 'user Codex guidance\n' >"$FIXTURE_HOME/.codex/AGENTS.md"
+    printf 'user Claude guidance\n' >"$FIXTURE_HOME/.claude/CLAUDE.md"
+
+    run_installer
+
+    grep -Fxq 'user Codex guidance' "$FIXTURE_HOME/.codex/AGENTS.md" ||
+        fail "generic install changed Codex harness guidance"
+    grep -Fxq 'user Claude guidance' "$FIXTURE_HOME/.claude/CLAUDE.md" ||
+        fail "generic install changed Claude harness guidance"
+
+    run_installer success --skip-mise-runtimes
+
+    grep -Fxq 'user Codex guidance' "$FIXTURE_HOME/.codex/AGENTS.md" ||
+        fail "skip mode changed Codex harness guidance"
+    grep -Fxq 'user Claude guidance' "$FIXTURE_HOME/.claude/CLAUDE.md" ||
+        fail "skip mode changed Claude harness guidance"
+    pass "generic installs leave harness-global configuration explicit"
+}
+
+test_uninstall_removes_only_owned_devflow() {
+    local executable tool_environment
+
+    new_fixture uninstall-owned-devflow Darwin
+    run_installer
+    run_uninstaller 0
+
+    assert_devflow_not_installed
+    assert_log_prefix_count 1 "uv tool uninstall|" "$FIXTURE_LOG"
+    assert_exists "$FIXTURE_FAKE_BIN/uv"
+
+    new_fixture uninstall-foreign-devflow Darwin
+    mkdir -p \
+        "$FIXTURE_HOME/.local/bin" \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    printf 'user-owned environment\n' \
+        >"$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow/marker"
+    for executable in devflow devflow-reference-transaction devflow-pre-push; do
+        printf 'user-owned executable\n' >"$FIXTURE_HOME/.local/bin/$executable"
+    done
+
+    run_uninstaller 0
+
+    grep -Fxq 'user-owned environment' \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow/marker" ||
+        fail "uninstaller changed an unreceipted private tool environment"
+    for executable in devflow devflow-reference-transaction devflow-pre-push; do
+        grep -Fxq 'user-owned executable' "$FIXTURE_HOME/.local/bin/$executable" ||
+            fail "uninstaller changed a foreign Workflow Engine executable"
+    done
+    assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
+
+    new_fixture uninstall-ambiguous-devflow Darwin
+    run_installer
+    mv "$FIXTURE_HOME/.local/bin/devflow" \
+        "$FIXTURE_STATE/owned-devflow-link"
+    printf 'replacement executable\n' >"$FIXTURE_HOME/.local/bin/devflow"
+
+    run_uninstaller 0
+
+    grep -Fxq 'replacement executable' "$FIXTURE_HOME/.local/bin/devflow" ||
+        fail "uninstaller changed a replacement Workflow Engine executable"
+    assert_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    assert_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+    assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
+
+    new_fixture uninstall-replaced-devflow-environment Darwin
+    run_installer
+    tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
+    mv "$tool_environment/bin/python" "$FIXTURE_STATE/owned-python-link"
+    cp "$FIXTURE_GENERIC_TEMPLATE" "$FIXTURE_STATE/replacement-python"
+    chmod +x "$FIXTURE_STATE/replacement-python"
+    ln -s "$FIXTURE_STATE/replacement-python" "$tool_environment/bin/python"
+    printf '%s\n' "$FIXTURE_ROOT/replacement-source" \
+        >"$tool_environment/lib/python3.14/site-packages/dotfiles_devflow.pth"
+
+    run_uninstaller 0
+
+    assert_exists "$tool_environment"
+    assert_exists \
+        "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
+    assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
+    pass "uninstall removes only a receipted Workflow Engine installation"
 }
 
 test_uninstall_cli_is_safe() {
@@ -1181,7 +2067,7 @@ test_link_preflight_prevents_partial_configuration() {
     cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
     cp "$REPO_ROOT/templates/local.fish" "$REPO_ROOT/templates/local.zsh" \
         "$fixture_repo/templates/"
-    for source_name in fish ghostty herdr hunk lazygit nvim tmux zsh; do
+    for source_name in devflow fish ghostty herdr hunk lazygit nvim tmux zsh; do
         ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
     done
     FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
@@ -1218,6 +2104,33 @@ test_link_preflight_prevents_partial_configuration() {
     grep -Fxq 'original zsh config' "$FIXTURE_HOME/.zshrc" ||
         fail "blocking parent preflight changed zsh config"
     assert_not_exists "$FIXTURE_HOME/.config/fish"
+
+    new_fixture missing-devflow-package Darwin
+    fixture_repo="$FIXTURE_ROOT/repo"
+    mkdir -p \
+        "$fixture_repo/devflow" \
+        "$fixture_repo/mise/conf.d" \
+        "$fixture_repo/templates"
+    cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
+    cp "$REPO_ROOT/devflow/pyproject.toml" "$fixture_repo/devflow/"
+    ln -s "$REPO_ROOT/devflow/src" "$fixture_repo/devflow/src"
+    cp "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" \
+        "$fixture_repo/mise/conf.d/"
+    cp "$REPO_ROOT/templates/local.fish" "$REPO_ROOT/templates/local.zsh" \
+        "$fixture_repo/templates/"
+    for source_name in fish ghostty herdr hunk lazygit nvim tmux zsh; do
+        ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
+    done
+    FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
+
+    run_installer failure --skip-mise-runtimes
+
+    grep -Fq \
+        "missing or invalid tracked configuration file: $FIXTURE_INSTALL_REPO_ROOT/devflow/uv.lock" \
+        "$FIXTURE_OUTPUT" ||
+        fail "installer did not preflight the Workflow Engine package sources"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
     pass "link preflight fails before changing home configuration"
 }
 
@@ -1254,7 +2167,7 @@ test_dependency_manifests_match_the_install_contract() {
 
     mise_lines=(
         '"core:node" = "24.18.0"'
-        '"core:python" = "3.14.6"'
+        '"core:python" = "3.14.7"'
         '"core:rust" = { version = "1.97.1", profile = "minimal", components = ["clippy", "rustfmt", "rust-src"] }'
         '"core:java" = "corretto-21.0.12.8.1"'
     )
@@ -1276,6 +2189,19 @@ test_mise_runtime_version_mismatch_is_rejected_before_linking
 test_install_cli_is_safe
 test_skip_mise_runtimes_completes_yum_setup
 test_skip_mise_runtimes_retains_existing_manifest
+test_skip_mise_runtimes_preserves_foreign_devflow_state
+test_devflow_install_failure_precedes_configuration_links
+test_devflow_resumes_after_uv_interruption
+test_devflow_resumes_after_finalization_interruption
+test_devflow_preflight_preserves_foreign_state
+test_devflow_receipt_requires_the_exact_python
+test_devflow_noop_rejects_a_replaced_environment
+test_devflow_accepts_uvs_unterminated_editable_source_marker
+test_devflow_rejects_an_ambiguous_editable_source_marker
+test_devflow_uv_receipt_accepts_equivalent_toml
+test_devflow_uv_invocations_are_hermetic
+test_devflow_uv_receipt_inventory_is_exact
+test_generic_install_preserves_harness_configuration
 test_macos_fresh_and_second_run
 test_linux_manager_fresh_and_second_run apt-get
 test_linux_manager_fresh_and_second_run dnf
@@ -1285,9 +2211,11 @@ test_unsupported_linux_package_manager
 test_linux_handoff_is_validated_before_linking
 test_non_corretto_jdk_is_rejected_before_linking
 test_incompatible_git_tool_versions_are_rejected_before_linking
+test_incompatible_neovim_versions_are_rejected_before_linking
 test_uninstall_cli_is_safe
 test_install_and_uninstall_reject_unsafe_homes
 test_uninstall_removes_only_owned_links
+test_uninstall_removes_only_owned_devflow
 test_uninstall_restores_latest_backups
 test_uninstall_blocks_unsafe_or_ambiguous_restores
 test_equivalent_relative_links_are_idempotent

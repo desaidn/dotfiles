@@ -1,0 +1,3 @@
+# Restrict branch roles by default
+
+Agent development uses a deny-by-default branch flow: `wip/*` history is append-only, `review/*` is read-only except when the Review Flow creates or advances it to the selected Change Set revision, and `main`, `mainline`, or `master` advances only through one Squash Landing of the latest reviewed and explicitly approved complete feature from WIP. Normal Main Merges into WIP remain part of the flow. Any other branch action requires explicit user approval. This favors a small, predictable safety contract over encoding special behavior for every possible scenario.

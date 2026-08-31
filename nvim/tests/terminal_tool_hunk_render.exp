@@ -10,15 +10,111 @@ if {[info exists env(TMPDIR)] && [file isdirectory $env(TMPDIR)]} {
 set host_socket [file join $temp_root "codex-hunk-render-host-$suffix.sock"]
 set direct_socket [file join $temp_root "codex-hunk-render-direct-$suffix.sock"]
 set nvim_socket [file join $temp_root "codex-hunk-render-nvim-$suffix.sock"]
+set startup_host_socket [file join $temp_root "codex-hunk-render-startup-host-$suffix.sock"]
+set manual_host_socket [file join $temp_root "codex-hunk-render-manual-host-$suffix.sock"]
+set startup_nvim_socket [file join $temp_root "codex-hunk-render-startup-nvim-$suffix.sock"]
+set manual_nvim_socket [file join $temp_root "codex-hunk-render-manual-nvim-$suffix.sock"]
 set fixture ""
 set second_fixture ""
+set review_fixture ""
+set startup_fixture ""
+set manual_fixture ""
 set host_spawn_id ""
 set host_slave ""
 set direct_hunk_pid ""
 set nvim_hunk_pid ""
+set startup_hunk_pid ""
+set manual_hunk_pid ""
 
 proc capture {socket target} {
   return [exec tmux -S $socket capture-pane -p -t $target]
+}
+
+proc capture_ansi {socket target} {
+  return [exec tmux -S $socket capture-pane -p -e -t $target]
+}
+
+proc ansi_palette {screen} {
+  return [lsort -unique [regexp -all -inline \
+    {(?:38|48|58);(?:2;[0-9]+;[0-9]+;[0-9]+|5;[0-9]+)} $screen]]
+}
+
+proc strip_ansi {text} {
+  regsub -all {\x1b\[[0-9:;<=>?]*[ -/]*[@-~]} $text {} text
+  regsub -all {\x1b[()][0-9A-Za-z]} $text {} text
+  return $text
+}
+
+proc ansi_style_sequence {line} {
+  set styles {}
+  foreach sequence [regexp -all -inline {\x1b\[[0-9:;]*m} $line] {
+    lappend styles [string range $sequence 2 end-1]
+  }
+  return $styles
+}
+
+proc content_style_signatures {screen needles} {
+  set signatures {}
+  foreach needle $needles {
+    set matches {}
+    foreach line [split $screen "\n"] {
+      if {[string first $needle [strip_ansi $line]] >= 0} {
+        lappend matches [ansi_style_sequence $line]
+      }
+    }
+    if {[llength $matches] != 1} {
+      error "expected exactly one styled line containing '$needle', found [llength $matches]"
+    }
+    lappend signatures [list $needle [lindex $matches 0]]
+  }
+  return $signatures
+}
+
+proc render_signature {screen needles} {
+  set palette [ansi_palette $screen]
+  if {[llength $palette] == 0} { error "render has no extended ANSI colors" }
+  return [list $palette [content_style_signatures $screen $needles]]
+}
+
+proc wait_for_render_signature {socket target needles} {
+  global timeout
+  set previous {}
+  set stable 0
+  set attempts [expr {$timeout * 10}]
+  for {set attempt 0} {$attempt < $attempts} {incr attempt} {
+    if {![catch { render_signature [capture_ansi $socket $target] $needles } signature]} {
+      if {$signature eq $previous} {
+        incr stable
+        if {$stable == 3} { return $signature }
+      } else {
+        set previous $signature
+        set stable 0
+      }
+    }
+    after 100
+  }
+  error "timed out waiting for stable content-bound ANSI styles on $target"
+}
+
+proc printable_palette {palette} {
+  if {[llength $palette] == 0} { return "<empty>" }
+  return [join $palette {, }]
+}
+
+proc printable_content_styles {signatures} {
+  set rendered {}
+  foreach signature $signatures {
+    lassign $signature needle styles
+    lappend rendered "$needle => [join $styles {, }]"
+  }
+  return [join $rendered {; }]
+}
+
+proc palette_has_rgb {palette} {
+  foreach color $palette {
+    if {[regexp {^(?:38|48|58);2;} $color]} { return 1 }
+  }
+  return 0
 }
 
 proc wait_for_screen {socket target pattern} {
@@ -167,23 +263,29 @@ proc terminate_process {label pid} {
 }
 
 proc cleanup {sockets files fixtures} {
-  global nvim_socket direct_hunk_pid nvim_hunk_pid
+  global nvim_socket startup_nvim_socket manual_nvim_socket direct_hunk_pid nvim_hunk_pid startup_hunk_pid manual_hunk_pid
   set errors {}
 
-  if {[file exists $nvim_socket]} {
-    set nvim_hunk_pids [current_nvim_terminal_pids $nvim_socket]
-    if {$nvim_hunk_pid ne "" && [lsearch -exact $nvim_hunk_pids $nvim_hunk_pid] < 0} {
-      lappend nvim_hunk_pids $nvim_hunk_pid
+  foreach owned [list \
+      [list $nvim_socket $nvim_hunk_pid "Neovim-owned Hunk"] \
+      [list $startup_nvim_socket $startup_hunk_pid "startup Neovim-owned Hunk"] \
+      [list $manual_nvim_socket $manual_hunk_pid "manual Neovim-owned Hunk"]] {
+    lassign $owned socket remembered_pid label
+    if {[file exists $socket]} {
+      set hunk_pids [current_nvim_terminal_pids $socket]
+      if {$remembered_pid ne "" && [lsearch -exact $hunk_pids $remembered_pid] < 0} {
+        lappend hunk_pids $remembered_pid
+      }
+      catch { exec nvim --server $socket --remote-expr {execute('qa!')} }
+    } else {
+      set hunk_pids {}
+      if {$remembered_pid ne ""} { lappend hunk_pids $remembered_pid }
     }
-    catch { exec nvim --server $nvim_socket --remote-expr {execute('qa!')} }
-  } else {
-    set nvim_hunk_pids {}
-    if {$nvim_hunk_pid ne ""} { lappend nvim_hunk_pids $nvim_hunk_pid }
-  }
-  foreach pid $nvim_hunk_pids {
-    if {![wait_for_process_exit $pid]} {
-      lappend errors "Neovim exit left Hunk process $pid running"
-      set errors [concat $errors [terminate_process "Neovim-owned Hunk" $pid]]
+    foreach pid $hunk_pids {
+      if {![wait_for_process_exit $pid]} {
+        lappend errors "$label process $pid remained after Neovim exit"
+        set errors [concat $errors [terminate_process $label $pid]]
+      }
     }
   }
   set errors [concat $errors [terminate_process "direct Hunk" $direct_hunk_pid]]
@@ -202,8 +304,9 @@ proc cleanup {sockets files fixtures} {
 }
 
 proc run_test {} {
-  global repo_root suffix temp_root host_socket direct_socket nvim_socket fixture second_fixture host_spawn_id host_slave
-  global direct_hunk_pid nvim_hunk_pid
+  global repo_root suffix temp_root host_socket direct_socket nvim_socket startup_host_socket manual_host_socket
+  global startup_nvim_socket manual_nvim_socket fixture second_fixture review_fixture startup_fixture manual_fixture host_spawn_id host_slave
+  global direct_hunk_pid nvim_hunk_pid startup_hunk_pid manual_hunk_pid
 
   set fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-$suffix.XXXXXX"]]
   set sample [open "$fixture/sample.txt" w]
@@ -226,6 +329,59 @@ proc run_test {} {
   set sample [open "$second_fixture/second.txt" w]
   puts $sample "alpha\nBETA changed\ngamma\nDELTA changed\nepsilon"
   close $sample
+
+  set review_fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-review-$suffix.XXXXXX"]]
+  set palette_file [open "$review_fixture/palette.txt" w]
+  puts $palette_file "red\ngreen\nblue"
+  close $palette_file
+  exec git -C $review_fixture init -q
+  exec git -C $review_fixture add palette.txt
+  exec git -C $review_fixture -c user.name=Test -c user.email=test@example.com commit -qm base
+  set review_base [string trim [exec git -C $review_fixture rev-parse HEAD]]
+  set palette_file [open "$review_fixture/palette.txt" w]
+  puts $palette_file "red\nGREEN changed\nblue\npeach"
+  close $palette_file
+  exec git -C $review_fixture add palette.txt
+  exec git -C $review_fixture -c user.name=Test -c user.email=test@example.com commit -qm change
+  set review_head [string trim [exec git -C $review_fixture rev-parse HEAD]]
+
+  set startup_fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-startup-$suffix.XXXXXX"]]
+  set manual_fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-manual-$suffix.XXXXXX"]]
+  exec git clone -q $review_fixture $startup_fixture
+  exec git clone -q $review_fixture $manual_fixture
+
+  set render_init "$repo_root/nvim/tests/terminal_tool_hunk_render_init.lua"
+  exec tmux -S $startup_host_socket -f /dev/null new-session -d -x 80 -y 24 -s startup -c $startup_fixture \
+    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$startup_fixture HUNK_RENDER_SECOND_FIXTURE=$startup_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup DEVFLOW_REVIEW_BASE_OID=$review_base DEVFLOW_REVIEW_HEAD_OID=$review_head nvim --clean --listen $startup_nvim_socket -u $render_init +HunkReview"
+  exec tmux -S $manual_host_socket -f /dev/null new-session -d -x 80 -y 24 -s manual -c $manual_fixture \
+    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$manual_fixture HUNK_RENDER_SECOND_FIXTURE=$manual_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=manual DEVFLOW_REVIEW_BASE_OID=$review_base DEVFLOW_REVIEW_HEAD_OID=$review_head nvim --clean --listen $manual_nvim_socket -u $render_init"
+
+  set startup_hunk_pid [wait_for_nvim_terminal_pid $startup_nvim_socket]
+  set manual_hunk_pid [wait_for_nvim_terminal_pid $manual_nvim_socket]
+  wait_for_screen $startup_host_socket startup:0.0 {palette.txt}
+  wait_for_screen $manual_host_socket manual:0.0 {palette.txt}
+  set content_needles [list green {GREEN changed} peach]
+  set startup_signature [wait_for_render_signature $startup_host_socket startup:0.0 $content_needles]
+  set manual_signature [wait_for_render_signature $manual_host_socket manual:0.0 $content_needles]
+  set startup_palette [lindex $startup_signature 0]
+  set manual_palette [lindex $manual_signature 0]
+  set startup_content_styles [lindex $startup_signature 1]
+  set manual_content_styles [lindex $manual_signature 1]
+  set signatures_match [expr {$startup_signature eq $manual_signature}]
+
+  catch { exec nvim --server $startup_nvim_socket --remote-expr {execute('qa!')} }
+  catch { exec nvim --server $manual_nvim_socket --remote-expr {execute('qa!')} }
+  if {![wait_for_process_exit $startup_hunk_pid] || ![wait_for_process_exit $manual_hunk_pid]} {
+    error "FAIL color-comparison Hunk process survived Neovim exit"
+  }
+  set startup_hunk_pid ""
+  set manual_hunk_pid ""
+  if {![palette_has_rgb $manual_palette]} {
+    error "HARNESS ERROR: post-startup <leader>gd did not render any RGB ANSI colors\n  <leader>gd: [printable_palette $manual_palette]"
+  }
+  if {!$signatures_match} {
+    error "FAIL nvim +HunkReview and the post-startup <leader>gd action render different content-bound ANSI styles\n  +HunkReview palette: [printable_palette $startup_palette]\n  <leader>gd palette: [printable_palette $manual_palette]\n  +HunkReview content: [printable_content_styles $startup_content_styles]\n  <leader>gd content: [printable_content_styles $manual_content_styles]"
+  }
 
   set menu_pattern {File +View +Navigate +(Theme +)?Agent +Help}
   exec tmux -S $direct_socket -f /dev/null new-session -d -x 80 -y 21 -s direct -c $fixture \
@@ -321,7 +477,7 @@ proc run_test {} {
     wait_for_row $host_socket host:0.0 1 $menu_pattern
     wait_for_screen $host_socket host:0.0 {second.txt}
 
-    return "PASS two production Hunk Tool Tabs render cleanly, survive tab switches and a native 80x20 to 100x30 resize, isolate process exit, and leave C-b s plus C-b h with host tmux"
+    return "PASS nvim +HunkReview matches the post-startup <leader>gd ANSI palette; two production Hunk Tool Tabs render cleanly, survive tab switches and a native 80x20 to 100x30 resize, isolate process exit, and leave C-b s plus C-b h with host tmux"
   }
 
   if {$menu_present} {
@@ -339,7 +495,10 @@ proc run_test {} {
 }
 
 set status [catch { run_test } result]
-set cleanup_errors [cleanup [list $host_socket $direct_socket] [list $host_socket $direct_socket $nvim_socket] [list $fixture $second_fixture]]
+set cleanup_errors [cleanup \
+  [list $host_socket $direct_socket $startup_host_socket $manual_host_socket] \
+  [list $host_socket $direct_socket $nvim_socket $startup_host_socket $manual_host_socket $startup_nvim_socket $manual_nvim_socket] \
+  [list $fixture $second_fixture $review_fixture $startup_fixture $manual_fixture]]
 if {$host_spawn_id ne ""} {
   catch { close -i $host_spawn_id }
   catch { wait -i $host_spawn_id }

@@ -20,7 +20,12 @@ function M.for_buffer(bufnr, profile)
   local path = named_file(bufnr)
   if not path then return nil end
 
-  local root = profile.resolve and profile.resolve(path) or vim.fs.root(path, profile.markers)
+  local root
+  if profile.resolve then
+    root = profile.resolve(path)
+  else
+    root = vim.fs.root(path, profile.markers)
+  end
   if not root then return nil end
   root = vim.fs.normalize(root)
 

@@ -78,6 +78,14 @@ check('does not assign unnamed or special buffers to the current directory', fun
   assert(context.for_buffer(special, java_profile) == nil)
 end)
 
+check('honors a profile resolver that rejects the buffer', function()
+  local rejecting_profile = {
+    markers = java_profile.markers,
+    resolve = function() return nil end,
+  }
+  assert(context.for_buffer(alpha_buf, rejecting_profile) == nil, 'resolver rejection must not fall back to marker discovery')
+end)
+
 check('creates stable and collision-resistant workspace-data paths', function()
   local alpha_data = context.workspace_data('jdtls', alpha_root)
   local beta_data = context.workspace_data('jdtls', beta_root)

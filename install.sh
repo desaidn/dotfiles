@@ -68,6 +68,16 @@ HOME_DIRECTORY="$(cd -P -- "$HOME" 2>/dev/null && pwd -P)" ||
     die "HOME must not resolve to the filesystem root"
 (( EUID != 0 )) || die "do not run this installer as root; run it as the user whose dotfiles are being installed"
 LOCAL_DIR="$HOME/.local/share/dotfiles"
+DEVFLOW_SOURCE="$REPO_ROOT/devflow"
+DEVFLOW_DISTRIBUTION="dotfiles-devflow"
+DEVFLOW_TOOL_DIR="$LOCAL_DIR/uv-tools"
+DEVFLOW_TOOL_ENV="$DEVFLOW_TOOL_DIR/$DEVFLOW_DISTRIBUTION"
+DEVFLOW_BIN_DIR="$HOME/.local/bin"
+DEVFLOW_RECEIPT="$LOCAL_DIR/devflow-tool.receipt"
+DEVFLOW_INSTALL_STATE=""
+DEVFLOW_RECEIPT_STATUS=""
+DEVFLOW_RECEIPT_SOURCE=""
+DEVFLOW_RECEIPT_PYTHON=""
 
 ensure_sudo() {
     command -v sudo >/dev/null 2>&1 || die "sudo is required to install system prerequisites and Homebrew"
@@ -357,7 +367,7 @@ validate_brew_dependencies() {
 
     for command_name in \
         git fish zsh nvim herdr tmux lazygit hunk mise atuin gh rg \
-        tree-sitter ghcup
+        tree-sitter uv ghcup
     do
         command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
     done
@@ -397,8 +407,8 @@ validate_brew_dependencies() {
 
     output="$(nvim --version 2>/dev/null || true)"
     output="${output%%$'\n'*}"
-    if [[ "$output" != "NVIM v0.12.4" ]]; then
-        errors+=("stable Neovim 0.12.4 is required (found '${output:-unknown}')")
+    if [[ "$output" != "NVIM v0.12.5" ]]; then
+        errors+=("stable Neovim 0.12.5 is required (found '${output:-unknown}')")
     fi
 
     if (( ${#errors[@]} > 0 )); then
@@ -515,6 +525,303 @@ symlink_points_to() {
     [[ -L "$1" && "$1" -ef "$2" ]]
 }
 
+load_devflow_receipt() {
+    local line
+    local lines=()
+
+    [[ -f "$DEVFLOW_RECEIPT" && ! -L "$DEVFLOW_RECEIPT" ]] || return 1
+    while IFS= read -r line; do
+        lines+=("$line")
+    done <"$DEVFLOW_RECEIPT"
+    [[ ${#lines[@]} == 3 ]] || return 1
+    case "${lines[0]}" in
+        dotfiles-devflow-v1)
+            DEVFLOW_RECEIPT_STATUS="final"
+            ;;
+        dotfiles-devflow-pending-v1)
+            DEVFLOW_RECEIPT_STATUS="pending"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    [[ -n "${lines[1]}" && -n "${lines[2]}" ]] || return 1
+
+    DEVFLOW_RECEIPT_SOURCE="${lines[1]}"
+    DEVFLOW_RECEIPT_PYTHON="${lines[2]}"
+}
+
+clear_devflow_resolver_environment() {
+    local variable
+
+    while IFS= read -r variable; do
+        case "$variable" in
+            UV_*|PYTHON*|VIRTUAL_ENV*|CONDA_*|PIP_*)
+                unset "$variable"
+                ;;
+        esac
+    done < <(compgen -e)
+}
+
+devflow_uv_receipt_matches() {
+    local expected_python="$1" expected_source="$2"
+
+    [[ -f "$DEVFLOW_TOOL_ENV/uv-receipt.toml" &&
+        ! -L "$DEVFLOW_TOOL_ENV/uv-receipt.toml" ]] || return 1
+    (
+        clear_devflow_resolver_environment
+        "$expected_python" - \
+            "$DEVFLOW_TOOL_ENV/uv-receipt.toml" \
+            "$expected_python" \
+            "$expected_source" \
+            "$DEVFLOW_BIN_DIR" \
+            "$DEVFLOW_DISTRIBUTION" <<'PYTHON'
+from __future__ import annotations
+
+import sys
+import tomllib
+from collections.abc import Mapping, Sequence
+
+
+def records_match(
+    value: object,
+    *,
+    keys: tuple[str, ...],
+    expected: frozenset[tuple[str, ...]],
+) -> bool:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return False
+    records: list[tuple[str, ...]] = []
+    for item in value:
+        if not isinstance(item, Mapping) or set(item) != set(keys):
+            return False
+        record = tuple(item[key] for key in keys)
+        if not all(isinstance(field, str) for field in record):
+            return False
+        records.append(record)
+    return len(records) == len(expected) and frozenset(records) == expected
+
+
+receipt_path, expected_python, expected_source, bin_dir, distribution = sys.argv[1:]
+try:
+    with open(receipt_path, "rb") as receipt_file:
+        receipt = tomllib.load(receipt_file)
+except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+    raise SystemExit(1) from None
+
+if set(receipt) != {"tool"} or not isinstance(receipt["tool"], Mapping):
+    raise SystemExit(1)
+tool = receipt["tool"]
+if set(tool) != {"requirements", "python", "entrypoints"}:
+    raise SystemExit(1)
+if tool["python"] != expected_python:
+    raise SystemExit(1)
+if not records_match(
+    tool["requirements"],
+    keys=("name", "editable"),
+    expected=frozenset({(distribution, expected_source)}),
+):
+    raise SystemExit(1)
+entrypoint_names = (
+    "devflow",
+    "devflow-pre-push",
+    "devflow-reference-transaction",
+)
+expected_entrypoints = frozenset(
+    (name, f"{bin_dir}/{name}", distribution) for name in entrypoint_names
+)
+if not records_match(
+    tool["entrypoints"],
+    keys=("name", "install-path", "from"),
+    expected=expected_entrypoints,
+):
+    raise SystemExit(1)
+PYTHON
+    )
+}
+
+devflow_environment_matches() {
+    local expected_python="$1" expected_source="$2"
+    local candidate line
+    local source_markers=() source_lines=()
+
+    devflow_uv_receipt_matches "$expected_python" "$expected_source" ||
+        return 1
+    symlink_points_to "$DEVFLOW_TOOL_ENV/bin/python" "$expected_python" ||
+        return 1
+
+    for candidate in \
+        "$DEVFLOW_TOOL_ENV"/lib/python*/site-packages/dotfiles_devflow.pth
+    do
+        [[ -f "$candidate" && ! -L "$candidate" ]] || continue
+        source_markers+=("$candidate")
+    done
+    [[ ${#source_markers[@]} == 1 ]] || return 1
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        source_lines+=("$line")
+    done <"${source_markers[0]}"
+    [[ ${#source_lines[@]} == 1 &&
+        "${source_lines[0]}" == "$expected_source/src" ]]
+}
+
+preflight_devflow_state() {
+    local executable executable_path
+    local existing_state=0
+
+    if [[ -e "$DEVFLOW_TOOL_ENV" || -L "$DEVFLOW_TOOL_ENV" ]]; then
+        existing_state=1
+    fi
+    for executable in \
+        devflow devflow-reference-transaction devflow-pre-push
+    do
+        executable_path="$DEVFLOW_BIN_DIR/$executable"
+        if [[ -e "$executable_path" || -L "$executable_path" ]]; then
+            existing_state=1
+        fi
+    done
+
+    if [[ ! -e "$DEVFLOW_RECEIPT" && ! -L "$DEVFLOW_RECEIPT" ]]; then
+        (( existing_state == 0 )) ||
+            die "existing Workflow Engine files have no dotfiles ownership receipt; preserve or remove them explicitly"
+        DEVFLOW_INSTALL_STATE="absent"
+        return 0
+    fi
+
+    load_devflow_receipt ||
+        die "the Workflow Engine ownership receipt is invalid or ambiguous: $DEVFLOW_RECEIPT"
+    [[ "$DEVFLOW_RECEIPT_SOURCE" == "$DEVFLOW_SOURCE" ]] ||
+        die "the Workflow Engine ownership receipt belongs to a different source: $DEVFLOW_RECEIPT_SOURCE"
+
+    if [[ "$DEVFLOW_RECEIPT_STATUS" == "pending" &&
+        "$existing_state" == 0 ]]
+    then
+        DEVFLOW_INSTALL_STATE="pending-empty"
+        return 0
+    fi
+
+    [[ -d "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] ||
+        die "the owned Workflow Engine environment is missing or invalid: $DEVFLOW_TOOL_ENV"
+    devflow_environment_matches \
+        "$DEVFLOW_RECEIPT_PYTHON" "$DEVFLOW_RECEIPT_SOURCE" ||
+        die "the Workflow Engine environment does not match its ownership receipt"
+
+    for executable in \
+        devflow devflow-reference-transaction devflow-pre-push
+    do
+        executable_path="$DEVFLOW_BIN_DIR/$executable"
+        symlink_points_to "$executable_path" "$DEVFLOW_TOOL_ENV/bin/$executable" ||
+            die "the Workflow Engine executable is missing or not owned by this installation: $executable_path"
+    done
+    if [[ "$DEVFLOW_RECEIPT_STATUS" == "pending" ]]; then
+        DEVFLOW_INSTALL_STATE="pending-complete"
+    else
+        DEVFLOW_INSTALL_STATE="owned"
+    fi
+}
+
+resolve_mise_python_path() (
+    cd -- "$REPO_ROOT"
+    export MISE_CONFIG_DIR="$MISE_BOOTSTRAP_CONFIG_DIR"
+    unset \
+        MISE_CONFIG_FILE \
+        MISE_GLOBAL_CONFIG_FILE \
+        MISE_GLOBAL_CONFIG_ROOT \
+        MISE_IGNORED_CONFIG_PATHS \
+        MISE_NO_CONFIG \
+        MISE_DISABLE_TOOLS \
+        MISE_NODE_VERSION \
+        MISE_PYTHON_VERSION \
+        MISE_RUST_VERSION \
+        MISE_JAVA_VERSION
+    mise which python
+)
+
+run_devflow_uv() (
+    clear_devflow_resolver_environment
+    export UV_TOOL_DIR="$DEVFLOW_TOOL_DIR"
+    export UV_TOOL_BIN_DIR="$DEVFLOW_BIN_DIR"
+    uv --no-config "$@"
+)
+
+write_devflow_receipt() {
+    local marker="$1" python_path="$2"
+    local receipt_temporary="$DEVFLOW_RECEIPT.tmp.$$"
+
+    [[ ! -e "$receipt_temporary" && ! -L "$receipt_temporary" ]] ||
+        die "temporary Workflow Engine receipt already exists: $receipt_temporary"
+    (
+        umask 077
+        printf '%s\n%s\n%s\n' \
+            "$marker" "$DEVFLOW_SOURCE" "$python_path" \
+            >"$receipt_temporary"
+    )
+    mv "$receipt_temporary" "$DEVFLOW_RECEIPT"
+}
+
+install_devflow() {
+    local executable python_path
+
+    section "Installing Workflow Engine"
+    python_path="$(resolve_mise_python_path)" ||
+        die "Mise could not resolve the tracked Python interpreter for the Workflow Engine"
+    [[ "$python_path" == /* && -x "$python_path" ]] ||
+        die "Mise returned an invalid Python interpreter for the Workflow Engine: $python_path"
+
+    if [[ "$DEVFLOW_INSTALL_STATE" == "owned" ]]; then
+        [[ "$DEVFLOW_RECEIPT_PYTHON" == "$python_path" ]] ||
+            die "the owned Workflow Engine uses a different Python interpreter; uninstall it explicitly before reinstalling"
+        "$DEVFLOW_BIN_DIR/devflow" --help >/dev/null 2>&1 ||
+            die "the owned Workflow Engine executable is not runnable"
+        echo "Workflow Engine is already installed."
+        return 0
+    fi
+
+    mkdir -p "$DEVFLOW_TOOL_DIR" "$DEVFLOW_BIN_DIR"
+    case "$DEVFLOW_INSTALL_STATE" in
+        absent)
+            write_devflow_receipt \
+                "dotfiles-devflow-pending-v1" "$python_path"
+            ;;
+        pending-empty|pending-complete)
+            [[ "$DEVFLOW_RECEIPT_PYTHON" == "$python_path" ]] ||
+                die "the pending Workflow Engine installation uses a different Python interpreter"
+            ;;
+        *)
+            die "internal error: unknown Workflow Engine install state '$DEVFLOW_INSTALL_STATE'"
+            ;;
+    esac
+
+    if [[ "$DEVFLOW_INSTALL_STATE" == "pending-complete" ]]; then
+        "$DEVFLOW_BIN_DIR/devflow" --help >/dev/null 2>&1 ||
+            die "the pending Workflow Engine executable is not runnable"
+        write_devflow_receipt "dotfiles-devflow-v1" "$python_path"
+        echo "Workflow Engine installation resumed."
+        return 0
+    fi
+
+    run_devflow_uv tool install \
+        --python "$python_path" \
+        --no-python-downloads \
+        --editable "$DEVFLOW_SOURCE"
+
+    [[ -d "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] ||
+        die "uv completed without creating the Workflow Engine environment"
+    devflow_environment_matches "$python_path" "$DEVFLOW_SOURCE" ||
+        die "uv created a Workflow Engine environment with unexpected provenance"
+    for executable in \
+        devflow devflow-reference-transaction devflow-pre-push
+    do
+        symlink_points_to \
+            "$DEVFLOW_BIN_DIR/$executable" \
+            "$DEVFLOW_TOOL_ENV/bin/$executable" ||
+            die "uv completed without creating the expected Workflow Engine executable: $executable"
+    done
+    "$DEVFLOW_BIN_DIR/devflow" --help >/dev/null 2>&1 ||
+        die "uv installed a Workflow Engine executable that is not runnable"
+
+    write_devflow_receipt "dotfiles-devflow-v1" "$python_path"
+}
+
 link() {
     local src="$REPO_ROOT/$1" dst="$HOME/$2"
     if symlink_points_to "$dst" "$src"; then
@@ -546,7 +853,7 @@ link_nested() {
 
 preflight_links() {
     local source required_directory
-    local directory_sources file_sources required_directories
+    local directory_sources file_sources package_directories required_directories
 
     directory_sources=(
         fish
@@ -560,12 +867,20 @@ preflight_links() {
 
     file_sources=(
         Brewfile
+        devflow/pyproject.toml
+        devflow/src/devflow/__init__.py
+        devflow/src/devflow/guidance.md
+        devflow/uv.lock
         herdr/config.toml
         hunk/config.toml
         mise/conf.d/00-dotfiles.toml
         zsh/.zshrc
         templates/local.fish
         templates/local.zsh
+    )
+    package_directories=(
+        devflow
+        devflow/src/devflow
     )
 
     for source in "${directory_sources[@]}"; do
@@ -576,6 +891,10 @@ preflight_links() {
         [[ -f "$REPO_ROOT/$source" ]] ||
             die "missing or invalid tracked configuration file: $REPO_ROOT/$source"
     done
+    for source in "${package_directories[@]}"; do
+        [[ -d "$REPO_ROOT/$source" ]] ||
+            die "missing or invalid tracked package directory: $REPO_ROOT/$source"
+    done
 
     required_directories=(
         "$HOME/.config"
@@ -584,7 +903,11 @@ preflight_links() {
         "$LOCAL_DIR"
     )
     if (( SKIP_MISE_RUNTIMES == 0 )); then
-        required_directories+=("$HOME/.config/mise")
+        required_directories+=(
+            "$HOME/.config/mise"
+            "$DEVFLOW_BIN_DIR"
+            "$DEVFLOW_TOOL_DIR"
+        )
     fi
 
     for required_directory in "${required_directories[@]}"; do
@@ -594,6 +917,10 @@ preflight_links() {
             die "'$required_directory' blocks required configuration directory"
         fi
     done
+
+    if (( SKIP_MISE_RUNTIMES == 0 )); then
+        preflight_devflow_state
+    fi
 }
 
 link_configs() {
@@ -659,6 +986,7 @@ if (( SKIP_MISE_RUNTIMES == 1 )); then
     echo "Mise runtime installation and validation skipped by request."
 else
     install_mise_runtimes
+    install_devflow
 fi
 link_configs
 print_next_steps

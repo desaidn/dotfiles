@@ -7,6 +7,20 @@ local pending_handoff_win
 
 local function alternate_window() return vim.fn.win_getid(vim.fn.winnr '#') end
 
+local function set_window_buffer(win, buf)
+  local ok, err = pcall(vim.api.nvim_win_set_buf, win, buf)
+  if ok then return end
+
+  -- Neovim may raise E325 after installing a swap-conflicted buffer. Accept
+  -- only that completed postcondition so Flatten can finish its handoff.
+  if type(err) == 'string' and err:find('Vim:E325:', 1, true) == 1 then
+    local observed, current_buf = pcall(vim.api.nvim_win_get_buf, win)
+    if observed and current_buf == buf then return end
+  end
+
+  error(err, 0)
+end
+
 local function take_handoff_window(data)
   local win = pending_handoff_win or terminal_tool.editor_handoff_window(data)
   pending_handoff_win = nil
@@ -16,7 +30,7 @@ end
 local function open_in_host_window(opts)
   local target = opts.stdin_buf or opts.files[1]
   local win = take_handoff_window(opts.data) or alternate_window()
-  vim.api.nvim_win_set_buf(win, target.bufnr)
+  set_window_buffer(win, target.bufnr)
   vim.api.nvim_set_current_win(win)
   return target.bufnr, win
 end
@@ -38,7 +52,7 @@ local function open_diff_in_host_window(opts)
 
   for index, target in ipairs(targets) do
     if index == 1 then
-      vim.api.nvim_win_set_buf(win, target.bufnr)
+      set_window_buffer(win, target.bufnr)
     else
       win = vim.api.nvim_open_win(target.bufnr, true, { win = 0, vertical = true })
     end

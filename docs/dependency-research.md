@@ -1,6 +1,6 @@
 # Dependency installation research
 
-Checked 2026-07-26 against [`install.sh`](../install.sh), the Neovim inventory and bootstrap notes in [`nvim/`](../nvim/), and the repository's [`gh` issue-tracker contract](agents/issue-tracker.md). The resulting installer uses Homebrew as the declared package owner, then validates effective commands on `PATH`; Ghostty and JetBrains Mono also accept manually installed app/font files so Brew never overwrites them.
+Checked 2026-07-26 against [`install.sh`](../install.sh), the Neovim inventory and bootstrap notes in [`nvim/`](../nvim/), and the repository's [`gh` issue-tracker contract](agents/issue-tracker.md); the Python and Neovim release pins were refreshed 2026-08-30. The resulting installer uses Homebrew as the declared package owner, then validates effective commands on `PATH`; Ghostty and JetBrains Mono also accept manually installed app/font files so Brew never overwrites them.
 
 ## Homebrew bootstrap boundary
 
@@ -19,7 +19,7 @@ This makes CLT/Xcode on macOS and distro development tools on Linux the correct 
 | `git` | [`git`](https://formulae.brew.sh/formula/git) formula | Both | Required everywhere; a bootstrap/system Git also satisfies the check |
 | `fish` | [`fish`](https://formulae.brew.sh/formula/fish) formula | Both | Required primary shell. **Effective floor: 3.2**, because `config.fish` invokes `fish_add_path`, introduced in Fish 3.2.0. The current Homebrew stable (4.8.1) satisfies it. ([Fish 3.2 release notes](https://fishshell.com/docs/3.5/relnotes.html#fish-3-2-0-released-march-1-2021)) |
 | `zsh` | [`zsh`](https://formulae.brew.sh/formula/zsh) formula | Both | Required handoff/login shell; a system Zsh satisfies the check |
-| `nvim` | [`neovim`](https://formulae.brew.sh/formula/neovim) formula | Both | Required editor; formula name differs from command. **Exact gate: stable Neovim 0.12.4**; [`nvim/init.lua`](../nvim/init.lua) rejects every other version, and the current Homebrew stable is exactly 0.12.4. |
+| `nvim` | [`neovim`](https://formulae.brew.sh/formula/neovim) formula | Both | Required editor; formula name differs from command. **Exact gate: stable Neovim 0.12.5**; [`nvim/init.lua`](../nvim/init.lua) rejects every other version, and the current Homebrew stable is exactly 0.12.5. |
 | `herdr` | [`herdr`](https://formulae.brew.sh/formula/herdr) formula | Both | Required daily workspace manager |
 | `tmux` | [`tmux`](https://formulae.brew.sh/formula/tmux) formula | Both | Required fallback/compatibility multiplexer. **Effective floor: 3.7**, because the tracked message styles use `fill=`; tmux records that requirement under the 3.6b-to-3.7 changes. The current Homebrew stable (3.7b) satisfies it. ([tmux 3.7 CHANGES](https://raw.githubusercontent.com/tmux/tmux/3.7/CHANGES)) |
 | `lazygit` | [`lazygit`](https://formulae.brew.sh/formula/lazygit) formula | Both | Required Git Transaction Surface. **Effective floor: 0.56**, which introduced the configured `git.pagers` interface used to select Hunk as the Diffing Solution. ([LazyGit 0.56 release](https://github.com/jesseduffield/lazygit/releases/tag/v0.56.0)) |
@@ -28,12 +28,29 @@ This makes CLT/Xcode on macOS and distro development tools on Linux the correct 
 | `rg` | [`ripgrep`](https://formulae.brew.sh/formula/ripgrep) formula | Both | Required search tool; formula name differs from command |
 | `tree-sitter` | [`tree-sitter-cli`](https://formulae.brew.sh/formula/tree-sitter-cli) formula | Both | Required parser-management CLI; formula name differs from command. The current formula supplies `tree-sitter` 0.26.11, satisfying nvim-treesitter main's requirement for 0.26.1 or later. ([nvim-treesitter requirements](https://github.com/nvim-treesitter/nvim-treesitter#requirements)) |
 | `hunk` | [`hunk`](https://formulae.brew.sh/formula/hunk) formula | Both | Required Diffing Solution and stacked working-tree Review Surface. **Effective floor: 0.18.1** for concurrent watch sessions: 0.18 replaced the 250 ms Git polling loop with filesystem event hints, an authoritative Git signature, and a 10-second safety check. Hunk's frozen campaign measured 35–36 times fewer Git invocations and 1.8–6.4 times lower idle main-process CPU per session, subject to its stated platform and projection caveats. ([Hunk 0.18.1 release](https://github.com/modem-dev/hunk/releases/tag/v0.18.1), [watch benchmark](https://github.com/modem-dev/hunk/blob/d6e967bf5c5a3a93bb7796aa50e67ee3fec58179/docs/watch-benchmark-final.md#L9-L28)) |
+| `uv` | [`uv`](https://formulae.brew.sh/formula/uv) formula | Both | Installs the Python 3.14 Workflow Engine as a persistent isolated tool tied to Mise's exact interpreter. |
 | `xclip` / `wl-copy` | [`xclip`](https://formulae.brew.sh/formula/xclip) / [`wl-clipboard`](https://formulae.brew.sh/formula/wl-clipboard) | Linux (`xclip` also has macOS bottles) | X11 and Wayland clipboard providers installed by the Linux Brewfile |
 | `Ghostty.app` or `ghostty` | [`ghostty`](https://formulae.brew.sh/cask/ghostty) cask (`brew install --cask ghostty`) | macOS only | Required only on macOS; the installer explicitly skips its config on Linux |
 
 The installer validates Fish 3.2 or newer, tmux 3.7 or newer, LazyGit 0.56 or
 newer, Hunk 0.18.1 or newer, tree-sitter CLI 0.26.1 or newer, and exactly stable
-Neovim 0.12.4 after applying the Brewfile.
+Neovim 0.12.5 after applying the Brewfile.
+
+After Mise provisions the pinned Python, `install.sh` resolves that interpreter
+inside the isolated bootstrap configuration and installs the repository's
+`dotfiles-devflow` package with
+`uv tool install --python <path> --no-python-downloads --editable`.
+`UV_TOOL_DIR` is confined to
+`~/.local/share/dotfiles/uv-tools`, while public entry points go to
+`~/.local/bin`. A source-and-interpreter receipt supplies the ownership proof
+for a strict second-run no-op and conservative uninstall; unreceipted or
+ambiguous state is preserved. Before `uv` runs, an exact pending receipt makes
+interrupted installation resumable: an empty attempt may retry, and a fully
+matching environment may finalize without reinstalling, but partial state
+fails closed. The degraded `--skip-mise-runtimes` mode skips this
+runtime-dependent installation and retains any existing owned tool.
+Harness-global Codex and Claude adapters remain explicit `devflow harness
+install` operations rather than generic installer side effects.
 
 Ghostty's tracked configuration also selects **JetBrains Mono**. Homebrew maps that presentation dependency to the macOS-only [`font-jetbrains-mono`](https://formulae.brew.sh/cask/font-jetbrains-mono) cask. `install.sh` accepts either its Brew receipt or a matching font file in the standard macOS font directories.
 
@@ -56,7 +73,7 @@ One direct repository workflow is outside `install.sh`: [`docs/agents/issue-trac
 
 The configuration in [`nvim/lua/custom/languages/config.lua`](../nvim/lua/custom/languages/config.lua) is passed wholesale to Mason Tool Installer, so Mason attempts to install every listed tool. Mason installs editor tooling, but its own documentation says that it shells out to external package managers such as `npm`; language runtimes remain machine capabilities. In this repository, **mise should own versioned Node, Python, and Rust runtimes plus Amazon Corretto JDK 21**, while Mason owns the LSP/formatter/linter executables. Mise has core backends for all four runtimes and deliberately does not replace system package management. ([Mason requirements](https://github.com/mason-org/mason.nvim#requirements), [mise core tools](https://mise.jdx.dev/core-tools.html), [mise ownership boundary](https://mise.jdx.dev/faq.html#mise-is-for-dev-tools-not-applications-or-system-packages))
 
-The tracked Mise fragment pins Node 24.18.0, Python 3.14.6, Rust 1.97.1,
+The tracked Mise fragment pins Node 24.18.0, Python 3.14.7, Rust 1.97.1,
 and Amazon Corretto JDK 21 at `corretto-21.0.12.8.1`. Exact selectors make a
 successful second install a stable no-op; advancing a runtime is an explicit
 manifest change rather than a side effect of resolving `latest`, `lts`, or a
@@ -64,7 +81,7 @@ moving major-version channel.
 
 | Capability | Runtime prerequisite and evidence | Provisioning boundary |
 | --- | --- | --- |
-| JavaScript/TypeScript and npm-backed tools | `node` plus `npm`; current Mason entries such as [typescript-language-server](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/typescript-language-server/package.yaml), [BasedPyright](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/basedpyright/package.yaml), and [Prettier](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/prettier/package.yaml) declare npm sources. | **Capability runtime:** manage Node with mise. Homebrew's [`node`](https://formulae.brew.sh/formula/node) formula is available on both platforms if mise is not used. |
+| JavaScript/TypeScript and npm-backed tools | `node` plus `npm`; Mason entries such as [typescript-language-server](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/typescript-language-server/package.yaml), [js-debug-adapter](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/js-debug-adapter/package.yaml), [BasedPyright](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/basedpyright/package.yaml), and [Prettier](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/prettier/package.yaml) require Node or distribute Node programs. Each recognized non-Deno JS/TS workspace owns its root-local TypeScript: version 7+ supplies the native `node_modules/.bin/tsc` LSP, while an earlier version must also supply `node_modules/typescript/lib/tsserver.js`. Mason owns only the `typescript-language-server` compatibility transport and points it at that exact project language service; it also owns `eslint_d`, Prettier, and js-debug. Missing, unparseable, unowned, and Deno workspaces receive no TypeScript semantic client. | **Capability runtime:** manage Node with mise. **Project semantics/compiler:** install the intended TypeScript version in each JS/TS workspace. **Compatibility transport:** Mason owns `typescript-language-server`; never install a second global TypeScript compiler. Homebrew's [`node`](https://formulae.brew.sh/formula/node) formula is available on both platforms if mise is not used. |
 | Rust language tooling and native plugin fallback | `cargo`, `clippy`, `rustfmt`, and `rust-src`; rustaceanvim owns rust-analyzer with default Cargo features and Clippy checks, while the language inventory invokes `rustfmt` through Conform. The tracked FFF install hook calls `download_or_build_binary()`, whose upstream contract downloads a prebuilt binary or falls back to a Cargo build. ([FFF installation](https://github.com/dmtrKovalenko/fff#installation)) | **Capability runtime/build fallback:** manage Rust with mise. The tracked minimal rustup profile explicitly adds `clippy`, `rustfmt`, and `rust-src`. ([mise Rust backend](https://mise.jdx.dev/lang/rust.html), [rustup components](https://rust-lang.github.io/rustup/concepts/components.html)) |
 | Python tooling | A Python/pip-capable runtime; Mason's [Ruff](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/ruff/package.yaml) entry is PyPI-backed, and the [JDTLS launcher](https://github.com/eclipse-jdtls/eclipse.jdt.ls#running-from-command-line-with-wrapper-script) also requires Python 3.9+. | **Capability runtime:** manage Python with mise. Homebrew's [`python`](https://formulae.brew.sh/formula/python@3.14) formula is available on both platforms. |
 | Python debugging | [`python.lua`](../nvim/lua/custom/languages/adapters/python.lua) lazily configures nvim-dap-python with Mason's debugpy adapter while the debug target uses the project interpreter; the shared DAP module remains language-neutral. | **Neovim editor tool:** Mason owns [debugpy](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/debugpy/package.yaml); Mise's Python remains the visible fallback for a debug target without a project environment. |
@@ -78,7 +95,7 @@ and its brew-first policy is:
 
 ```text
 git fish zsh neovim herdr tmux lazygit hunk mise atuin gh ripgrep
-tree-sitter-cli ghcup
+tree-sitter-cli uv ghcup
 ```
 
 Bootstrap/system Git and Zsh can make the first run possible before their

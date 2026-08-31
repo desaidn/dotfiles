@@ -15,6 +15,7 @@ local SINGLETON_INSTANCE_KEY = {}
 
 local tools = {}
 local tool_keys = {}
+local tool_commands = {}
 local host_win = nil
 
 local function editor_env()
@@ -247,11 +248,43 @@ local function stop_all_jobs()
 end
 
 local lifecycle_group = vim.api.nvim_create_augroup('custom-terminal-tool-lifecycle', { clear = true })
+local ui_entered = vim.v.vim_did_enter == 1
+vim.api.nvim_create_autocmd('UIEnter', {
+  group = lifecycle_group,
+  once = true,
+  callback = function() ui_entered = true end,
+  desc = 'Record terminal UI initialization',
+})
 vim.api.nvim_create_autocmd('VimLeavePre', {
   group = lifecycle_group,
   callback = stop_all_jobs,
   desc = 'Stop terminal tools before Neovim exits',
 })
+
+local function after_ui_enter(callback)
+  local pending = false
+
+  return function()
+    if pending then return true end
+    if ui_entered then return callback() end
+
+    pending = true
+    vim.api.nvim_create_autocmd('UIEnter', {
+      group = lifecycle_group,
+      once = true,
+      callback = function()
+        -- Neovim settles terminal capabilities during startup. Waiting until
+        -- after UIEnter keeps +cmd launches identical to interactive mappings.
+        vim.schedule(function()
+          pending = false
+          callback()
+        end)
+      end,
+      desc = 'Start terminal tool after UI initialization',
+    })
+    return true
+  end
+end
 
 local function start_tool(tool, instance, variant, cwd, return_win)
   instance.generation = instance.generation + 1
@@ -406,10 +439,14 @@ local function assert_nonempty_string(value, message)
   return value
 end
 
-local function normalize_variant(variant, declared_keys)
+local function normalize_variant(variant, declared_keys, declared_ex_commands, existing_ex_commands)
   local key = assert_nonempty_string(variant.key, 'terminal tool key is required')
   assert(tool_keys[key] == nil, string.format('terminal tool key %s is already registered by %s', key, tool_keys[key] or ''))
   assert(not declared_keys[key], 'terminal tool declares key more than once: ' .. key)
+  -- maparg applies <leader> and key-notation semantics exactly as
+  -- vim.keymap.set does; the keymap-list APIs expose only normalized lhs text.
+  local existing_mapping = vim.fn.maparg(key, 'n', false, true)
+  assert(type(existing_mapping) == 'table' and next(existing_mapping) == nil, 'terminal tool key is already mapped by Neovim: ' .. key)
   declared_keys[key] = true
 
   local command = variant.command
@@ -418,10 +455,27 @@ local function normalize_variant(variant, declared_keys)
     assert_nonempty_string(value, string.format('terminal tool command argument %d must be a non-empty string', index))
   end
 
+  local ex_command = variant.ex_command
+  if ex_command ~= nil then
+    assert_nonempty_string(ex_command, 'terminal tool Ex command must be a non-empty string')
+    assert(
+      ex_command:match '^[A-Z][A-Za-z0-9]*$' and ex_command ~= 'Next',
+      'terminal tool Ex command must start with an uppercase ASCII letter and contain only ASCII letters or digits'
+    )
+    assert(not declared_ex_commands[ex_command], 'terminal tool declares Ex command more than once: ' .. ex_command)
+    assert(
+      tool_commands[ex_command] == nil,
+      string.format('terminal tool Ex command %s is already registered by %s', ex_command, tool_commands[ex_command] or '')
+    )
+    assert(existing_ex_commands[ex_command] == nil, 'terminal tool Ex command is already registered by Neovim: ' .. ex_command)
+    declared_ex_commands[ex_command] = true
+  end
+
   return {
     key = key,
     desc = assert_nonempty_string(variant.desc, 'terminal tool desc is required'),
     command = vim.deepcopy(command),
+    ex_command = ex_command,
   }
 end
 
@@ -454,11 +508,13 @@ local function normalize_config(config)
   end
 
   local declared_keys = {}
+  local declared_ex_commands = {}
   local declared_commands = {}
+  local existing_ex_commands = vim.api.nvim_get_commands { builtin = false }
   local variants = {}
   for _, variant in ipairs(declared_variants) do
     assert(type(variant) == 'table', 'each terminal tool variant must be a table')
-    local normalized = normalize_variant(variant, declared_keys)
+    local normalized = normalize_variant(variant, declared_keys, declared_ex_commands, existing_ex_commands)
     local argv = table.concat(normalized.command, '\0')
     assert(not declared_commands[argv], 'terminal tool declares the same command more than once: ' .. table.concat(normalized.command, ' '))
     declared_commands[argv] = true
@@ -501,6 +557,7 @@ end
 ---@field command string[]
 ---@field key string
 ---@field desc string
+---@field ex_command? string
 
 ---@class custom.TerminalToolConfig
 ---@field id string
@@ -521,13 +578,49 @@ function M.create(config)
     next_instance_token = 0,
   }
 
-  -- Install every mapping before claiming any key, so a failure partway cannot
-  -- leave keys reserved by a tool that was never registered.
+  local registrations = {}
   for _, variant in ipairs(tool.spec.variants) do
-    vim.keymap.set('n', variant.key, function() return toggle(tool, variant) end, { desc = variant.desc })
+    local callback = function() return toggle(tool, variant) end
+    if variant.ex_command then callback = after_ui_enter(callback) end
+    registrations[#registrations + 1] = {
+      variant = variant,
+      callback = callback,
+    }
   end
+
+  local registered_commands = {}
+  local registered_mappings = {}
+  local registered, registration_error = pcall(function()
+    -- Register commands first with replacement disabled. All predictable
+    -- conflicts were preflighted, and rollback still covers an API failure.
+    for _, registration in ipairs(registrations) do
+      local variant = registration.variant
+      if variant.ex_command then
+        vim.api.nvim_create_user_command(variant.ex_command, registration.callback, { desc = variant.desc, force = false })
+        registered_commands[#registered_commands + 1] = variant.ex_command
+      end
+    end
+
+    for _, registration in ipairs(registrations) do
+      local variant = registration.variant
+      vim.keymap.set('n', variant.key, registration.callback, { desc = variant.desc })
+      registered_mappings[#registered_mappings + 1] = variant.key
+    end
+  end)
+
+  if not registered then
+    for index = #registered_mappings, 1, -1 do
+      pcall(vim.keymap.del, 'n', registered_mappings[index])
+    end
+    for index = #registered_commands, 1, -1 do
+      pcall(vim.api.nvim_del_user_command, registered_commands[index])
+    end
+    error(registration_error, 0)
+  end
+
   for _, variant in ipairs(tool.spec.variants) do
     tool_keys[variant.key] = tool.spec.id
+    if variant.ex_command then tool_commands[variant.ex_command] = tool.spec.id end
   end
   tools[tool.spec.id] = tool
 end

@@ -9,7 +9,7 @@ A lean Neovim configuration based on kickstart.nvim. Part of [dotfiles](../READM
 ### Install Neovim
 
 This configuration follows the current kickstart.nvim mainline baseline and
-requires exactly stable Neovim 0.12.4. Startup rejects older, newer, and
+requires exactly stable Neovim 0.12.5. Startup rejects older, newer, and
 prerelease builds so plugin behavior stays tied to the tested baseline.
 
 > For detailed installation methods (Homebrew, Bob, Flatpak, etc.), see the
@@ -34,11 +34,27 @@ Host requirements:
 
 Mise owns the language runtimes used by the enabled Language Tooling
 configuration: Node.js/npm, Python, Rust with Cargo, Clippy, and rustfmt, and
-Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Mason owns the corresponding
-LSPs, formatters, linters, and debuggers. Python DAP uses Mason's debugpy
-adapter while debug targets use their project environments.
+Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Mason owns the declared editor
+tools, with one semantic-ownership exception: each recognized non-Deno
+JavaScript/TypeScript workspace supplies its root-local TypeScript. Version 7+
+uses the project's native `tsc` LSP; earlier versions use Mason's
+`typescript-language-server` only as transport, pinned to the project's exact
+`node_modules/typescript/lib/tsserver.js`. The compatibility client terminates
+if the server reports a bundled, workspace-fallback, or mismatched TypeScript.
+Missing, unparseable, unowned, and Deno workspaces receive neither client.
+Python DAP uses Mason's debugpy adapter
+while debug targets use their project environments; JavaScript/TypeScript DAP
+uses Mason's js-debug adapter while projects own non-trivial launch
+configuration. Restart Neovim after changing a project's installed TypeScript
+version so its semantic route is recalculated.
 Haskell support currently requires `ghcup` because Mason's HLS installer calls
 it directly.
+
+This personal editor configuration assumes repositories opened for development
+are trusted: JavaScript/TypeScript startup executes the project's root-local
+compiler to select a semantic route, and project lint configuration can execute
+code. Review untrusted checkouts before opening them in Neovim. Debug launches
+remain explicit user actions and bind the adapter to loopback.
 
 `make` is optional: when available, it enables telescope-fzf-native and
 LuaSnip's jsregexp build. `fd` is not a base dependency because fff.nvim owns
@@ -76,7 +92,7 @@ nvim
 - `<leader>td` - Toggle inline git diff
 - `]c` / `[c` - Navigate git hunks
 
-Lazygit and Hunk open files through the shell-owned `EDITOR=nvim` contract. flatten.nvim routes nested Neovim calls back into the host editor and hides the originating Git surface.
+Lazygit and Hunk open files through the shell-owned `EDITOR=nvim` contract. flatten.nvim routes nested Neovim calls back into the host editor and hides the originating Git surface. Workflow reviews run Hunk in devflow's Invoking Checkout, so pressing `e` opens in the review tab's Neovim with normal project-root discovery and full language tooling using that checkout's project and build context.
 
 Neovim-launched terminal tools use one shared flow in every environment: one persistent terminal job and Tool Tab per selected instance, all stopped before Neovim exits, with host tmux prefix and pane navigation left available when running in the tmux fallback and flatten.nvim handling editor handoff. LazyGit keeps the default singleton and restarts when its effective working directory changes; Hunk retains one instance per canonical Host Window working directory, with working-tree and staged variants sharing that instance. Add future flows through a declarative `terminal_tool.create { id, command?, key?, desc?, variants?, instances?, env?, handoff? }` call; the module owns mappings, instance lifecycle, error recovery, and source-agnostic handoff routing while leaving TUI input untouched.
 

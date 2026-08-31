@@ -1,8 +1,8 @@
 # High-fidelity LSP and DAP for the primary language set
 
 Status: investigation and implementation recommendation
-Evidence checked: 2026-08-14
-Scope: Rust, Kotlin, Java, Python, TypeScript/JavaScript for Node.js and browsers, Fish, and Bash/POSIX `sh` in this repository's Neovim 0.12.4 environment. Zsh is deliberately excluded from this implementation scope.
+Evidence checked: 2026-08-24
+Scope: Rust, Kotlin, Java, Python, TypeScript/JavaScript for Node.js and browsers, Fish, and Bash/POSIX `sh` in this repository's Neovim 0.12.5 environment. Zsh is deliberately excluded from this implementation scope.
 
 ## Executive decision
 
@@ -16,7 +16,7 @@ The target should remain native-first:
 | Java                  | Mason `jdtls`, owned per project by `nvim-jdtls`                                          | Existing Google Java Format only                | Mason `java-debug-adapter` and `java-test`, injected into JDT LS by nvim-jdtls                                           | Replace generic `jdtls` startup with nvim-jdtls and a collision-proof workspace-data path.                                                  |
 | Kotlin                | Mason's official JetBrains `kotlin-lsp`                                                   | Existing ktlint only                            | Pilot JetBrains' experimental attach-only DAP; keep Mason `kotlin-debug-adapter` only as an explicitly degraded fallback | LSP is the best current upstream choice but remains alpha and JVM-centric. Full, stable Kotlin DAP does not exist for this client today.    |
 | Python                | Mason `basedpyright`                                                                      | Mason native `ruff` LSP                         | Mason `debugpy` through `nvim-dap-python`                                                                                | Prefer basedpyright for maximum generic-LSP fidelity; Ruff owns lint/actions, Conform owns formatting, and neither duplicates the other.    |
-| TypeScript/JavaScript | Project-local TypeScript 7 `tsc --lsp --stdio`, selected by upstream nvim-lspconfig `tsc` | Project-local ESLint through Mason `eslint-lsp` | Mason `js-debug-adapter` directly through nvim-dap                                                                       | TypeScript 7 made `ts_ls` a legacy default in July 2026. Keep a routed TypeScript 6 fallback only for embedded-language/plugin projects.    |
+| TypeScript/JavaScript | Version-routed project TypeScript: 7+ uses native `tsc --lsp --stdio`; earlier versions use `ts_ls` with the exact root-local `tsserver.js` | Project-local ESLint through Mason `eslint_d`   | Mason `js-debug-adapter` directly through nvim-dap                                                                       | Keep native `tsc` as the modern default and Mason `typescript-language-server` as a mutually exclusive transport for project-owned pre-7 semantics. |
 | Fish                  | Mason `fish-lsp`, selected by upstream nvim-lspconfig `fish_lsp`                          | Fish LSP diagnostics/actions                    | None — no broadly supported Fish DAP                                                                                    | Add the Fish parser and LSP. Let Fish LSP remain the single Fish formatting/diagnostic owner; it has the appropriate language-aware surface. |
 | Bash/POSIX `sh`       | Mason `bash-language-server`, selected by upstream nvim-lspconfig `bashls`                | BashLS + its Mason `shellcheck` integration     | None — no broadly supported shell DAP                                                                                   | Add BashLS, ShellCheck, and `shfmt`; constrain workspace scanning and keep Conform/`shfmt` as the sole formatter.                            |
 
@@ -45,14 +45,14 @@ The result will still not be a single proprietary, polyglot semantic index. LSP 
 
 `nvim/lua/custom/languages/lsp.lua` uses the Neovim 0.11+ `vim.lsp.config`/`vim.lsp.enable` API, merges Blink completion capabilities, attaches standard mappings, document highlights, and capability-gated inlay hints. This follows the current [Neovim LSP configuration model](https://neovim.io/doc/user/lsp/). `nvim-lspconfig` supplies executable, filetype, and root defaults.
 
-`nvim/lua/custom/languages/dap.lua` owns the shared lazy `nvim-dap`, `nvim-dap-ui`, and `nvim-nio` stack plus the common controls; [`adapters/python.lua`](../nvim/lua/custom/languages/adapters/python.lua) separately owns lazy nvim-dap-python/debugpy setup for Python buffers. [nvim-dap](https://github.com/mfussenegger/nvim-dap) supports the required generic launch, attach, breakpoint, stepping, inspection, and REPL operations; adapters are intentionally language-specific dependencies.
+`nvim/lua/custom/languages/dap.lua` owns the shared lazy `nvim-dap`, `nvim-dap-ui`, and `nvim-nio` stack plus the common controls; [`adapters/python.lua`](../nvim/lua/custom/languages/adapters/python.lua) owns lazy nvim-dap-python/debugpy setup and [`adapters/javascript.lua`](../nvim/lua/custom/languages/adapters/javascript.lua) owns lazy direct js-debug setup. [nvim-dap](https://github.com/mfussenegger/nvim-dap) supports the required generic launch, attach, breakpoint, stepping, inspection, and REPL operations; adapters are intentionally language-specific dependencies.
 
 Provisioning boundaries are clear:
 
-- Mise pins Node 24.18.0, Python 3.14.6, Rust 1.97.1 with Clippy/rustfmt, and Amazon Corretto 21.0.12.8.1.
+- Mise pins Node 24.18.0, Python 3.14.7, Rust 1.97.1 with Clippy/rustfmt, and Amazon Corretto 21.0.12.8.1.
 - Mason owns editor servers, formatters, linters, and debuggers.
 - Homebrew owns standalone applications, while Mason owns the Python adapter and language tools.
-- Conform is the save-format path; nvim-lint currently owns Ruff and `eslint_d` lint runs.
+- Conform is the save-format path; Ruff publishes Python diagnostics through LSP, while nvim-lint retains `eslint_d` for JavaScript/TypeScript.
 
 ### Per-language state and gaps
 
@@ -62,7 +62,7 @@ Provisioning boundaries are clear:
 | Java                  | nvim-jdtls starts Mason JDT LS per Java build root; Google Java Format via Conform; Mason Java debug/test bundles       | A real Gradle/Maven multi-module and JUnit/TestNG DAP fixture is still needed; the server and project JDK selection must remain visible when diagnosing build-model issues.                                                                                                              |
 | Kotlin                | Official `kotlin_lsp`; ktlint via Conform                                                                              | Server is alpha/JVM-focused. No configured DAP. Android is experimental, Kotlin Multiplatform is not yet supported, and official DAP is experimental and attach-only.                                                                                                                    |
 | Python                | BasedPyright semantic LSP; native Ruff LSP for diagnostics/actions; Conform runs Ruff fix/format/imports; Mason debugpy powers nvim-dap-python | Workspace diagnostics and mypy remain project-level choices; representative multi-package/test/attach fixtures are still needed. |
-| TypeScript/JavaScript | `ts_ls`; Mason `typescript-language-server`; prettier/prettierd; `eslint_d`; no DAP                                    | It selects the old TypeScript 6 tsserver bridge rather than TypeScript 7's first-party native LSP. No Node/browser debugger, source-map configuration, ESLint code-action LSP, or explicit Node-versus-browser project contract.                                                         |
+| TypeScript/JavaScript | Root-local version router: TypeScript 7+ native LSP or pre-7 `ts_ls` against the exact project `tsserver.js`; prettier/prettierd; `eslint_d`; lazy Mason js-debug with root-aware Node/browser launch files | A real source-map/browser/worker smoke fixture is still required. The two TypeScript routes are mutually exclusive; ESLint LSP remains a conditional compatibility evaluation. |
 | Fish                  | Tree-sitter is not installed; no LSP, formatter, lint/action owner, or debugger                                                 | The primary interactive shell's functions, completions, abbreviations, and sourced configuration have no semantic navigation, diagnostics, or Fish-aware formatting.                                                                                                                      |
 | Bash/POSIX `sh`       | Tree-sitter `bash` only; no LSP, formatter, or diagnostics                                                                   | Shell scripts lack cross-file navigation, ShellCheck analysis, and an explicit formatting owner.                                                                                                                                                                                              |
 
@@ -84,7 +84,7 @@ This is a boundary, not a universal root algorithm or LSP-root replacement. It m
 | Java                  | Highest applicable Gradle/Maven build root: wrapper, `settings.gradle[.kts]`, or reactor `pom.xml`; module build files are fallback                                     | JDT LS imports a build model. Starting one server for every module loses cross-module references; using the Git root for unrelated builds over-indexes.                                                                           |
 | Kotlin                | `settings.gradle[.kts]`, Maven reactor `pom.xml`, supported build file, or JetBrains `workspace.json`; avoid a bare `.git` fallback when no supported JVM build exists  | The official server currently imports JVM Gradle/Maven models and has had nested-project import fixes; unrelated directories should not share its large index.                                                                    |
 | Python                | Nearest `pyrightconfig.json` or relevant `pyproject.toml`, then packaging/project markers; Git only as a last fallback                                                  | Python monorepos often need explicit execution environments, import roots, and distinct virtual environments. Ruff may have a nearer lint configuration without becoming the semantic root.                                       |
-| TypeScript/JavaScript | Package-manager lockfile/workspace root for one TypeScript 7 process; TypeScript selects nested `tsconfig.json`/`jsconfig.json` projects internally; exclude Deno roots | Upstream nvim-lspconfig's [`tsc` configuration](https://raw.githubusercontent.com/neovim/nvim-lspconfig/master/lsp/tsc.lua) is explicitly designed to run one native server for a monorepo and prefer the project-local compiler. |
+| TypeScript/JavaScript | Package-manager lockfile/workspace root for one version-selected semantic client; TypeScript 7+ uses native `tsc`, while pre-7 uses the same root's `tsserver.js` through `ts_ls`; exclude Deno roots | Upstream nvim-lspconfig supplies both [`tsc`](https://raw.githubusercontent.com/neovim/nvim-lspconfig/master/lsp/tsc.lua) and [`ts_ls`](https://raw.githubusercontent.com/neovim/nvim-lspconfig/master/lsp/ts_ls.lua); local policy narrows them to mutually exclusive project-owned versions and one workspace root. |
 | Fish                  | Nearest `config.fish`, otherwise the Git root; use the canonical configuration directory for the dotfiles checkout                | Upstream [`fish_lsp`](https://raw.githubusercontent.com/neovim/nvim-lspconfig/master/lsp/fish_lsp.lua) uses `config.fish` then `.git`. This gives functions and sourced files one intended configuration workspace without treating all of `$HOME` as a project. |
 | Bash/POSIX `sh`       | Bounded script-project Git root; standalone/home-directory scripts retain the local, non-recursive scan policy                    | Upstream [`bashls`](https://raw.githubusercontent.com/neovim/nvim-lspconfig/master/lsp/bashls.lua) deliberately overrides BashLS's recursive default with `*@(.sh|.inc|.bash|.command)` so opening `~/foo.sh` does not recursively index the home directory. |
 
@@ -106,10 +106,10 @@ Direct adapter registration is preferable to generic wrapper plugins when nvim-d
 
 ### Capability and ownership discipline
 
-- Primary semantic client: rust-analyzer, JDT LS, Kotlin LSP, basedpyright, TypeScript 7, Fish LSP, or BashLS respectively.
-- Auxiliary LSP: Ruff and ESLint only. Disable Ruff hover in favor of basedpyright; disable Ruff and ESLint formatting because Conform is the save-format owner.
+- Primary semantic client: rust-analyzer, JDT LS, Kotlin LSP, basedpyright, the version-routed project TypeScript client (`tsc` or `ts_ls`), Fish LSP, or BashLS respectively.
+- Auxiliary LSP: Ruff only in the current implementation. Disable Ruff hover in favor of basedpyright; `eslint_d` remains the JavaScript/TypeScript diagnostic owner until the packaged ESLint LSP passes the compatibility gate.
 - Import actions: disable basedpyright's organize-imports action when Ruff owns Python import sorting. Keep TypeScript import actions with the TypeScript server unless a project deliberately delegates them.
-- Diagnostics: remove Ruff and `eslint_d` from nvim-lint once their LSPs attach, avoiding duplicate messages and two processes analyzing the same edits.
+- Diagnostics: keep Ruff out of nvim-lint while its LSP is attached; retain exactly one `eslint_d` nvim-lint path for JavaScript/TypeScript.
 - Formatting: retain Ruff's existing Conform chain for Python, Google Java Format for Java, ktlint for Kotlin, prettier/prettierd for JavaScript/TypeScript, and Conform/`shfmt` for Bash/POSIX `sh`. Fish LSP's formatter is the sole Fish formatter; do not also add a save-time `fish_indent` command. For Rust, choose exactly one rustfmt path (rust-analyzer formatting is sufficient unless Conform is adopted deliberately).
 - Keymaps and UI must remain capability-gated. Server-specific commands should be buffer-local and appear only for their language.
 
@@ -194,35 +194,31 @@ Acceptance must include a uv-locked project, root-local `.venv`, module launch, 
 
 ## TypeScript and JavaScript: Node and browser
 
-### TypeScript 7 changes the default
+### TypeScript 7 changes the default; pre-7 remains project-routed
 
 TypeScript 7.0 became stable on 2026-07-08 and ships a first-party native LSP in the project `tsc` executable. The [official announcement](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/) says editors can run the project-installed compiler via LSP and lists auto-imports, hovers, inlay hints, code lenses, source-definition navigation, JSX linked editing, semantic highlighting, and import actions. Microsoft also reports substantially lower command-failure and crash rates than TypeScript 6 in its telemetry. This makes a generic `typescript-language-server`/tsserver bridge the wrong default for ordinary Node and browser TypeScript projects.
 
-Update the nvim-lspconfig package lock to a revision containing its upstream [`tsc` config](https://raw.githubusercontent.com/neovim/nvim-lspconfig/master/lsp/tsc.lua), then replace `ts_ls` with `tsc`. That config searches `node_modules/.bin/tsc` (or the transitional native executable) before PATH, starts `--lsp --stdio`, supports a monorepo in one process, lets TypeScript select the nested tsconfig/jsconfig project, and excludes Deno projects. Harden its permissive Git/`cwd` fallback for this multi-project setup: require a recognized project root and project-local TypeScript, or an explicit local opt-in, rather than accidentally starting an ambient global compiler in the wrong workspace. The compiler must be a project dependency so editor analysis and command-line builds use the same TypeScript version. Remove Mason `typescript-language-server` from the normal inventory. Its [current Mason recipe](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/typescript-language-server/package.yaml) deliberately pins TypeScript 6.0.3 because TypeScript 7 removed `tsserver.js`.
+The implementation locks nvim-lspconfig at `221c438` and narrows upstream's permissive fallbacks behind one local version router. A named normal buffer must resolve through a package-manager lockfile/Git root, a nearer Deno project is rejected, and that exact root must contain an executable `node_modules/.bin/tsc` (`tsc.cmd` on Windows) with a parseable version. TypeScript 7+ starts that exact compiler with `--lsp --stdio`; an earlier version starts Mason's `typescript-language-server` transport only when the same root contains a real `node_modules/typescript/lib/tsserver.js` file, which is passed as the exact `initializationOptions.tsserver.path`. Both processes use the root as explicit `cwd`; PATH and Neovim CWD are never compiler fallbacks. Because the wrapper itself can fall through after an invalid configured path, a `$/typescriptVersion` handler accepts only the expected version with source `user-setting` and terminates workspace/bundled fallbacks or mismatches. Missing/unparseable/unowned/Deno roots and incomplete pre-7 installations receive neither usable client. See the [implementation record](neovim-typescript-javascript-best-practices.md) and [typescript-language-server configuration](https://github.com/typescript-language-server/typescript-language-server/blob/master/docs/configuration.md).
 
-TypeScript 7.0 has one important boundary: it does not expose a stable language-service API. The TypeScript team says Vue, MDX, Astro, Svelte, Angular templates, and other language-service-plugin/embedded-language workflows still need TypeScript 6 editor support until a new API arrives. Keep a documented, project-routed fallback using project TypeScript 6 plus vtsls or `ts_ls`, selected from unambiguous project/framework markers or an explicit local setting. [vtsls](https://github.com/yioneko/vtsls) can provide a close-to-VS-Code TS6 experience but is a community best-effort server, so it is a compatibility lane, never a concurrently attached second TypeScript server. TypeScript's official side-by-side `@typescript/typescript6` package is the preferred compiler compatibility mechanism.
+TypeScript 7.0 has one important boundary: it does not expose a stable language-service API. The TypeScript team says Vue, MDX, Astro, Svelte, Angular templates, and other language-service-plugin/embedded-language workflows may still need TypeScript 6 editor support until a new API arrives. The compatibility route does not infer frameworks or attach a second client; it follows the version already owned by the project. The `desaidn.dev` pnpm workspace supplied the first concrete regression: its valid root-local TypeScript 5.9.3 and `tsserver.js` received no semantic client after the unconditional `ts_ls` removal. The mutually exclusive pre-7 route restored `AppLayout.tsx`, and the server reported TypeScript `5.9.3` from `user-setting`, confirming that Mason's transport used the project language service rather than its bundled compiler.
 
 Project tsconfig files, not editor globals, distinguish runtimes. Node packages should model Node's module/type environment; browser/bundler packages should model DOM libraries and bundler resolution. TypeScript 7 changes defaults—including explicit `types`, and `nodenext` or `bundler` replacing legacy Node/classic resolution—so the migration must run project builds as well as LSP checks. A pnpm/npm/yarn workspace may intentionally contain both Node and browser packages under one native server.
 
-### ESLint LSP
+### ESLint diagnostics
 
-Replace `eslint_d` through nvim-lint with Mason `eslint-lsp`, backed by the project's local ESLint/config/plugins. Microsoft's [VS Code ESLint server](https://github.com/microsoft/vscode-eslint) supports live diagnostics, code actions, flat configuration, and per-workspace working directories. Set working directories explicitly or use its auto mode for package-based monorepos. Disable its formatting capability so Prettier/Conform remains the only save formatter; expose ESLint fix-all as a deliberate code action rather than another automatic format pass.
+Retain `eslint_d` through nvim-lint, backed by the project's local ESLint/config/plugins and the nearest ESLint-config directory as `cwd`. It supports current ESLint generations without adding a second diagnostic owner, while Prettier/Conform remains the only save formatter.
 
-The Mason `eslint-lsp` package uses the extracted VS Code language-server distribution and can lag the latest editor extension. Treat registry version and flat-config compatibility as health/fixture assertions rather than assuming parity with whichever project ESLint version is newest.
+The Mason `eslint-lsp` package still uses `vscode-langservers-extracted@4.10.0` rather than a current Microsoft server build. Adopt it only after that exact artifact passes flat-config, ESLint 8.57/9/10, monorepo, typed-linting, and fix-all fixtures. If adopted, switch diagnostic ownership atomically, set `settings.format = false`, and preserve nvim-lspconfig's upstream `on_attach` command.
 
 ### Node and browser DAP
 
 Install Mason `js-debug-adapter` and register its executable directly as an nvim-dap server adapter, passing the selected port. Do not add `nvim-dap-vscode-js`: nvim-dap can register server adapters natively, and the wrapper's own compatibility notes have lagged upstream build changes and describe browser support as partial. Microsoft's [js-debug](https://github.com/microsoft/vscode-js-debug) is the upstream DAP used for Node.js and Chromium-family browser debugging; it supports source maps, workers/child processes, minified variable remapping, launch, and attach.
 
-Provide only safe, small defaults:
-
-- Node launch of the current JavaScript/TypeScript entry with project root as `cwd`;
-- Node attach with process selection;
-- browser launch/attach using a project-specified URL, `webRoot`, and executable where needed.
+Provide one safe default: launch the current plain JavaScript file with Node from its recognized project root. TypeScript, JSX, browser, attach, test-runner, transpiler, environment, and source-map behavior remains project-owned through `.vscode/launch.json`; unowned and Deno buffers abort rather than inheriting Neovim's CWD.
 
 Register the adapter types used by js-debug launch files (notably the modern Node and Chromium types) so nvim-dap's root-aware launch provider can load project `.vscode/launch.json`. Project configurations should own dev-server commands, Jest/Vitest behavior, transpilers, runtime executables, environment files, source maps, workers, and remote path mappings. Do not guess a global test runner or browser application path. A browser is a runtime prerequisite for browser debugging, not a new baseline Homebrew editor dependency.
 
-Acceptance must include plain Node JavaScript, TypeScript executed through the project's chosen loader/build output, child processes, a source-mapped browser bundle in Chromium, breakpoints in original TypeScript, a worker, project launch-file selection, a Node package and browser package in one monorepo, and the explicit TypeScript 6 embedded-language fallback without a duplicate `tsc` client.
+Acceptance must include plain Node JavaScript, TypeScript executed through the project's chosen loader/build output, child processes, a source-mapped browser bundle in Chromium, breakpoints in original TypeScript, a worker, project launch-file selection, a Node package and browser package in one monorepo, and a pre-7 project proving exact root-local `tsserver.js` selection without a duplicate `tsc` client.
 
 ## Fish and Bash/POSIX shell
 
@@ -250,7 +246,7 @@ Acceptance fixtures should cover: this repository's `fish/config.fish`, an autol
 
 ## Provisioning and ownership changes
 
-The versions below are an observation of the Mason registry on 2026-08-13, not a recommendation to hardcode registry internals in Lua. Mason's named package installs float under the current repository policy; the resolved version should be shown by health checks and captured in failure reports.
+Unless noted, the versions below are an observation of the Mason registry on 2026-08-13; the JavaScript/TypeScript entries were rechecked on 2026-08-24. This is not a recommendation to hardcode registry internals in Lua. Mason's named package installs float under the current repository policy; the resolved version should be shown by health checks and captured in failure reports.
 
 | Mason package                                                                                                                                    | Observed package version              | Action                                                                                 |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -265,8 +261,8 @@ The versions below are an observation of the Mason registry on 2026-08-13, not a
 | [`ruff`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/ruff/package.yaml)                                             | 0.16.2                                | Keep, now as native LSP plus existing Conform formatter executable.                    |
 | [`debugpy`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/debugpy/package.yaml)                                       | 1.8.21                                | Add.                                                                                   |
 | [`js-debug-adapter`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/js-debug-adapter/package.yaml)                     | 1.117.0                               | Add.                                                                                   |
-| [`eslint-lsp`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/eslint-lsp/package.yaml)                                 | `vscode-langservers-extracted` 4.10.0 | Add, replacing `eslint_d`.                                                             |
-| [`typescript-language-server`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/typescript-language-server/package.yaml) | 5.3.0 with TypeScript 6.0.3           | Remove from the default; only add a routed TS6 fallback if a real project requires it. |
+| [`eslint-lsp`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/eslint-lsp/package.yaml)                                 | `vscode-langservers-extracted` 4.10.0 | Defer; retain `eslint_d` until this exact artifact passes the compatibility gate.      |
+| [`typescript-language-server`](https://mason-registry.dev/registry/list#typescript-language-server)                                            | 6.0.0 with TypeScript 6.0.3           | Keep as the pre-7 transport; point it at the exact project `tsserver.js` and reject any non-`user-setting` version report, so its bundled TypeScript never owns semantics. |
 | [`fish-lsp`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/fish-lsp/package.yaml)                                     | 1.1.3                                 | Add; `fish_lsp` becomes Fish's sole semantic/formatting owner.                         |
 | [`bash-language-server`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/bash-language-server/package.yaml)             | 5.6.0                                 | Add; enable only for Bash/POSIX `sh`, with bounded workspace scanning.                 |
 | [`shellcheck`](https://raw.githubusercontent.com/mason-org/mason-registry/main/packages/shellcheck/package.yaml)                                 | 0.11.0                                | Add; used by BashLS, not separately through nvim-lint.                                 |
@@ -279,12 +275,12 @@ Mise changes are intentionally small:
 - keep the exact Node, Python, Rust, and Corretto pins;
 - add `rust-src` to the Rust components;
 - do not add JDK 25 for Mason's bundled Kotlin LSP;
-- do not install TypeScript globally through Mise/npm; each project owns TypeScript 7 and any TypeScript 6 compatibility package;
+- do not install TypeScript globally through Mise/npm; each project owns its selected TypeScript compiler and language service, while Mason owns only the pre-7 wrapper transport;
 - do not make project Python environments or Java build toolchains global defaults.
 
 Homebrew needs no LSP or DAP formula. Mason owns debugger/server packages. Project repositories own Cargo manifests/toolchain overrides, Gradle/Maven wrappers and toolchains, Python dependency locks/environments/config, TypeScript/compiler/ESLint dependencies and configuration, browser bundler/source maps, and `.vscode/launch.json`.
 
-Neovim plugin changes are limited to rustaceanvim and nvim-jdtls. Pin them through the existing `vim.pack` lock workflow. No new generic DAP wrapper is required for JavaScript, Python, or Kotlin's pilot.
+Neovim plugin additions are limited to rustaceanvim and nvim-jdtls; the TypeScript slice only refreshes the existing nvim-lspconfig lock. Pin them through the existing `vim.pack` workflow. No new generic DAP wrapper is required for JavaScript, Python, or Kotlin's pilot.
 
 ## Verification strategy
 
@@ -293,12 +289,12 @@ Neovim plugin changes are limited to rustaceanvim and nvim-jdtls. Pin them throu
 Extend the existing Neovim runtime-test effort with assertions that:
 
 - every configured LSP name exists in the pinned nvim-lspconfig/runtime state;
-- `tsc` is present before enabling the TypeScript 7 migration;
+- both `tsc` and `ts_ls` configurations exist, route mutually exclusively by the root-local TypeScript major, and never use PATH/CWD or a bundled compiler fallback;
 - `fish_lsp` is present before enabling Fish support, and `bashls` is configured only for `bash`/`sh`, never `zsh`;
 - no buffer can attach two primary semantic servers for one language;
 - rust-analyzer and JDT LS are absent from generic `vim.lsp.enable` when their extension owns startup;
 - Mason package names resolve, expected executables/bundles exist, and adapter commands are executable on the platform;
-- every filetype has a single format-on-save owner and no Ruff/ESLint nvim-lint duplication;
+- every filetype has a single format-on-save owner, no Ruff nvim-lint duplication, and exactly one ESLint diagnostic path;
 - root selection handles nested modules, unrelated projects in one Git repository, symlinks, and two worktrees with the same leaf basename;
 - Java data-directory hashes differ for distinct canonical roots;
 - root-aware launch configuration resolves the active buffer's root without mutating global `cwd`;
@@ -314,7 +310,7 @@ Create small, deterministic fixtures outside the production config or generate t
 - Java: Gradle multi-module mixed Java/Kotlin project and Maven reactor; two target JDKs.
 - Kotlin: supported Gradle and Maven JVM layouts, nested builds, Java cross-references, compiler plugin/nonstandard source set where feasible.
 - Python: uv project with `.venv`, multi-package execution environments, tests, compiled/stubbed dependency.
-- TypeScript: package-manager monorepo with project references, Node and browser packages, source maps, and a Deno subtree; separate embedded-language fixture for the TypeScript 6 route.
+- TypeScript: package-manager monorepo with project references, Node and browser packages, source maps, and a Deno subtree; separate TypeScript 7+ and pre-7 fixtures proving exactly one semantic client and exact project `tsserver.js` selection.
 
 For each fixture, open a buffer headlessly, wait for attachment, and assert primary client name, executable, canonical root, project-local tool version, negotiated capabilities, and absence of a duplicate. Exercise definition, references, rename, workspace symbol, diagnostics, semantic tokens/inlay hints, code actions, and dependency navigation across module boundaries. Server-specific features—Rust macro expansion/runnables and Java refactors/test discovery—need their own assertions or scripted manual checks.
 
@@ -343,7 +339,7 @@ A final manual pass should confirm discoverability and ergonomics: capability-ga
 
 1. Turn the LSP/DAP capability lists above into an acceptance matrix.
 2. Add root-selection fixtures, including same-basename worktrees and nested builds.
-3. Update the nvim-lspconfig lock to a revision containing `tsc`, and run the existing Neovim regression suite before behavior changes.
+3. Update the nvim-lspconfig lock to a revision containing `tsc`, retain its `ts_ls` compatibility definition, and run the existing Neovim regression suite before behavior changes.
 4. Record baseline startup time, resident memory, indexing time, diagnostic latency, and existing formatter/linter output.
 
 Exit criterion: tests describe roots, ownership, and capability expectations before servers are swapped.
@@ -385,12 +381,14 @@ Exit criterion: Gradle and Maven multi-module fixtures pass, including tests and
 
 ### Phase 5 — TypeScript/JavaScript vertical slice
 
-1. Replace `ts_ls` with project-local TypeScript 7 through `tsc`; remove default Mason typescript-language-server.
-2. Replace `eslint_d`/nvim-lint with ESLint LSP and keep Prettier/Conform formatting.
-3. Register Mason js-debug-adapter directly for Node and browser adapter types.
-4. Add Node/browser/source-map fixtures and a narrowly routed TS6 embedded-language compatibility fixture.
+Implemented 2026-08-23:
 
-Exit criterion: ordinary Node/browser projects run only TypeScript 7, source-mapped breakpoints bind, and the TS6 fallback never attaches concurrently.
+1. Added a mutually exclusive root-local version router: TypeScript 7+ uses native `tsc`; pre-7 uses Mason `typescript-language-server` pointed at the exact project `tsserver.js`; missing, unparseable, unowned, Deno, and incomplete pre-7 roots receive neither.
+2. Retained `eslint_d`/nvim-lint after the packaged ESLint LSP failed the maintenance-evidence gate; kept Prettier/Conform formatting.
+3. Registered Mason js-debug-adapter directly and lazily for public and `pwa-*` Node/Chrome/Edge launch types, normalized public aliases to the standalone server's canonical `pwa-*` types, and added one project-rooted plain-JavaScript `pwa-node` default.
+4. Added focused inventory, root/compiler, native activation, adapter lifecycle, Deno exclusion, and Node/browser launch-provider fixtures. Live-verified `desaidn.dev` TypeScript 5.9.3 on `AppLayout.tsx`, including the server's `user-setting` version source. Real source-map/browser/worker smoke fixtures remain follow-up verification.
+
+Exit criterion: every recognized non-Deno project runs exactly one project-owned TypeScript route for its installed major, and source-mapped breakpoints bind.
 
 ### Phase 6 — Kotlin pilot and best-attainable slice
 
@@ -420,7 +418,7 @@ Exit criterion: Fish and Bash/POSIX scripts have their stated LSP/format/diagnos
 ## Risks and tradeoffs
 
 - **Kotlin maturity:** Official Kotlin LSP is alpha, JVM-first, partially closed source, large, and rapidly moving. Android remains experimental, KMP unsupported, and DAP undocumented/attach-only. This is an upstream capability ceiling, not a configuration bug.
-- **TypeScript transition:** TypeScript 7 is newly stable and has no 7.0 API. Ordinary projects benefit from its native LSP, but embedded languages and language-service plugins require a TypeScript 6 route until the ecosystem migrates. The current nvim-lspconfig lock predates `tsc` and must move first.
+- **TypeScript transition:** TypeScript 7 is newly stable and has no 7.0 API. Version 7+ projects use its native LSP; pre-7 projects use `ts_ls` only against their root-local `tsserver.js`. The nvim-lspconfig lock supplies both configurations, while local policy makes them mutually exclusive and forbids global/CWD/bundled semantic fallbacks.
 - **basedpyright provenance:** It maximizes generic-client capability but is a community fork. Pin/observe it, retain a documented Pyright rollback, and validate behavior against real projects.
 - **Extension maintenance:** rustaceanvim and nvim-jdtls add plugin surface, but they are narrowly justified by non-standard server functionality and target/test/debug discovery. Avoid comparable wrappers where native nvim-dap is enough.
 - **Moving Mason artifacts:** Current named installs float. A clean install can receive a newer server than an existing machine. Health output, fixture tests, the Neovim plugin lock, and deliberate registry updates are necessary; raw artifact paths must not be copied into config.
@@ -434,6 +432,6 @@ Exit criterion: Fish and Bash/POSIX scripts have their stated LSP/format/diagnos
 
 ## Final assessment
 
-High-fidelity LSP plus DAP is achievable now for Rust, Java, Python, and ordinary Node/browser TypeScript/JavaScript without abandoning this repository's native-first design. The largest architectural work is project context and debug routing, not UI. TypeScript 7's first-party native LSP is the most important current-source change: retaining `ts_ls` as the default would build the new system around a compatibility path that is already legacy.
+High-fidelity LSP plus DAP is achievable now for Rust, Java, Python, and ordinary Node/browser TypeScript/JavaScript without abandoning this repository's native-first design. The largest architectural work is project context and debug routing, not UI. TypeScript 7's first-party native LSP remains the modern default; retaining `ts_ls` as a narrowly version-routed transport preserves real pre-7 projects without making that compatibility path the global default.
 
 Kotlin LSP can reach a useful, high-fidelity JVM editing experience, but “full Kotlin DAP” cannot honestly be promised on 2026-08-13. Treat the official JetBrains adapter as a bounded pilot and the old packaged adapter as a degraded fallback, with KMP/Native and stable Android support explicitly outside the achieved state. That transparent boundary is preferable to installing more overlapping tools and calling the gap solved.
