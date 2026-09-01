@@ -108,6 +108,6 @@ run its Python tests, Ruff, basedpyright, and offline lock verification.
 - [`install.sh`](../../install.sh)
 - [`uninstall.sh`](../../uninstall.sh)
 - [`tests/install_test.sh`](../../tests/install_test.sh)
-- [`devflow/pyproject.toml`](../../devflow/pyproject.toml)
-- [`devflow/uv.lock`](../../devflow/uv.lock)
+- [`tools/devflow/pyproject.toml`](../../tools/devflow/pyproject.toml)
+- [`tools/devflow/uv.lock`](../../tools/devflow/uv.lock)
 - [`AGENTS.md`](../../AGENTS.md) — Install and Uninstall Contracts

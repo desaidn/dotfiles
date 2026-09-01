@@ -29,7 +29,7 @@ A focused place for inspecting complete changesets before deciding what to keep,
 _Avoid_: Diff viewer, pager
 
 **WIP Branch**:
-The development history for one feature. Coding agents extend it only with append-only commits; human Git remains unrestricted, and landing never rewrites or deletes it.
+The append-only development history for one feature, named `wip/<feature>`. Devflow creates it from the Invoking Checkout's current commit or resumes it without rewriting it.
 _Avoid_: Feature branch, topic branch, mutable work branch
 
 **WIP Guard**:
@@ -37,59 +37,95 @@ The agent-only rule that WIP changes append history. Harness guidance constrains
 _Avoid_: Repository hook, global Git policy, security boundary
 
 **Work Flow**:
-The coding-agent branch lifecycle that creates and extends a WIP Branch. It can supply a Change Set to the Review Flow but is not required by it.
+The part of devflow that creates or resumes a WIP Branch and carries locally authored work into Review Flow.
 _Avoid_: WIP workflow, development flow, review workflow
 
 **Workflow Engine**:
-The Python 3.14 application that validates and performs Work Flow, Review Flow, and Squash Landing transitions. It is managed with `uv`, models decisions with typed immutable data and pure functions, and keeps Git and user-interface effects at its outer boundary.
+The `devflow` Agent Tool that orchestrates Work Flow, Review Flow, and Squash Landing while accepting project-specific choices as explicit inputs.
 _Avoid_: Shell script, agent prompt, Git wrapper
 
-**Main Merge**:
-An ordinary merge of `main` into a WIP Branch. It records when concurrent mainline changes entered the feature without rewriting its history.
-_Avoid_: Rebase, branch refresh, sync commit
+**Agent Tool**:
+A small independently named utility that agent instructions, skills, scripts, people, and other tools can invoke directly.
+_Avoid_: Plugin, workflow framework, generic subcommand
+
+**Tool Workspace**:
+The repository's `tools/` directory, which organizes independent Agent Tools such as `tools/devflow/`. It is a source layout rather than an umbrella command, plugin registry, or shared framework.
+_Avoid_: Tools CLI, plugin directory, application framework
+
+**Project Workflow**:
+The team-specific process composed around devflow, including checkout or worktree preparation, branch conventions, publishing, team review, queues, and onward delivery.
+_Avoid_: Devflow plugin, built-in team workflow, hard-coded convention
+
+**Composition Surface**:
+The small command-line and JSON interface through which a Project Workflow supplies explicit choices and consumes validated results. Devflow has no plugin, callback, hook, or project-configuration layer.
+_Avoid_: Plugin API, workflow hooks, embedded team configuration
+
+**Target Merge**:
+An append-only merge of Landing Target changes into WIP when integration requires feature changes before landing. The resulting WIP must be reviewed again.
+_Avoid_: Rebase, landing-time conflict resolution, hidden integration fix
 
 **Change Set**:
-An immutable unit of code change presented for review, identified by its base and resulting revision. It may originate from a WIP Branch or from externally authored code.
+An immutable unit of code change identified by an explicit Review Base and source revision. It may originate from a WIP Branch or from externally authored code.
 _Avoid_: Diff, branch, working tree
 
+**External Change Set**:
+A Change Set authored outside the local Work Flow and reviewed without creating or mutating a WIP Branch. It uses the same Review Flow but cannot use Squash Landing.
+_Avoid_: External workflow, adopted WIP, landable review
+
+**Review Base**:
+The exact revision explicitly chosen as the comparison point for a Review Snapshot.
+_Avoid_: Inferred mainline, default branch, landing destination
+
 **Review Flow**:
-A read-only workflow that presents a Change Set through the Review Surface and coordinates human review with the Agent Review Loop. It does not require or mutate a WIP Branch.
+A source-read-only workflow that presents either WIP or an External Change Set through the same Herdr, Neovim, Hunk, and Agent Review Loop.
 _Avoid_: WIP workflow, development workflow, landing flow
 
 **Review Snapshot**:
-The exact Change Set presented through the Review Surface. For locally developed features, it is taken only after WIP incorporates current `main`; for external code, it preserves the supplied change identity without creating WIP history.
+The exact Change Set presented through the Review Surface, including its Review Base, source revision, and resulting tree. A local snapshot names the exact WIP head; an external snapshot remains review-only.
 _Avoid_: Review copy, synthetic squash, review commit
 
+**Review Record**:
+The durable immutable evidence for one successfully opened Review Snapshot, identified by its review ID.
+_Avoid_: Approval record, mutable review state, workflow log
+
 **Invoking Checkout**:
-The Git checkout containing the directory from which the Workflow Engine is invoked. It may be the repository's primary checkout or a user-created worktree, and it remains the sole project context for that invocation.
+The project directory from which devflow is invoked, whether it is the primary checkout or a worktree.
 _Avoid_: Canonical checkout, managed checkout, repository checkout
 
 **In-place Checkout**:
-The invariant that Work Flow and Review Flow use only the Invoking Checkout and leave all worktree topology under user control. It does not imply that the repository has only one worktree.
+The invariant that devflow operates in its Invoking Checkout and leaves worktree topology to the Project Workflow.
 _Avoid_: Checkout mode, no-worktree repository, automatic checkout
 
 **Review Branch**:
-A `review/*` ref that exposes a Review Snapshot without being checked out by the Workflow Engine. Coding agents treat it as read-only outside Review Flow; human Git remains unrestricted, and agent development changes never originate there.
+A `review/<name>` branch that points to the exact source revision in a Review Snapshot. For local work it matches WIP; for an External Change Set it cannot land.
 _Avoid_: Staging branch, second WIP branch, review copy
 
 **Review Approval**:
-Explicit authorization that the latest Review Snapshot represents the complete feature and may land. A newer WIP revision invalidates it; movement on the Mainline Branch does not unless integration requires new WIP commits.
-_Avoid_: Base approval, branch approval, blanket approval
+The user's explicit authorization that one exact local WIP Review Snapshot represents the complete feature and may land. It becomes stale when WIP or its Review Branch changes.
+_Avoid_: Base approval, branch approval, blanket approval, teammate approval
 
 **Mainline Branch**:
-The shared integration history explicitly selected as `main`, `mainline`, or `master`. Coding agents advance it only through a Squash Landing of the latest reviewed and approved complete feature; human Git remains unrestricted.
-_Avoid_: Base branch, development branch, direct-commit branch
+The project's normal shared integration history, commonly named `main`, `mainline`, or `master`. It is one possible Landing Target rather than the only branch devflow may land onto.
+_Avoid_: Base branch, development branch, mandatory landing branch
+
+**Landing Target**:
+The existing local branch explicitly chosen to receive an approved Review Snapshot. It may use any project convention except the reserved `wip/*` and `review/*` roles.
+_Avoid_: Destination Branch, inferred target, managed target
+
+**Landing Title**:
+The complete-feature commit subject the agent derives from the feature name and the WIP changes, following project commit rules.
+_Avoid_: Last WIP subject, user-supplied boilerplate, generated prefix
 
 **Landing Candidate**:
-The prospective result of applying an approved Review Snapshot to the current Mainline Branch as one logical feature change. It is validated before the Mainline Branch advances.
+The prospective result of applying an approved Review Snapshot to its Landing Target as one feature change.
 _Avoid_: Merge result, squash branch, release candidate
 
 **Squash Landing**:
-The single-commit integration of the latest reviewed and approved complete feature into an explicitly selected Mainline Branch. It leaves the WIP Branch unchanged.
+The single-commit integration of one exact reviewed and approved local feature from its Review Branch into an explicit Landing Target. It leaves WIP and review intact; publishing, cleanup, and onward delivery remain in the Project Workflow.
 _Avoid_: Merge commit, partial landing, direct mainline commit
 
 **Workflow Exception**:
-Any coding-agent branch or worktree action outside the Work Flow, Review Flow, and Squash Landing contract. It requires explicit user approval before execution and never classifies the user's own Git or LazyGit actions.
+Any coding-agent branch or worktree action that is neither part of the common devflow contract nor authorized by direct user or project instructions. It requires explicit user approval before execution and never classifies the user's own Git or LazyGit actions.
 _Avoid_: Edge case, implicit permission, automatic recovery
 
 **Diffing Solution**:

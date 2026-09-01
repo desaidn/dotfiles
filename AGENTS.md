@@ -22,6 +22,7 @@ This is a personal dotfiles monorepo. It contains configurations for the tools b
 - **LazyGit** (`lazygit/config.yml`) - Git Transaction Surface with nvim
   integration, Hunk as its Diffing Solution, native staging, and a custom theme
 - **Hunk** (`hunk/config.toml`) - Full stacked working-tree and staged review surface from Neovim; only durable preferences are tracked
+- **Devflow** (`tools/devflow/`) - Small command-line tool for the common agent WIP, review, and squash-landing flow
 
 ### Dependency ownership
 
@@ -116,15 +117,15 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 - These rules govern coding-agent actions only. Human Git and LazyGit operations
   are unrestricted and remain the user's transaction surface; agents must not
   block, intercept, or reinterpret them as Workflow Exceptions.
-- Run `devflow` from the checkout where the work should remain. This may be the primary checkout or a user-created worktree; the Workflow Engine never creates, adopts, moves, repairs, prunes, locks, unlocks, or removes a worktree.
-- Start locally authored features with `devflow start <feature>` from a clean invoking checkout. It creates `wip/<feature>` exactly at current mainline or selects the existing branch without rewriting it. Development commits must only append history. Incorporate mainline changes with an ordinary merge, never by rebasing WIP. If the branch is checked out elsewhere, stop instead of moving or changing that checkout.
-- Treat every agent-initiated Git worktree lifecycle action as a Workflow Exception requiring explicit user approval. Devflow does not perform one even after approval; the user owns worktree topology.
-- Devflow installs no repository hooks and reserves no ref or checkout against human activity. It validates the state visible to each `start`, `review`, or `land` invocation and fails when that state is stale or incompatible, but a concurrent human Git operation can race any preflight. Coordinate shared-checkout activity rather than assuming serialization.
-- Start local review with `devflow --json review` from a clean checkout on the matching WIP head. For externally authored code, provide the complete source, base, and review-name triple; the explicit form is always external and requires the clean invoking checkout to be exactly at the resolved source. Do not create WIP history for review-only work.
-- Keep the invoking checkout quiescent while its review is open: do not change `HEAD`, the index, or working-tree files. Hunk and Editor Handoff stay rooted there so `e` opens in the review tab's Neovim with normal project-root discovery and full language tooling, using that checkout's dependencies, generated artifacts, and build context. For local work, address feedback with append-only WIP commits; for external code, review a newly supplied source. Either way, any checkout change requires a fresh Review Snapshot.
-- During review, inspect the same immutable Hunk session as the user and add actionable findings through Hunk's session comment commands.
-- Treat approval as explicit and Review Snapshot-specific. Land only with `devflow land <feature> --target <main|mainline|master>`, the exact review identifier, and a complete imperative feature title; devflow never infers the target branch.
-- Any agent action outside the documented flow in `docs/agents/development-workflow.md` is a Workflow Exception and requires explicit user approval.
+- Follow the user's request and project instructions to choose or prepare the checkout, including any worktree. Devflow operates only where invoked and never manages worktrees. If neither source authorizes a needed branch or worktree action outside the common flow, ask first.
+- Start local work with `devflow start <feature>` from a clean checkout at the commit where work should begin. It creates `wip/<feature>` at the current commit or selects the existing branch without rewriting it. If that branch is checked out elsewhere, use that checkout instead of moving it.
+- Keep agent-authored WIP append-only. Ordinary commits and ordinary merges into WIP are allowed; never amend, rebase, reset, delete, or force-update WIP.
+- Review local WIP from its clean checkout with `devflow --json review --base <branch-or-commit>`. Devflow uses the current commit as the source and infers the name from `wip/<feature>`. Review someone else's current checked-out commit through the same Herdr, Neovim, and Hunk path by also passing `--name <review-name>`; this creates no WIP and cannot land.
+- Keep the checkout unchanged while review is open so Hunk's `e` action returns to the review tab's Neovim with normal project-root discovery and full language tooling. Inspect the exact returned Hunk session and add every actionable finding there before asking for the user's decision. After approval, the review tab may close and its checkout may be reused.
+- Apply feedback as new WIP commits and open a fresh review. Any WIP or Review Branch change makes an older approval stale. A review does not imply approval.
+- After the user explicitly approves the exact current local review, ask which existing local branch should receive it. From a clean checkout already on that target, run `devflow land <feature> --target <branch> --approved <review-id> --title <complete-feature-title>`. Derive the title from the feature name and complete WIP history; do not ask the user for it.
+- A landing target may use any project convention except `wip/*` or `review/*`, must contain the Review Base, and receives one squash commit. Devflow leaves WIP and review records intact and never creates targets, pushes, runs team-specific review tools, performs onward delivery, or cleans up successful work.
+- Devflow installs no repository hooks and reserves no ref or checkout against human activity. Coordinate shared-checkout activity and rerun validation after a concurrent human Git operation.
 
 ### Agent Harnesses
 
@@ -137,7 +138,8 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 
 ### File Organization
 
-- Each tool maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked
+- Each configured application maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked
+- `tools/` is the source workspace for small, independently named agent-facing utilities. It is not an umbrella command, plugin system, or shared framework; see `tools/README.md`.
 - Individual tools may have their own AGENTS.md files (e.g., `herdr/AGENTS.md`, `nvim/AGENTS.md`, `tmux/AGENTS.md`)
 - Long-lived architecture review reports that the user chooses to retain live under `docs/`; generated reports should not remain at the repository root
 - Configurations are environment-specific and not intended for multi-user scenarios

@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: amended by ADR-0013
 ---
 
 # Keep human Git outside the agent workflow

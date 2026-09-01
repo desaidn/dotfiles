@@ -1,1 +1,0 @@
-"""Deterministic development workflow rails."""

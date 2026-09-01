@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "dotfiles-devflow"
 version = "0.1.0"
-description = "Deterministic Git Work Flow and Review Flow rails"
+description = "Small CLI for agent WIP, review, and squash-landing workflows"
 requires-python = ">=3.14,<3.15"
 dependencies = []
 

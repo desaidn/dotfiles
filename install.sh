@@ -68,7 +68,7 @@ HOME_DIRECTORY="$(cd -P -- "$HOME" 2>/dev/null && pwd -P)" ||
     die "HOME must not resolve to the filesystem root"
 (( EUID != 0 )) || die "do not run this installer as root; run it as the user whose dotfiles are being installed"
 LOCAL_DIR="$HOME/.local/share/dotfiles"
-DEVFLOW_SOURCE="$REPO_ROOT/devflow"
+DEVFLOW_SOURCE="$REPO_ROOT/tools/devflow"
 DEVFLOW_DISTRIBUTION="dotfiles-devflow"
 DEVFLOW_TOOL_DIR="$LOCAL_DIR/uv-tools"
 DEVFLOW_TOOL_ENV="$DEVFLOW_TOOL_DIR/$DEVFLOW_DISTRIBUTION"
@@ -746,6 +746,7 @@ write_devflow_receipt() {
     local marker="$1" python_path="$2"
     local receipt_temporary="$DEVFLOW_RECEIPT.tmp.$$"
 
+    mkdir -p "$LOCAL_DIR"
     [[ ! -e "$receipt_temporary" && ! -L "$receipt_temporary" ]] ||
         die "temporary Workflow Engine receipt already exists: $receipt_temporary"
     (
@@ -862,10 +863,10 @@ preflight_links() {
 
     file_sources=(
         Brewfile
-        devflow/pyproject.toml
-        devflow/src/devflow/__init__.py
-        devflow/src/devflow/guidance.md
-        devflow/uv.lock
+        tools/devflow/pyproject.toml
+        tools/devflow/src/devflow/__init__.py
+        tools/devflow/src/devflow/guidance.md
+        tools/devflow/uv.lock
         herdr/config.toml
         hunk/config.toml
         mise/conf.d/00-dotfiles.toml
@@ -874,8 +875,8 @@ preflight_links() {
         templates/local.zsh
     )
     package_directories=(
-        devflow
-        devflow/src/devflow
+        tools/devflow
+        tools/devflow/src/devflow
     )
 
     for source in "${directory_sources[@]}"; do

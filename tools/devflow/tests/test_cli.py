@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -178,6 +177,16 @@ class RepoCase(unittest.TestCase):
         }, log
 
 class StartTests(RepoCase):
+    def test_start_creates_wip_at_current_head_without_a_conventional_mainline(self) -> None:
+        git(self.repo, "branch", "-m", "trunk")
+        start_oid = git(self.repo, "rev-parse", "HEAD")
+
+        started = self.devflow("--json", "start", "from-current")
+
+        self.assertEqual(started.returncode, 0, started.stderr)
+        self.assertEqual(git(self.repo, "branch", "--show-current"), "wip/from-current")
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), start_oid)
+
     def test_repository_state_directory_symlink_fails_without_external_writes(self) -> None:
         common = Path(git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
         external = self.root / "external-state"
@@ -275,7 +284,7 @@ class ReviewTests(RepoCase):
         tree = git(self.repo, "rev-parse", "HEAD^{tree}")
         review_env, log = self.fake_review_tools()
 
-        reviewed = self.devflow("--json", "review", env=review_env)
+        reviewed = self.devflow("--json", "review", "--base", "main", env=review_env)
 
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         payload = json_output(reviewed)
@@ -325,23 +334,14 @@ class ReviewTests(RepoCase):
         git(self.repo, "add", "external.txt")
         git(self.repo, "commit", "-m", "External change")
         head = git(self.repo, "rev-parse", "HEAD")
-        git(self.repo, "switch", "main")
         review_env, _ = self.fake_review_tools()
 
-        incomplete = self.devflow("--json", "review", "--source", "contributor", env=review_env)
+        incomplete = self.devflow("--json", "review", "--base", "main", env=review_env)
         self.assertEqual(incomplete.returncode, 2)
-        self.assertEqual(json_output(incomplete)["error"]["code"], "external_change_set_incomplete")
+        self.assertEqual(json_output(incomplete)["error"]["code"], "external_review_name_required")
 
-        mismatched = self.devflow(
-            "--json", "review", "--source", "contributor", "--base", base, "--name", "upstream", env=review_env
-        )
-        self.assertEqual(mismatched.returncode, 2)
-        self.assertEqual(json_output(mismatched)["error"]["code"], "review_source_checkout_mismatch")
-        self.assertFalse(Path(review_env["FAKE_REVIEW_STARTED"]).exists())
-
-        git(self.repo, "switch", "--detach", head)
         reviewed = self.devflow(
-            "--json", "review", "--source", "contributor", "--base", base, "--name", "upstream", env=review_env
+            "--json", "review", "--base", "main", "--name", "upstream", env=review_env
         )
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         payload = json_output(reviewed)
@@ -351,7 +351,7 @@ class ReviewTests(RepoCase):
         self.assertEqual(Path(payload["checkout"]), self.repo.resolve())
         self.assertEqual(git(self.repo, "rev-parse", "review/upstream"), head)
 
-    def test_complete_explicit_triple_is_external_even_when_source_is_named_wip(self) -> None:
+    def test_explicit_name_marks_a_checked_out_wip_branch_as_external(self) -> None:
         base = git(self.repo, "rev-parse", "main")
         git(self.repo, "switch", "-c", "wip/upstream")
         (self.repo / "external.txt").write_text("external\n")
@@ -363,8 +363,6 @@ class ReviewTests(RepoCase):
         reviewed = self.devflow(
             "--json",
             "review",
-            "--source",
-            "wip/upstream",
             "--base",
             base,
             "--name",
@@ -388,23 +386,20 @@ class ReviewTests(RepoCase):
         (self.repo / "sibling.txt").write_text("sibling\n")
         git(self.repo, "add", "sibling.txt")
         git(self.repo, "commit", "-m", "Sibling")
-        sibling = git(self.repo, "rev-parse", "HEAD")
         review_env, _ = self.fake_review_tools()
 
         refused = self.devflow(
             "--json",
             "review",
-            "--source",
-            "source",
             "--base",
-            sibling,
+            "source",
             "--name",
             "diverged",
             env=review_env,
         )
 
         self.assertEqual(refused.returncode, 2)
-        self.assertEqual(json_output(refused)["error"]["code"], "external_base_not_ancestor")
+        self.assertEqual(json_output(refused)["error"]["code"], "review_base_not_ancestor")
         self.assertFalse((self.root / "review-started").exists())
 
     def test_failed_ui_keeps_snapshot_ref_closes_created_tab_and_writes_no_review_record(self) -> None:
@@ -412,14 +407,16 @@ class ReviewTests(RepoCase):
         (self.repo / "feature.txt").write_text("review me\n")
         git(self.repo, "add", "feature.txt")
         git(self.repo, "commit", "-m", "Review me")
-        head = git(self.repo, "rev-parse", "HEAD")
         review_env, log = self.fake_review_tools()
 
-        failed = self.devflow("--json", "review", env=review_env | {"FAKE_PANE_FAIL": "1"})
+        failed = self.devflow(
+            "--json", "review", "--base", "main", env=review_env | {"FAKE_PANE_FAIL": "1"}
+        )
 
         self.assertEqual(failed.returncode, 2)
         self.assertEqual(json_output(failed)["error"]["code"], "herdr_pane_run_failed")
-        self.assertEqual(git(self.repo, "rev-parse", "review/failed-ui"), head)
+        missing = run(["git", "rev-parse", "--verify", "review/failed-ui"], cwd=self.repo, env=self.env)
+        self.assertNotEqual(missing.returncode, 0)
         calls = [json.loads(line) for line in log.read_text().splitlines()]
         closes = [call for call in calls if call["tool"] == "herdr" and call["argv"][:2] == ["tab", "close"]]
         self.assertEqual([call["argv"] for call in closes], [["tab", "close", "w1:t9"]])
@@ -437,6 +434,8 @@ class ReviewTests(RepoCase):
         failed = self.devflow(
             "--json",
             "review",
+            "--base",
+            "main",
             env=review_env | {"FAKE_PANE_FAIL": "1", "FAKE_CLOSE_FAIL": "1"},
         )
 
@@ -459,7 +458,9 @@ class ReviewTests(RepoCase):
         for variable in ("DEVFLOW_HUNK_TIMEOUT", "DEVFLOW_HUNK_POLL_INTERVAL"):
             for value in ("inf", "-inf", "nan"):
                 with self.subTest(variable=variable, value=value):
-                    failed = self.devflow("--json", "review", env=review_env | {variable: value})
+                    failed = self.devflow(
+                        "--json", "review", "--base", "main", env=review_env | {variable: value}
+                    )
 
                     self.assertEqual(failed.returncode, 2)
                     self.assertEqual(json_output(failed)["error"]["code"], "hunk_poll_settings_invalid")
@@ -484,6 +485,8 @@ class ReviewTests(RepoCase):
         failed = self.devflow(
             "--json",
             "review",
+            "--base",
+            "main",
             env=review_env
             | {
                 "FAKE_REVIEW_STATE_PATH": str(common / "devflow" / "reviews"),
@@ -497,6 +500,8 @@ class ReviewTests(RepoCase):
         closes = [call for call in calls if call["tool"] == "herdr" and call["argv"][:2] == ["tab", "close"]]
         self.assertEqual([call["argv"] for call in closes], [["tab", "close", "w1:t9"]])
         self.assertEqual(list(external.iterdir()), [])
+        missing = run(["git", "rev-parse", "--verify", "review/record-failure"], cwd=self.repo, env=self.env)
+        self.assertNotEqual(missing.returncode, 0)
 
     def test_nonempty_pane_success_response_closes_only_created_tab(self) -> None:
         self.assertEqual(self.devflow("start", "invalid-ui").returncode, 0)
@@ -505,7 +510,9 @@ class ReviewTests(RepoCase):
         git(self.repo, "commit", "-m", "Review me")
         review_env, log = self.fake_review_tools()
 
-        failed = self.devflow("--json", "review", env=review_env | {"FAKE_PANE_OUTPUT": "unexpected"})
+        failed = self.devflow(
+            "--json", "review", "--base", "main", env=review_env | {"FAKE_PANE_OUTPUT": "unexpected"}
+        )
 
         self.assertEqual(failed.returncode, 2)
         self.assertEqual(json_output(failed)["error"]["code"], "herdr_invalid_response")
@@ -525,12 +532,15 @@ class ReviewTests(RepoCase):
         failed = self.devflow(
             "--json",
             "review",
+            "--base",
+            "main",
             env=review_env | {"FAKE_SESSION_TITLE": f"unrelated {base}...{head}"},
         )
 
         self.assertEqual(failed.returncode, 2)
         self.assertEqual(json_output(failed)["error"]["code"], "hunk_session_mismatch")
-        self.assertEqual(git(self.repo, "rev-parse", "review/wrong-session"), head)
+        missing = run(["git", "rev-parse", "--verify", "review/wrong-session"], cwd=self.repo, env=self.env)
+        self.assertNotEqual(missing.returncode, 0)
         calls = [json.loads(line) for line in log.read_text().splitlines()]
         closes = [call for call in calls if call["tool"] == "herdr" and call["argv"][:2] == ["tab", "close"]]
         self.assertEqual([call["argv"] for call in closes], [["tab", "close", "w1:t9"]])
@@ -542,7 +552,9 @@ class ReviewTests(RepoCase):
         git(self.repo, "commit", "-m", "Review exact aggregate")
         review_env, log = self.fake_review_tools()
 
-        failed = self.devflow("--json", "review", env=review_env | {"FAKE_SESSION_MALFORMED": "1"})
+        failed = self.devflow(
+            "--json", "review", "--base", "main", env=review_env | {"FAKE_SESSION_MALFORMED": "1"}
+        )
 
         self.assertEqual(failed.returncode, 2)
         self.assertEqual(json_output(failed)["error"]["code"], "hunk_invalid_response")
@@ -557,7 +569,9 @@ class ReviewTests(RepoCase):
         git(self.repo, "commit", "-m", "Review exact aggregate")
         review_env, log = self.fake_review_tools()
 
-        failed = self.devflow("--json", "review", env=review_env | {"FAKE_HUNK_QUERY_ERROR": "1"})
+        failed = self.devflow(
+            "--json", "review", "--base", "main", env=review_env | {"FAKE_HUNK_QUERY_ERROR": "1"}
+        )
 
         self.assertEqual(failed.returncode, 2)
         self.assertEqual(json_output(failed)["error"]["code"], "hunk_session_query_failed")
@@ -573,7 +587,13 @@ class ReviewTests(RepoCase):
         git(self.repo, "commit", "-m", "Review exact aggregate")
         review_env, _ = self.fake_review_tools()
 
-        reviewed = self.devflow("--json", "review", env=review_env | {"FAKE_SESSION_ID": "concurrent-exact-session"})
+        reviewed = self.devflow(
+            "--json",
+            "review",
+            "--base",
+            "main",
+            env=review_env | {"FAKE_SESSION_ID": "concurrent-exact-session"},
+        )
 
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         self.assertEqual(json_output(reviewed)["session_id"], "concurrent-exact-session")
@@ -585,7 +605,7 @@ class ReviewTests(RepoCase):
         git(self.repo, "commit", "-m", "Review me")
         review_env, _ = self.fake_review_tools()
         process_env = os.environ.copy() | self.env | review_env | {"FAKE_PANE_DELAY": "0.3"}
-        argv = [str(DEVFLOW), "--json", "review"]
+        argv = [str(DEVFLOW), "--json", "review", "--base", "main"]
 
         first = subprocess.Popen(
             argv, cwd=self.repo, env=process_env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
@@ -611,7 +631,7 @@ class ReviewTests(RepoCase):
         head = git(self.repo, "rev-parse", "HEAD")
         review_env, _ = self.fake_review_tools()
 
-        reviewed = self.devflow("--json", "review", env=review_env)
+        reviewed = self.devflow("--json", "review", "--base", "main", env=review_env)
 
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         checkout = Path(json_output(reviewed)["checkout"])
@@ -630,13 +650,15 @@ class ReviewTests(RepoCase):
         git(self.repo, "commit", "-m", "First version")
         first_head = git(self.repo, "rev-parse", "HEAD")
         review_env, _ = self.fake_review_tools()
-        first = self.devflow("--json", "review", env=review_env)
+        first = self.devflow("--json", "review", "--base", "main", env=review_env)
         self.assertEqual(first.returncode, 0, first.stderr)
         (self.repo / "feature.txt").write_text("second\n")
         git(self.repo, "add", "feature.txt")
         git(self.repo, "commit", "-m", "Second version")
 
-        refused = self.devflow("--json", "review", env=review_env | {"FAKE_SESSION_PREEXISTS": "1"})
+        refused = self.devflow(
+            "--json", "review", "--base", "main", env=review_env | {"FAKE_SESSION_PREEXISTS": "1"}
+        )
 
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(json_output(refused)["error"]["code"], "hunk_session_exists")
@@ -659,7 +681,7 @@ class ReviewTests(RepoCase):
         git(self.repo, "commit", "-m", "Feature version")
         review_env, _ = self.fake_review_tools()
 
-        refused = self.devflow("--json", "review", env=review_env)
+        refused = self.devflow("--json", "review", "--base", "main", env=review_env)
 
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(json_output(refused)["error"]["code"], "review_checkout_conflict")
@@ -680,7 +702,7 @@ class ReviewTests(RepoCase):
         git(self.repo, "worktree", "add", str(user_review), "review/exact-review")
         review_env, _ = self.fake_review_tools()
 
-        reviewed = self.devflow("--json", "review", env=review_env)
+        reviewed = self.devflow("--json", "review", "--base", "main", env=review_env)
 
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         self.assertEqual(json_output(reviewed)["change_set"]["head_oid"], head)
@@ -693,7 +715,7 @@ class ReviewTests(RepoCase):
         git(self.repo, "commit", "-m", "Plain review")
         review_env, _ = self.fake_review_tools()
 
-        reviewed = self.devflow("review", env=review_env)
+        reviewed = self.devflow("review", "--base", "main", env=review_env)
 
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         review_id = reviewed.stdout.strip()
@@ -701,7 +723,7 @@ class ReviewTests(RepoCase):
         common = Path(git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
         self.assertTrue((common / "devflow" / "reviews" / f"{review_id}.json").is_file())
 
-    def test_wip_must_include_current_main_and_be_clean(self) -> None:
+    def test_review_base_must_be_an_ancestor_and_checkout_clean(self) -> None:
         self.assertEqual(self.devflow("start", "main-merge").returncode, 0)
         (self.repo / "feature.txt").write_text("feature\n")
         git(self.repo, "add", "feature.txt")
@@ -716,17 +738,17 @@ class ReviewTests(RepoCase):
         git(self.repo, "switch", "wip/main-merge")
         review_env, _ = self.fake_review_tools()
 
-        missing_merge = self.devflow("--json", "review", env=review_env)
+        missing_merge = self.devflow("--json", "review", "--base", "main", env=review_env)
         self.assertEqual(missing_merge.returncode, 2)
-        self.assertEqual(json_output(missing_merge)["error"]["code"], "wip_requires_main_merge")
+        self.assertEqual(json_output(missing_merge)["error"]["code"], "review_base_not_ancestor")
 
         git(self.repo, "merge", "--no-edit", "main")
         (self.repo / "untracked.txt").write_text("dirty\n")
-        dirty = self.devflow("--json", "review", env=review_env)
+        dirty = self.devflow("--json", "review", "--base", "main", env=review_env)
         self.assertEqual(dirty.returncode, 2)
         self.assertEqual(json_output(dirty)["error"]["code"], "dirty_checkout")
         (self.repo / "untracked.txt").unlink()
-        reviewed = self.devflow("--json", "review", env=review_env)
+        reviewed = self.devflow("--json", "review", "--base", "main", env=review_env)
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
 
     def test_sha256_repository_uses_full_width_compare_and_swap_oids(self) -> None:
@@ -746,7 +768,7 @@ class ReviewTests(RepoCase):
         git(sha_repo, "commit", "-m", "Wide OIDs")
         review_env, _ = self.fake_review_tools()
 
-        reviewed = self.devflow("--json", "review", cwd=sha_repo, env=review_env)
+        reviewed = self.devflow("--json", "review", "--base", "main", cwd=sha_repo, env=review_env)
 
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         payload = json_output(reviewed)
@@ -766,7 +788,7 @@ class LandingTests(RepoCase):
         git(self.repo, "commit", "-m", "Complete feature")
         head = git(self.repo, "rev-parse", "HEAD")
         review_env, _ = self.fake_review_tools()
-        reviewed = self.devflow("--json", "review", env=review_env)
+        reviewed = self.devflow("--json", "review", "--base", "main", env=review_env)
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         return json_output(reviewed)["review_id"], head, review_env
 
@@ -782,10 +804,145 @@ class LandingTests(RepoCase):
         self.assertIn("--target", missing.stderr)
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
 
+    def test_landing_squashes_the_approved_wip_onto_an_arbitrary_target(self) -> None:
+        review_id, wip_head, _ = self._reviewed_feature()
+        target_before = git(self.repo, "rev-parse", "main")
+        git(self.repo, "switch", "-c", "cr/landing", target_before)
+
+        landed = self.devflow(
+            "--json",
+            "land",
+            "landing",
+            "--target",
+            "cr/landing",
+            "--approved",
+            review_id,
+            "--title",
+            "Land cohesive feature",
+        )
+
+        self.assertEqual(landed.returncode, 0, landed.stderr)
+        payload = json_output(landed)
+        self.assertEqual(payload["target_ref"], "refs/heads/cr/landing")
+        self.assertEqual(git(self.repo, "branch", "--show-current"), "cr/landing")
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), payload["commit_oid"])
+        self.assertEqual(git(self.repo, "show", "-s", "--format=%P", "HEAD"), target_before)
+        self.assertEqual(git(self.repo, "show", "-s", "--format=%s", "HEAD"), "Land cohesive feature")
+        self.assertEqual(git(self.repo, "show", "HEAD:feature.txt"), "feature complete")
+        self.assertEqual(git(self.repo, "rev-parse", "wip/landing"), wip_head)
+        self.assertEqual(git(self.repo, "rev-parse", "review/landing"), wip_head)
+
+    def test_landing_rejects_reserved_workflow_targets(self) -> None:
+        review_id, head, _ = self._reviewed_feature()
+
+        for target in ("wip/landing", "review/landing"):
+            with self.subTest(target=target):
+                refused = self.devflow(
+                    "--json",
+                    "land",
+                    "landing",
+                    "--target",
+                    target,
+                    "--approved",
+                    review_id,
+                    "--title",
+                    "Reject reserved target",
+                )
+
+                self.assertEqual(refused.returncode, 2)
+                self.assertEqual(json_output(refused)["error"]["code"], "reserved_landing_target")
+                self.assertEqual(git(self.repo, "rev-parse", "wip/landing"), head)
+                self.assertEqual(git(self.repo, "rev-parse", "review/landing"), head)
+
+    def test_landing_target_must_contain_the_review_base(self) -> None:
+        review_id, _, _ = self._reviewed_feature()
+        main_before = git(self.repo, "rev-parse", "main")
+        main_tree = git(self.repo, "rev-parse", "main^{tree}")
+        unrelated = run(
+            ["git", "commit-tree", main_tree],
+            cwd=self.repo,
+            env=self.env,
+            stdin="Unrelated target\n",
+        )
+        self.assertEqual(unrelated.returncode, 0, unrelated.stderr)
+        git(self.repo, "switch", "-c", "release/candidate", unrelated.stdout.strip())
+        target_before = git(self.repo, "rev-parse", "HEAD")
+
+        refused = self.devflow(
+            "--json",
+            "land",
+            "landing",
+            "--target",
+            "release/candidate",
+            "--approved",
+            review_id,
+            "--title",
+            "Reject unrelated target",
+        )
+
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(json_output(refused)["error"]["code"], "landing_target_missing_base")
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), target_before)
+        self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
+
+    def test_external_review_cannot_land(self) -> None:
+        git(self.repo, "switch", "-c", "contributor")
+        (self.repo / "external.txt").write_text("external\n")
+        git(self.repo, "add", "external.txt")
+        git(self.repo, "commit", "-m", "External change")
+        review_env, _ = self.fake_review_tools()
+        reviewed = self.devflow(
+            "--json", "review", "--base", "main", "--name", "vendor-change", env=review_env
+        )
+        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
+        git(self.repo, "switch", "main")
+        main_before = git(self.repo, "rev-parse", "main")
+
+        refused = self.devflow(
+            "--json",
+            "land",
+            "vendor-change",
+            "--target",
+            "main",
+            "--approved",
+            json_output(reviewed)["review_id"],
+            "--title",
+            "Reject external review",
+        )
+
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(json_output(refused)["error"]["code"], "approval_mismatch")
+        self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
+
+    def test_noncolliding_ignored_target_state_survives_landing(self) -> None:
+        (self.repo / ".gitignore").write_text("local-only.txt\n")
+        git(self.repo, "add", ".gitignore")
+        git(self.repo, "commit", "-m", "Ignore local target state")
+        review_id, _, _ = self._reviewed_feature()
+        git(self.repo, "switch", "main")
+        local_only = self.repo / "local-only.txt"
+        local_only.write_text("preserve me\n")
+
+        landed = self.devflow(
+            "--json",
+            "land",
+            "landing",
+            "--target",
+            "main",
+            "--approved",
+            review_id,
+            "--title",
+            "Preserve local target state",
+        )
+
+        self.assertEqual(landed.returncode, 0, landed.stderr)
+        self.assertEqual(local_only.read_text(), "preserve me\n")
+
     def test_landing_updates_only_the_explicit_target_when_multiple_mainlines_exist(self) -> None:
         review_id, _, _ = self._reviewed_feature()
         main_before = git(self.repo, "rev-parse", "main")
         git(self.repo, "branch", "mainline", main_before)
+        git(self.repo, "switch", "mainline")
 
         landed = self.devflow(
             "--json",
@@ -800,7 +957,7 @@ class LandingTests(RepoCase):
         )
 
         self.assertEqual(landed.returncode, 0, landed.stderr)
-        self.assertEqual(json_output(landed)["mainline_ref"], "refs/heads/mainline")
+        self.assertEqual(json_output(landed)["target_ref"], "refs/heads/mainline")
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
         self.assertNotEqual(git(self.repo, "rev-parse", "mainline"), main_before)
 
@@ -821,7 +978,7 @@ class LandingTests(RepoCase):
         )
 
         self.assertEqual(refused.returncode, 2)
-        self.assertEqual(json_output(refused)["error"]["code"], "mainline_not_found")
+        self.assertEqual(json_output(refused)["error"]["code"], "landing_target_not_found")
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
 
     def test_landing_applies_approved_snapshot_to_advanced_main_as_one_commit(self) -> None:
@@ -837,6 +994,7 @@ class LandingTests(RepoCase):
         advanced_main = git(concurrent, "rev-parse", "HEAD")
         git(self.repo, "worktree", "remove", str(concurrent))
         git(self.repo, "update-ref", "refs/heads/main", advanced_main, old_main)
+        git(self.repo, "switch", "main")
 
         landed = self.devflow(
             "--json",
@@ -867,6 +1025,7 @@ class LandingTests(RepoCase):
         git(self.repo, "add", "after-review.txt")
         git(self.repo, "commit", "-m", "Change after review")
         main_before = git(self.repo, "rev-parse", "main")
+        git(self.repo, "switch", "main")
 
         refused = self.devflow(
             "--json", "land", "landing", "--target", "main", "--approved", review_id, "--title", "Stale"
@@ -877,8 +1036,9 @@ class LandingTests(RepoCase):
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
         self.assertEqual(git(self.repo, "rev-parse", "review/landing"), reviewed_head)
 
-    def test_dirty_review_checkout_blocks_landing(self) -> None:
+    def test_dirty_target_checkout_blocks_landing(self) -> None:
         review_id, reviewed_head, _ = self._reviewed_feature()
+        git(self.repo, "switch", "main")
         (self.repo / "unreviewed.txt").write_text("not reviewed\n")
         main_before = git(self.repo, "rev-parse", "main")
 
@@ -899,9 +1059,9 @@ class LandingTests(RepoCase):
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
         self.assertEqual(git(self.repo, "rev-parse", "review/landing"), reviewed_head)
 
-    def test_detached_review_checkout_blocks_landing_even_at_the_reviewed_head(self) -> None:
+    def test_detached_checkout_cannot_land_for_a_named_target(self) -> None:
         review_id, reviewed_head, _ = self._reviewed_feature()
-        git(self.repo, "switch", "--detach", reviewed_head)
+        git(self.repo, "switch", "--detach", "main")
         main_before = git(self.repo, "rev-parse", "main")
 
         refused = self.devflow(
@@ -917,54 +1077,17 @@ class LandingTests(RepoCase):
         )
 
         self.assertEqual(refused.returncode, 2)
-        self.assertEqual(json_output(refused)["error"]["code"], "review_checkout_stale")
+        self.assertEqual(json_output(refused)["error"]["code"], "landing_target_checkout_required")
         self.assertEqual(git(self.repo, "branch", "--show-current"), "")
-        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), reviewed_head)
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), main_before)
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
         self.assertEqual(git(self.repo, "rev-parse", "review/landing"), reviewed_head)
 
-    def test_wip_advance_during_atomic_landing_leaves_main_unchanged(self) -> None:
-        review_id, reviewed_head, review_env = self._reviewed_feature()
+    def test_changed_review_ref_stales_approval(self) -> None:
+        review_id, reviewed_head, _ = self._reviewed_feature()
         main_before = git(self.repo, "rev-parse", "main")
-        tree = git(self.repo, "rev-parse", f"{reviewed_head}^{{tree}}")
-        raced_commit = run(
-            ["git", "commit-tree", tree, "-p", reviewed_head],
-            cwd=self.repo,
-            env=self.env,
-            stdin="Advance WIP during landing\n",
-        )
-        self.assertEqual(raced_commit.returncode, 0, raced_commit.stderr)
-        raced_head = raced_commit.stdout.strip()
-
-        real_git = shutil.which("git")
-        self.assertIsNotNone(real_git)
-        git_wrapper = self.root / "fake-bin" / "git"
-        git_wrapper.write_text(
-            textwrap.dedent(
-                f"""\
-                #!{sys.executable}
-                import os, subprocess, sys
-                real = os.environ["DEVFLOW_REAL_GIT"]
-                if sys.argv[1:] == ["update-ref", "--stdin"]:
-                    raced = subprocess.run(
-                        [real, "update-ref", os.environ["DEVFLOW_RACE_REF"], os.environ["DEVFLOW_RACE_NEW"],
-                         os.environ["DEVFLOW_RACE_OLD"]],
-                        cwd=os.getcwd(), env=os.environ.copy(), text=True, capture_output=True, check=False,
-                    )
-                    if raced.returncode != 0:
-                        sys.stderr.write(raced.stderr)
-                        raise SystemExit(raced.returncode)
-                os.execv(real, [real, *sys.argv[1:]])
-                """
-            )
-        )
-        git_wrapper.chmod(0o755)
-        race_env = review_env | {
-            "DEVFLOW_REAL_GIT": str(real_git),
-            "DEVFLOW_RACE_REF": "refs/heads/wip/landing",
-            "DEVFLOW_RACE_OLD": reviewed_head,
-            "DEVFLOW_RACE_NEW": raced_head,
-        }
+        git(self.repo, "update-ref", "refs/heads/review/landing", main_before, reviewed_head)
+        git(self.repo, "switch", "main")
 
         refused = self.devflow(
             "--json",
@@ -975,58 +1098,18 @@ class LandingTests(RepoCase):
             "--approved",
             review_id,
             "--title",
-            "Reject stale atomic landing",
-            env=race_env,
+            "Reject stale review",
         )
 
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(json_output(refused)["error"]["code"], "approval_stale")
-        self.assertEqual(git(self.repo, "rev-parse", "wip/landing"), raced_head)
-        self.assertEqual(git(self.repo, "rev-parse", "review/landing"), reviewed_head)
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
+        self.assertEqual(git(self.repo, "rev-parse", "wip/landing"), reviewed_head)
+        self.assertEqual(git(self.repo, "rev-parse", "review/landing"), main_before)
 
-    def test_target_advance_during_atomic_landing_is_preserved(self) -> None:
-        review_id, reviewed_head, review_env = self._reviewed_feature()
+    def test_landing_requires_the_named_target_checkout(self) -> None:
+        review_id, _, _ = self._reviewed_feature()
         main_before = git(self.repo, "rev-parse", "main")
-        main_tree = git(self.repo, "rev-parse", f"{main_before}^{{tree}}")
-        raced_commit = run(
-            ["git", "commit-tree", main_tree, "-p", main_before],
-            cwd=self.repo,
-            env=self.env,
-            stdin="Advance target during landing\n",
-        )
-        self.assertEqual(raced_commit.returncode, 0, raced_commit.stderr)
-        raced_head = raced_commit.stdout.strip()
-
-        real_git = shutil.which("git")
-        self.assertIsNotNone(real_git)
-        git_wrapper = self.root / "fake-bin" / "git"
-        git_wrapper.write_text(
-            textwrap.dedent(
-                f"""\
-                #!{sys.executable}
-                import os, subprocess, sys
-                real = os.environ["DEVFLOW_REAL_GIT"]
-                if sys.argv[1:] == ["update-ref", "--stdin"]:
-                    raced = subprocess.run(
-                        [real, "update-ref", os.environ["DEVFLOW_RACE_REF"], os.environ["DEVFLOW_RACE_NEW"],
-                         os.environ["DEVFLOW_RACE_OLD"]],
-                        cwd=os.getcwd(), env=os.environ.copy(), text=True, capture_output=True, check=False,
-                    )
-                    if raced.returncode != 0:
-                        sys.stderr.write(raced.stderr)
-                        raise SystemExit(raced.returncode)
-                os.execv(real, [real, *sys.argv[1:]])
-                """
-            )
-        )
-        git_wrapper.chmod(0o755)
-        race_env = review_env | {
-            "DEVFLOW_REAL_GIT": str(real_git),
-            "DEVFLOW_RACE_REF": "refs/heads/main",
-            "DEVFLOW_RACE_OLD": main_before,
-            "DEVFLOW_RACE_NEW": raced_head,
-        }
 
         refused = self.devflow(
             "--json",
@@ -1037,15 +1120,13 @@ class LandingTests(RepoCase):
             "--approved",
             review_id,
             "--title",
-            "Reject concurrent target advance",
-            env=race_env,
+            "Require target checkout",
         )
 
         self.assertEqual(refused.returncode, 2)
-        self.assertEqual(json_output(refused)["error"]["code"], "ref_update_rejected")
-        self.assertEqual(git(self.repo, "rev-parse", "main"), raced_head)
-        self.assertEqual(git(self.repo, "rev-parse", "wip/landing"), reviewed_head)
-        self.assertEqual(git(self.repo, "rev-parse", "review/landing"), reviewed_head)
+        self.assertEqual(json_output(refused)["error"]["code"], "landing_target_checkout_required")
+        self.assertEqual(git(self.repo, "branch", "--show-current"), "wip/landing")
+        self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
 
     def test_landing_refuses_to_disturb_main_checked_out_in_a_user_worktree(self) -> None:
         (self.repo / ".gitignore").write_text("ignored.txt\n")
@@ -1063,7 +1144,7 @@ class LandingTests(RepoCase):
         git(wip, "add", "--force", "ignored.txt")
         git(wip, "commit", "-m", "Add ignored file")
         review_env, _ = self.fake_review_tools()
-        reviewed = self.devflow("--json", "review", cwd=wip, env=review_env)
+        reviewed = self.devflow("--json", "review", "--base", "main", cwd=wip, env=review_env)
         review_id = json_output(reviewed)["review_id"]
 
         main_before = git(self.repo, "rev-parse", "main")
@@ -1079,11 +1160,11 @@ class LandingTests(RepoCase):
             review_id,
             "--title",
             "Align main checkout",
-            cwd=wip,
+            cwd=self.repo,
         )
 
         self.assertEqual(landed.returncode, 2)
-        self.assertEqual(json_output(landed)["error"]["code"], "mainline_checkout_conflict")
+        self.assertEqual(json_output(landed)["error"]["code"], "landing_checkout_conflict")
         self.assertEqual(git(self.repo, "branch", "--show-current"), "main")
         self.assertEqual(git(self.repo, "rev-parse", "HEAD"), head_before)
         self.assertEqual(git(self.repo, "rev-parse", "main"), main_before)
@@ -1095,7 +1176,7 @@ class LandingTests(RepoCase):
         git(self.repo, "add", "README.md")
         git(self.repo, "commit", "-m", "Feature edit")
         review_env, _ = self.fake_review_tools()
-        reviewed = self.devflow("--json", "review", env=review_env)
+        reviewed = self.devflow("--json", "review", "--base", "main", env=review_env)
         review_id = json_output(reviewed)["review_id"]
         old_main = git(self.repo, "rev-parse", "main")
         concurrent = self.root / "conflicting-main"
@@ -1106,6 +1187,7 @@ class LandingTests(RepoCase):
         advanced_main = git(concurrent, "rev-parse", "HEAD")
         git(self.repo, "worktree", "remove", str(concurrent))
         git(self.repo, "update-ref", "refs/heads/main", advanced_main, old_main)
+        git(self.repo, "switch", "main")
 
         refused = self.devflow(
             "--json",
@@ -1125,6 +1207,7 @@ class LandingTests(RepoCase):
 
     def test_same_approval_cannot_land_twice(self) -> None:
         review_id, _, _ = self._reviewed_feature()
+        git(self.repo, "switch", "main")
         first = self.devflow(
             "land", "landing", "--target", "main", "--approved", review_id, "--title", "Land once"
         )
@@ -1169,13 +1252,14 @@ class HarnessTests(unittest.TestCase):
         installed_bytes = target.read_bytes()
         self.assertTrue(installed_bytes.startswith(original))
         self.assertNotIn(b"devflow policy", installed_bytes)
-        self.assertIn(b"operates only in the checkout where it is invoked", installed_bytes)
-        self.assertIn(b"worktree lifecycle action", installed_bytes)
-        self.assertIn(b"devflow --json review", installed_bytes)
+        self.assertIn(b"Devflow operates only in", installed_bytes)
+        self.assertIn(b"never creates, moves, repairs, or removes", installed_bytes)
+        self.assertIn(b"devflow --json review --base", installed_bytes)
         self.assertIn(b"hunk session review <session-id> --include-patch --include-notes --json", installed_bytes)
         self.assertIn(b"hunk session comment add <session-id>", installed_bytes)
-        self.assertIn(b"ordinary `git commit`", installed_bytes)
-        self.assertIn(b"ordinary merge of current mainline into WIP", installed_bytes)
+        self.assertIn(b"ordinary commits and ordinary merges into WIP", installed_bytes)
+        self.assertIn(b"--target <branch>", installed_bytes)
+        self.assertIn(b"squash commit", installed_bytes)
         self.assertEqual(target.stat().st_mode & 0o777, 0o640)
 
         repeated = self.devflow("--json", "harness", "install", "codex")

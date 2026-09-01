@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
 
 from .domain import ChangeSetKind, Failure, Outcome, Success
 
 FEATURE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]*")
-type MainlineName = Literal["main", "mainline", "master"]
-MAINLINE_NAMES: tuple[MainlineName, ...] = ("main", "mainline", "master")
 
 
 def decide_feature_name(value: str) -> Outcome[str]:
@@ -22,7 +19,7 @@ def decide_feature_name(value: str) -> Outcome[str]:
 
 @dataclass(frozen=True, slots=True)
 class StartFacts:
-    main_oid: str
+    head_oid: str
     current_branch: str | None
     existing_oid: str | None
 
@@ -40,25 +37,24 @@ def decide_start(feature: str, facts: StartFacts) -> Outcome[StartPlan]:
         return outcome
     branch = f"wip/{feature}"
     if facts.existing_oid is None:
-        return Success(StartPlan(branch, facts.main_oid, True, True))
+        return Success(StartPlan(branch, facts.head_oid, True, True))
     return Success(StartPlan(branch, None, False, facts.current_branch != branch))
 
 
 @dataclass(frozen=True, slots=True)
 class ReviewRequest:
-    source: str | None
-    base: str | None
+    base: str
     name: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class LocalReview:
     name: str
+    base: str
 
 
 @dataclass(frozen=True, slots=True)
 class ExternalReview:
-    source: str
     base: str
     name: str
 
@@ -67,41 +63,28 @@ type ReviewIntent = LocalReview | ExternalReview
 
 
 def decide_review(current_branch: str | None, request: ReviewRequest) -> Outcome[ReviewIntent]:
-    match request:
-        case ReviewRequest(None, None, None):
-            if current_branch is None or not current_branch.startswith("wip/"):
-                return Failure(
-                    "wip_source_required",
-                    "Run an implicit review from its WIP branch or supply --source, --base, and --name.",
-                )
-            return Success(LocalReview(current_branch.removeprefix("wip/")))
-        case ReviewRequest(str(source), str(base), str(name)):
-            return Success(ExternalReview(source, base, name))
-        case ReviewRequest():
-            return Failure(
-                "external_change_set_incomplete",
-                "External reviews require explicit --source, --base, and --name values.",
-            )
+    if current_branch is not None and current_branch.startswith("wip/") and request.name is None:
+        return Success(LocalReview(current_branch.removeprefix("wip/"), request.base))
+    if request.name is None:
+        return Failure("external_review_name_required", "External reviews require --name.")
+    return Success(ExternalReview(request.base, request.name))
 
 
 @dataclass(frozen=True, slots=True)
 class LandRequest:
     feature: str
-    target: MainlineName
+    target: str
     title: str
 
 
 def decide_land_request(feature: str, target: str, title: str) -> Outcome[LandRequest]:
     if isinstance(outcome := decide_feature_name(feature), Failure):
         return outcome
-    match target:
-        case "main" | "mainline" | "master":
-            mainline = target
-        case _:
-            return Failure("invalid_landing_target", "Landing target must be main, mainline, or master.")
+    if target.startswith(("wip/", "review/")):
+        return Failure("reserved_landing_target", "Landing target cannot be a WIP or review branch.")
     if not title.strip() or "\n" in title or "\r" in title:
         return Failure("invalid_landing_title", "Landing title must be one non-empty line.")
-    return Success(LandRequest(feature, mainline, title))
+    return Success(LandRequest(feature, target, title))
 
 
 @dataclass(frozen=True, slots=True)

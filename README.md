@@ -16,6 +16,7 @@ The setup is designed around one uniform code interface: Herdr is the daily work
 | `mise/conf.d/00-dotfiles.toml` | `~/.config/mise/conf.d/00-dotfiles.toml` | Global runtime defaults; user config can override them. |
 | `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack`.           |
 | `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer with 1-indexed windows and panes.    |
+| `tools/`            | `~/.local/bin/` per tool       | Source workspace for small, independently named agent tools. |
 | `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
 
 Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
@@ -73,7 +74,8 @@ setup explicitly in degraded mode:
 - It installs missing platform prerequisites, Homebrew, the tracked
   [`Brewfile`](Brewfile), and the runtimes in
   [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml), then installs
-  the repository's `dotfiles-devflow` package as an editable `uv` tool.
+  the repository's [`dotfiles-devflow`](tools/devflow/) package as an editable
+  `uv` tool.
 - On macOS, a missing Xcode Command Line Tools install may require completing
   Apple's system dialog and rerunning the script. On Linux, native bootstrap
   packages are supported through `apt-get`, `dnf`, `yum`, and `pacman`.
@@ -140,27 +142,44 @@ These commands manage only their marked guidance blocks. The generic dotfiles
 installer does not create or edit `~/.codex/AGENTS.md` or
 `~/.claude/CLAUDE.md`.
 
-Devflow is in-place only: it operates in the checkout where it is invoked,
-including a worktree the user created, and never performs a worktree lifecycle
-action or chooses another checkout. `devflow start <feature>` selects the
-append-only WIP branch in that checkout. Review requires the same checkout to be
-clean and exactly at the reviewed source, then keeps Herdr, Neovim, Hunk, and
-editor handoff rooted there so `e` opens with normal project-root discovery and
-full language tooling, using the checkout's dependencies, generated files, and
-build context. Any agent-initiated worktree lifecycle action is a separately
-approved Workflow Exception. See
-[`docs/agents/development-workflow.md`](docs/agents/development-workflow.md)
-for the branch, review, approval, and landing contract.
+Devflow is a small command-line tool for one common agent workflow:
 
-Those restrictions apply to coding agents, not to the developer. Human Git and
-LazyGit remain wholly unrestricted. Devflow may refuse one of its own
-transitions when it observes a conflicting checkout or stale ref, but it cannot
-reserve repository state or prevent a human operation after that check; shared
-checkout activity therefore requires ordinary coordination. Landing always
-names its integration branch explicitly:
+```text
+start -> wip/<feature> -> review/<name> -> one squash commit
+```
+
+The user and project instructions choose the checkout or worktree, the explicit
+review base, the landing target, and what happens afterward. Devflow operates
+where it is invoked and never manages worktrees. A new WIP branch starts at the
+checkout's current commit, and agent-authored WIP remains append-only.
+
+Local and external reviews use the current checked-out commit and the same
+Herdr, Neovim, and Hunk path. Pressing `e` in Hunk returns to the review tab's
+Neovim with the checkout's normal project root, dependencies, and full language
+tooling. External review is review-only; locally authored and explicitly
+approved WIP can land as one squash commit on any existing local branch except
+the reserved `wip/*` and `review/*` names.
+
+These restrictions apply to coding agents, not to the developer. Human Git and
+LazyGit remain wholly unrestricted. Devflow never pushes, runs project-specific
+review tools, or performs onward delivery. Its commands and JSON results are
+the composition surface; it has no plugin or project-configuration system. See
+[`docs/agents/development-workflow.md`](docs/agents/development-workflow.md)
+for the full operational contract.
+
+The agent supplies an explicit base for review:
 
 ```bash
-devflow land <feature> --target <main|mainline|master> --approved <review-id> --title "<complete feature title>"
+devflow --json review --base <branch-or-commit>
+devflow --json review --base <branch-or-commit> --name <external-review-name>
+```
+
+After the user approves the exact local review, the agent asks where to land,
+derives a cohesive commit title from the feature and its WIP history, and runs
+the command from a clean checkout already on that target:
+
+```bash
+devflow land <feature> --target <branch> --approved <review-id> --title "<complete feature title>"
 ```
 
 ## Dependency ownership

@@ -48,7 +48,7 @@ HOME_DIRECTORY="$(cd -P -- "$HOME" 2>/dev/null && pwd -P)" ||
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOCAL_DIR="$HOME/.local/share/dotfiles"
-DEVFLOW_SOURCE="$REPO_ROOT/devflow"
+DEVFLOW_SOURCE="$REPO_ROOT/tools/devflow"
 DEVFLOW_DISTRIBUTION="dotfiles-devflow"
 DEVFLOW_TOOL_DIR="$LOCAL_DIR/uv-tools"
 DEVFLOW_TOOL_ENV="$DEVFLOW_TOOL_DIR/$DEVFLOW_DISTRIBUTION"

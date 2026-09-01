@@ -165,49 +165,42 @@ def _current_branch(repository: Repository) -> str | None:
 def build_change_set(
     repository: Repository,
     *,
-    source: str | None,
-    base: str | None,
+    base: str,
     name: str | None,
 ) -> tuple[str, ChangeSet]:
-    decision = decide_review(_current_branch(repository), ReviewRequest(source, base, name))
+    current_branch = _current_branch(repository)
+    decision = decide_review(current_branch, ReviewRequest(base, name))
     match decision:
         case Failure(code, message):
             raise DevflowError(code, message)
         case Success(intent):
             match intent:
-                case LocalReview(wip_name):
+                case LocalReview(wip_name, selected_base):
                     _ = validate_feature(wip_name)
                     selected_source = f"wip/{wip_name}"
                     require_clean(repository.cwd)
                     head_oid = _resolve_commit(repository, "HEAD", "source")
-                    main_name, main_oid = repository.mainline()
-                    ancestry = repository.git("merge-base", "--is-ancestor", main_oid, head_oid, check=False)
-                    if ancestry.returncode != 0:
-                        raise DevflowError(
-                            "wip_requires_main_merge",
-                            f"Merge current {main_name} into {selected_source} before review.",
-                        )
-                    tree_oid = repository.git("rev-parse", f"{head_oid}^{{tree}}").stdout.strip()
-                    return wip_name, ChangeSet(main_oid, head_oid, selected_source, tree_oid, "wip")
-                case ExternalReview(selected_source, selected_base, selected_name):
-                    review_name = validate_feature(selected_name)
                     base_oid = _resolve_commit(repository, selected_base, "base")
-                    head_oid = _resolve_commit(repository, selected_source, "source")
                     ancestry = repository.git("merge-base", "--is-ancestor", base_oid, head_oid, check=False)
                     if ancestry.returncode != 0:
                         raise DevflowError(
-                            "external_base_not_ancestor",
-                            (
-                                "External review base must be an ancestor of head so "
-                                "BASE...HEAD preserves the recorded change set."
-                            ),
+                            "review_base_not_ancestor",
+                            "Review base must be an ancestor of the checked-out head.",
                         )
-                    if _resolve_commit(repository, "HEAD", "checkout HEAD") != head_oid:
-                        raise DevflowError(
-                            "review_source_checkout_mismatch",
-                            "The invoking checkout must already be at the external review source revision.",
-                        )
+                    tree_oid = repository.git("rev-parse", f"{head_oid}^{{tree}}").stdout.strip()
+                    return wip_name, ChangeSet(base_oid, head_oid, selected_source, tree_oid, "wip")
+                case ExternalReview(selected_base, selected_name):
+                    review_name = validate_feature(selected_name)
                     require_clean(repository.cwd)
+                    base_oid = _resolve_commit(repository, selected_base, "base")
+                    head_oid = _resolve_commit(repository, "HEAD", "source")
+                    ancestry = repository.git("merge-base", "--is-ancestor", base_oid, head_oid, check=False)
+                    if ancestry.returncode != 0:
+                        raise DevflowError(
+                            "review_base_not_ancestor",
+                            "Review base must be an ancestor of the checked-out head.",
+                        )
+                    selected_source = current_branch or head_oid
                     tree_oid = repository.git("rev-parse", f"{head_oid}^{{tree}}").stdout.strip()
                     return review_name, ChangeSet(base_oid, head_oid, selected_source, tree_oid, "external")
 
@@ -342,6 +335,22 @@ def _raise_after_tab_cleanup(checkout: Path, tab_id: str, original: DevflowError
     raise original
 
 
+def _restore_review_ref(
+    repository: Repository,
+    review_ref: str,
+    old_oid: str,
+    reviewed_oid: str,
+) -> DevflowError | None:
+    try:
+        if old_oid == repository.zero_oid:
+            repository.delete_ref(review_ref, reviewed_oid)
+        else:
+            repository.update_ref(review_ref, old_oid, reviewed_oid)
+    except DevflowError as error:
+        return error
+    return None
+
+
 def _poll_settings() -> PollSettings:
     try:
         timeout = float(os.environ.get("DEVFLOW_HUNK_TIMEOUT", "10"))
@@ -435,11 +444,10 @@ def _launch_review(
 def review(
     repository: Repository,
     *,
-    source: str | None,
-    base: str | None,
+    base: str,
     name: str | None,
 ) -> ReviewResult:
-    review_name, change_set = build_change_set(repository, source=source, base=base, name=name)
+    review_name, change_set = build_change_set(repository, base=base, name=name)
     poll_settings = _poll_settings()
     workspace = _review_workspace()
     review_ref = f"refs/heads/review/{review_name}"
@@ -457,19 +465,36 @@ def review(
         )
     checkout = repository.cwd
     _ensure_no_hunk_session(checkout)
-    if old_oid != change_set.head_oid:
-        repository.update_ref(review_ref, change_set.head_oid, old_oid)
     tab_id, pane_id, session_id = _launch_review(checkout, review_name, change_set, workspace, poll_settings)
     result = ReviewResult(review_id, review_name, review_ref, change_set, checkout, tab_id, pane_id, session_id)
     record = ReviewRecord(1, review_id, review_name, review_ref, change_set, str(checkout), tab_id, pane_id, session_id)
+    ref_advanced = False
     try:
+        if old_oid != change_set.head_oid:
+            repository.update_ref(review_ref, change_set.head_oid, old_oid)
+            ref_advanced = True
         atomic_write_json(record_path, review_record_json(record))
     except DevflowError as error:
+        if ref_advanced:
+            rollback = _restore_review_ref(repository, review_ref, old_oid, change_set.head_oid)
+            if rollback is not None:
+                error = DevflowError(
+                    error.code,
+                    f"{error.message} Review-ref rollback also failed: {rollback.message}",
+                )
         _raise_after_tab_cleanup(checkout, tab_id, error)
     except OSError as error:
+        failure = DevflowError("review_record_write_failed", f"Could not persist review {review_id}: {error}")
+        if ref_advanced:
+            rollback = _restore_review_ref(repository, review_ref, old_oid, change_set.head_oid)
+            if rollback is not None:
+                failure = DevflowError(
+                    failure.code,
+                    f"{failure.message} Review-ref rollback also failed: {rollback.message}",
+                )
         _raise_after_tab_cleanup(
             checkout,
             tab_id,
-            DevflowError("review_record_write_failed", f"Could not persist review {review_id}: {error}"),
+            failure,
         )
     return result

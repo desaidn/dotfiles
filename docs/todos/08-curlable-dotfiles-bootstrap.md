@@ -14,7 +14,7 @@ The documented quick start requires cloning the repository, changing into the
 checkout, and running `./install.sh`. The installer derives `REPO_ROOT` from
 `BASH_SOURCE[0]`, preflights files and directories throughout that checkout,
 links configuration targets directly to sources below `REPO_ROOT`, and installs
-devflow as an editable package from `REPO_ROOT/devflow`.
+devflow as an editable package from `REPO_ROOT/tools/devflow`.
 
 Piping the current installer directly to Bash cannot satisfy those assumptions:
 a script read from standard input has no usable source-file location, and the

@@ -16,7 +16,6 @@ from .harness import Harness, HarnessAction, HarnessResult, apply_harness
 from .landing import LandingResult, land
 from .review import ReviewResult, change_set_json, review
 from .state import workflow_lock
-from .transitions import MAINLINE_NAMES
 
 
 @final
@@ -24,7 +23,6 @@ class RawArguments(argparse.Namespace):
     as_json: bool
     command: str | None
     feature: str | None
-    source: str | None
     base: str | None
     name: str | None
     target: str | None
@@ -39,7 +37,6 @@ class RawArguments(argparse.Namespace):
         self.as_json = False
         self.command = None
         self.feature = None
-        self.source = None
         self.base = None
         self.name = None
         self.target = None
@@ -56,8 +53,7 @@ class StartCommand:
 
 @dataclass(frozen=True, slots=True)
 class ReviewCommand:
-    source: str | None
-    base: str | None
+    base: str
     name: str | None
 
 
@@ -100,12 +96,11 @@ def _parser() -> argparse.ArgumentParser:
     start_command = commands.add_parser("start")
     _ = start_command.add_argument("feature")
     review_command = commands.add_parser("review")
-    _ = review_command.add_argument("--source")
-    _ = review_command.add_argument("--base")
+    _ = review_command.add_argument("--base", required=True)
     _ = review_command.add_argument("--name")
     land_command = commands.add_parser("land")
     _ = land_command.add_argument("feature")
-    _ = land_command.add_argument("--target", choices=MAINLINE_NAMES, required=True)
+    _ = land_command.add_argument("--target", required=True)
     _ = land_command.add_argument("--approved", required=True)
     _ = land_command.add_argument("--title", required=True)
     harness = commands.add_parser("harness")
@@ -130,8 +125,8 @@ def _decode_arguments(raw: RawArguments) -> Outcome[Invocation]:
     match raw.command:
         case "start" if raw.feature is not None:
             return Success(Invocation(raw.as_json, StartCommand(raw.feature)))
-        case "review":
-            return Success(Invocation(raw.as_json, ReviewCommand(raw.source, raw.base, raw.name)))
+        case "review" if raw.base is not None:
+            return Success(Invocation(raw.as_json, ReviewCommand(raw.base, raw.name)))
         case "land" if (
             raw.feature is not None
             and raw.target is not None
@@ -157,9 +152,9 @@ def _execute(command: CliCommand) -> ExecutionResult:
         case StartCommand(feature):
             with workflow_lock(repository.common_dir):
                 return StartedResult(start(repository, feature))
-        case ReviewCommand(source, base, name):
+        case ReviewCommand(base, name):
             with workflow_lock(repository.common_dir):
-                return review(repository, source=source, base=base, name=name)
+                return review(repository, base=base, name=name)
         case LandCommand(feature, target, approved, title):
             with workflow_lock(repository.common_dir):
                 return land(repository, feature, target, approved, title)
@@ -184,10 +179,10 @@ def _result_json(result: ExecutionResult) -> JsonObject:
                 "session_id": session_id,
                 "change_set": change_set_json(change_set),
             }
-        case LandingResult(feature, mainline_ref, previous_oid, commit_oid, tree_oid, review_id):
+        case LandingResult(feature, target_ref, previous_oid, commit_oid, tree_oid, review_id):
             return {
                 "feature": feature,
-                "mainline_ref": mainline_ref,
+                "target_ref": target_ref,
                 "previous_oid": previous_oid,
                 "commit_oid": commit_oid,
                 "tree_oid": tree_oid,

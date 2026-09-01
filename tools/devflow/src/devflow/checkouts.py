@@ -72,11 +72,13 @@ def _switch_without_overwriting_ignored(repository: Repository, *args: str) -> N
 
 
 def start(repository: Repository, feature: str) -> StartResult:
-    _, main_oid = repository.mainline()
+    head_oid = repository.ref_oid("HEAD")
+    if head_oid is None:
+        raise DevflowError("head_required", "Start requires a checkout with at least one commit.")
     branch = f"wip/{feature}"
     existing_oid = repository.ref_oid(f"refs/heads/{branch}")
     current_branch = repository.git("branch", "--show-current").stdout.strip() or None
-    match decide_start(feature, StartFacts(main_oid, current_branch, existing_oid)):
+    match decide_start(feature, StartFacts(head_oid, current_branch, existing_oid)):
         case Failure(code, message):
             raise DevflowError(code, message)
         case Success(plan):

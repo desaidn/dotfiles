@@ -67,29 +67,11 @@ class Repository:
             detail = result.stderr.strip() or "The ref changed concurrently."
             raise DevflowError("ref_update_rejected", detail)
 
-    def update_refs_atomically(
-        self,
-        *,
-        verifications: Sequence[tuple[str, str]],
-        updates: Sequence[tuple[str, str, str]],
-    ) -> CommandResult:
-        instructions = ["start"]
-        instructions.extend(f"verify {ref} {old_oid}" for ref, old_oid in verifications)
-        instructions.extend(f"update {ref} {new_oid} {old_oid}" for ref, new_oid, old_oid in updates)
-        instructions.extend(("prepare", "commit"))
-        return self.git(
-            "update-ref",
-            "--stdin",
-            check=False,
-            stdin="\n".join(instructions) + "\n",
-        )
-
-    def mainline(self) -> tuple[str, str]:
-        for name in ("main", "mainline", "master"):
-            ref = f"refs/heads/{name}"
-            if oid := self.ref_oid(ref):
-                return name, oid
-        raise DevflowError("mainline_not_found", "Expected a local main, mainline, or master branch.")
+    def delete_ref(self, ref: str, old_oid: str) -> None:
+        result = self.git("update-ref", "-d", ref, old_oid, check=False)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or "The ref changed concurrently."
+            raise DevflowError("ref_update_rejected", detail)
 
 
 def command(

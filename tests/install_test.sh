@@ -73,10 +73,28 @@ assert_log_prefix_count() {
 
 write_fake_commands() {
     local command_name command_path
-    for command_name in bash cat chmod cp date dirname env ln mkdir readlink; do
+    for command_name in bash cat chmod cp date dirname env ln readlink; do
         command_path="$(command -v "$command_name")"
         ln -s "$command_path" "$FIXTURE_FAKE_BIN/$command_name"
     done
+
+    cat >"$FIXTURE_FAKE_BIN/mkdir" <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+"$DOTFILES_TEST_REAL_MKDIR" "$@"
+flag="$DOTFILES_TEST_STATE/remove-local-dir-before-receipt"
+if [[ -f "$flag" && "$#" == 3 &&
+    "$1" == "-p" &&
+    "$2" == "$HOME/.local/share/dotfiles/uv-tools" &&
+    "$3" == "$HOME/.local/bin" ]]
+then
+    "$DOTFILES_TEST_REAL_RMDIR" \
+        "$HOME/.local/share/dotfiles/uv-tools" \
+        "$HOME/.local/share/dotfiles"
+    printf 'consumed\n' >"$flag"
+fi
+SCRIPT
 
     cat >"$FIXTURE_FAKE_BIN/mv" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -434,7 +452,7 @@ case "${1:-} ${2:-}" in
             "${4:-}" == "$DOTFILES_TEST_FAKE_BIN/python" &&
             "${5:-}" == "--no-python-downloads" &&
             "${6:-}" == "--editable" &&
-            "${7:-}" == "$DOTFILES_TEST_REPO_ROOT/devflow" ]] || {
+            "${7:-}" == "$DOTFILES_TEST_REPO_ROOT/tools/devflow" ]] || {
             printf 'unexpected uv tool install arguments: %s\n' "$*" >&2
             exit 4
         }
@@ -447,11 +465,11 @@ case "${1:-} ${2:-}" in
             "$bin_dir"
         ln -s "$DOTFILES_TEST_FAKE_BIN/python" \
             "$tool_dir/dotfiles-devflow/bin/python"
-        printf '%s' "$DOTFILES_TEST_REPO_ROOT/devflow/src" \
+        printf '%s' "$DOTFILES_TEST_REPO_ROOT/tools/devflow/src" \
             >"$tool_dir/dotfiles-devflow/lib/python3.14/site-packages/dotfiles_devflow.pth"
         printf '%s\n' \
             '[tool]' \
-            "requirements = [{ name = \"dotfiles-devflow\", editable = \"$DOTFILES_TEST_REPO_ROOT/devflow\" }]" \
+            "requirements = [{ name = \"dotfiles-devflow\", editable = \"$DOTFILES_TEST_REPO_ROOT/tools/devflow\" }]" \
             "python = \"$DOTFILES_TEST_FAKE_BIN/python\"" \
             'entrypoints = [' \
             "    { name = \"devflow\", install-path = \"$bin_dir/devflow\", from = \"dotfiles-devflow\" }," \
@@ -646,6 +664,7 @@ SCRIPT
 
     chmod +x \
         "$FIXTURE_FAKE_BIN/curl" \
+        "$FIXTURE_FAKE_BIN/mkdir" \
         "$FIXTURE_FAKE_BIN/sudo" \
         "$FIXTURE_FAKE_BIN/uname" \
         "$FIXTURE_FAKE_BIN/xcode-select" \
@@ -680,8 +699,10 @@ new_fixture() {
     FIXTURE_INSTALL_REPO_ROOT="$REPO_ROOT"
     FIXTURE_BREW_PREFIX="$FIXTURE_ROOT"
     FIXTURE_OS="$os_name"
+    FIXTURE_REAL_MKDIR="$(command -v mkdir)"
     FIXTURE_REAL_MV="$(command -v mv)"
     FIXTURE_REAL_PYTHON="$(command -v python3)"
+    FIXTURE_REAL_RMDIR="$(command -v rmdir)"
     if [[ -n "$package_manager" ]]; then
         FIXTURE_PACKAGE_MANAGER="$package_manager"
     elif [[ "$os_name" == "Linux" ]]; then
@@ -738,8 +759,10 @@ run_installer() {
             DOTFILES_TEST_MISE_TEMPLATE="$FIXTURE_MISE_TEMPLATE" \
             DOTFILES_TEST_OS="$FIXTURE_OS" \
             DOTFILES_TEST_REPO_ROOT="$FIXTURE_INSTALL_REPO_ROOT" \
+            DOTFILES_TEST_REAL_MKDIR="$FIXTURE_REAL_MKDIR" \
             DOTFILES_TEST_REAL_MV="$FIXTURE_REAL_MV" \
             DOTFILES_TEST_REAL_PYTHON="$FIXTURE_REAL_PYTHON" \
+            DOTFILES_TEST_REAL_RMDIR="$FIXTURE_REAL_RMDIR" \
             DOTFILES_TEST_RUNTIME_TEMPLATE="$FIXTURE_RUNTIME_TEMPLATE" \
             DOTFILES_TEST_STATE="$FIXTURE_STATE" \
             DOTFILES_TEST_UV_TEMPLATE="$FIXTURE_UV_TEMPLATE" \
@@ -769,8 +792,10 @@ run_uninstaller() {
         DOTFILES_TEST_FAKE_BIN="$FIXTURE_FAKE_BIN" \
         DOTFILES_TEST_GENERIC_TEMPLATE="$FIXTURE_GENERIC_TEMPLATE" \
         DOTFILES_TEST_LOG="$FIXTURE_LOG" \
+        DOTFILES_TEST_REAL_MKDIR="$FIXTURE_REAL_MKDIR" \
         DOTFILES_TEST_REAL_MV="$FIXTURE_REAL_MV" \
         DOTFILES_TEST_REAL_PYTHON="$FIXTURE_REAL_PYTHON" \
+        DOTFILES_TEST_REAL_RMDIR="$FIXTURE_REAL_RMDIR" \
         DOTFILES_TEST_REPO_ROOT="$REPO_ROOT" \
         DOTFILES_TEST_STATE="$FIXTURE_STATE" \
         "$REPO_ROOT/uninstall.sh" "$@" >"$FIXTURE_ROOT/uninstall.out" 2>&1
@@ -831,14 +856,14 @@ assert_devflow_installed() {
         "$tool_environment/bin/devflow"
     grep -Fxq 'dotfiles-devflow-v2' "$receipt" ||
         fail "Workflow Engine receipt has an unexpected format"
-    grep -Fxq "$REPO_ROOT/devflow" "$receipt" ||
+    grep -Fxq "$REPO_ROOT/tools/devflow" "$receipt" ||
         fail "Workflow Engine receipt did not record its editable source"
     grep -Fxq "$FIXTURE_FAKE_BIN/python" "$receipt" ||
         fail "Workflow Engine receipt did not record Mise's exact Python"
     assert_symlink \
         "$tool_environment/bin/python" \
         "$FIXTURE_FAKE_BIN/python"
-    grep -Fxq "$REPO_ROOT/devflow/src" \
+    grep -Fxq "$REPO_ROOT/tools/devflow/src" \
         "$tool_environment/lib/python3.14/site-packages/dotfiles_devflow.pth" ||
         fail "Workflow Engine environment did not record its editable source"
     write_devflow_uv_receipt_fixture "$expected_uv_receipt"
@@ -866,7 +891,7 @@ assert_devflow_receipt_status() {
 write_devflow_uv_receipt_fixture() {
     local destination="$1" inventory="${2:-exact}"
     local receipt_python="$FIXTURE_FAKE_BIN/python"
-    local requirement_source="$REPO_ROOT/devflow"
+    local requirement_source="$REPO_ROOT/tools/devflow"
 
     if [[ "$inventory" == "reformatted" ]]; then
         printf '%s\n' \
@@ -877,7 +902,7 @@ write_devflow_uv_receipt_fixture() {
             "  { install-path = '$FIXTURE_HOME/.local/bin/devflow', from = 'dotfiles-devflow', name = 'devflow' }," \
             ']' \
             'requirements = [' \
-            "  { editable = '$REPO_ROOT/devflow', name = 'dotfiles-devflow' }," \
+            "  { editable = '$REPO_ROOT/tools/devflow', name = 'dotfiles-devflow' }," \
             ']' \
             >"$destination"
         return
@@ -900,7 +925,7 @@ write_devflow_uv_receipt_fixture() {
         extra-requirement)
             printf '%s\n' \
                 'requirements = [' \
-                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/devflow\" }," \
+                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/tools/devflow\" }," \
                 '    { name = "injected-package" },' \
                 ']' \
                 >>"$destination"
@@ -908,8 +933,8 @@ write_devflow_uv_receipt_fixture() {
         duplicate-requirement)
             printf '%s\n' \
                 'requirements = [' \
-                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/devflow\" }," \
-                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/devflow\" }," \
+                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/tools/devflow\" }," \
+                "    { name = \"dotfiles-devflow\", editable = \"$REPO_ROOT/tools/devflow\" }," \
                 ']' \
                 >>"$destination"
             ;;
@@ -1345,6 +1370,21 @@ test_devflow_install_failure_precedes_configuration_links() {
     pass "empty pending Workflow Engine installation retries before linking"
 }
 
+test_devflow_recreates_private_state_before_writing_receipt() {
+    new_fixture devflow-missing-private-state Darwin
+    : >"$FIXTURE_STATE/remove-local-dir-before-receipt"
+
+    run_installer
+
+    grep -Fxq 'consumed' \
+        "$FIXTURE_STATE/remove-local-dir-before-receipt" ||
+        fail "test fixture did not remove the private state directory"
+    assert_devflow_installed
+    assert_common_links
+    assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
+    pass "Workflow Engine receipt creation restores its preflighted parent"
+}
+
 test_devflow_resumes_after_uv_interruption() {
     new_fixture devflow-uv-interruption Darwin
     : >"$FIXTURE_STATE/uv-interrupt-after-install"
@@ -1435,7 +1475,7 @@ test_devflow_preflight_preserves_foreign_state() {
         "$FIXTURE_HOME/.local/share/dotfiles"
     printf '%s\n%s\n%s\n' \
         'dotfiles-devflow-pending-v2' \
-        "$REPO_ROOT/devflow" \
+        "$REPO_ROOT/tools/devflow" \
         "$FIXTURE_FAKE_BIN/python" \
         >"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
     printf 'partial pending executable\n' \
@@ -1458,7 +1498,7 @@ test_devflow_receipt_requires_the_exact_python() {
     run_installer
     printf '%s\n%s\n%s\n' \
         'dotfiles-devflow-v2' \
-        "$REPO_ROOT/devflow" \
+        "$REPO_ROOT/tools/devflow" \
         "$FIXTURE_ROOT/another-python" \
         >"$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
 
@@ -1504,7 +1544,7 @@ test_devflow_accepts_uvs_unterminated_editable_source_marker() {
     tool_environment="$FIXTURE_HOME/.local/share/dotfiles/uv-tools/dotfiles-devflow"
     source_marker="$tool_environment/lib/python3.14/site-packages/dotfiles_devflow.pth"
     expected_source_marker="$FIXTURE_STATE/expected-dotfiles-devflow.pth"
-    printf '%s' "$REPO_ROOT/devflow/src" >"$expected_source_marker"
+    printf '%s' "$REPO_ROOT/tools/devflow/src" >"$expected_source_marker"
     assert_file_bytes_equal \
         "$expected_source_marker" "$source_marker" \
         "fake uv did not mirror its unterminated editable source marker"
@@ -1527,7 +1567,7 @@ test_devflow_rejects_an_ambiguous_editable_source_marker() {
     source_marker="$tool_environment/lib/python3.14/site-packages/dotfiles_devflow.pth"
     snapshot="$FIXTURE_STATE/ambiguous-dotfiles-devflow.pth"
     printf '%s\n%s' \
-        "$REPO_ROOT/devflow/src" \
+        "$REPO_ROOT/tools/devflow/src" \
         "$FIXTURE_ROOT/injected-source" \
         >"$source_marker"
     cp "$source_marker" "$snapshot"
@@ -2037,7 +2077,7 @@ test_link_preflight_prevents_partial_configuration() {
     cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
     cp "$REPO_ROOT/templates/local.fish" "$REPO_ROOT/templates/local.zsh" \
         "$fixture_repo/templates/"
-    for source_name in devflow fish ghostty herdr hunk lazygit nvim tmux zsh; do
+    for source_name in fish ghostty herdr hunk lazygit nvim tmux tools zsh; do
         ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
     done
     FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
@@ -2078,12 +2118,14 @@ test_link_preflight_prevents_partial_configuration() {
     new_fixture missing-devflow-package Darwin
     fixture_repo="$FIXTURE_ROOT/repo"
     mkdir -p \
-        "$fixture_repo/devflow" \
+        "$fixture_repo/tools/devflow" \
         "$fixture_repo/mise/conf.d" \
         "$fixture_repo/templates"
     cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
-    cp "$REPO_ROOT/devflow/pyproject.toml" "$fixture_repo/devflow/"
-    ln -s "$REPO_ROOT/devflow/src" "$fixture_repo/devflow/src"
+    cp "$REPO_ROOT/tools/devflow/pyproject.toml" \
+        "$fixture_repo/tools/devflow/"
+    ln -s "$REPO_ROOT/tools/devflow/src" \
+        "$fixture_repo/tools/devflow/src"
     cp "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" \
         "$fixture_repo/mise/conf.d/"
     cp "$REPO_ROOT/templates/local.fish" "$REPO_ROOT/templates/local.zsh" \
@@ -2096,7 +2138,7 @@ test_link_preflight_prevents_partial_configuration() {
     run_installer failure --skip-mise-runtimes
 
     grep -Fq \
-        "missing or invalid tracked configuration file: $FIXTURE_INSTALL_REPO_ROOT/devflow/uv.lock" \
+        "missing or invalid tracked configuration file: $FIXTURE_INSTALL_REPO_ROOT/tools/devflow/uv.lock" \
         "$FIXTURE_OUTPUT" ||
         fail "installer did not preflight the Workflow Engine package sources"
     assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
@@ -2161,6 +2203,7 @@ test_skip_mise_runtimes_completes_yum_setup
 test_skip_mise_runtimes_retains_existing_manifest
 test_skip_mise_runtimes_preserves_foreign_devflow_state
 test_devflow_install_failure_precedes_configuration_links
+test_devflow_recreates_private_state_before_writing_receipt
 test_devflow_resumes_after_uv_interruption
 test_devflow_resumes_after_finalization_interruption
 test_devflow_preflight_preserves_foreign_state
