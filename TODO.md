@@ -6,3 +6,4 @@
 - [Add a local model](docs/todos/05-local-model.md)
 - [Unify Neovim language actions](docs/todos/06-unify-neovim-language-actions.md)
 - [Improve installer upgrade tolerance](docs/todos/07-installer-upgrade-tolerance.md)
+- [Add a curlable dotfiles bootstrap](docs/todos/08-curlable-dotfiles-bootstrap.md)
