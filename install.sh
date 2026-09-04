@@ -419,8 +419,8 @@ validate_brew_dependencies() {
 }
 
 install_mise_runtimes() (
-    local activation
     local active_version command_name command_path expected_version
+    local environment
     local manifest_key mise_command_path output tool_name version
     local mismatched missing version_mismatches
 
@@ -445,8 +445,9 @@ install_mise_runtimes() (
         mise install --yes
     fi
 
-    activation="$(mise activate bash)" || die "Mise runtimes installed but shell activation failed"
-    eval "$activation"
+    environment="$(mise env --shell bash)" ||
+        die "Mise runtimes installed but environment resolution failed"
+    eval "$environment"
     hash -r
 
     missing=()

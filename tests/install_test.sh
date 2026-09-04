@@ -330,6 +330,18 @@ case "${1:-}" in
         ;;
     activate)
         printf 'mise activate\n' >>"$DOTFILES_TEST_LOG"
+        if [[ -e "$DOTFILES_TEST_STATE/mise-parent-activation" &&
+            -n "${__MISE_ORIG_PATH:-}" ]]
+        then
+            printf 'export PATH="%s:$PATH"\n' \
+                "$DOTFILES_TEST_STATE/mise-shims"
+        else
+            printf 'export PATH="%s:$PATH"\n' "$DOTFILES_TEST_FAKE_BIN"
+        fi
+        ;;
+    env)
+        [[ "${2:-}" == "--shell" && "${3:-}" == "bash" ]] || exit 2
+        printf 'mise env\n' >>"$DOTFILES_TEST_LOG"
         printf 'export PATH="%s:$PATH"\n' "$DOTFILES_TEST_FAKE_BIN"
         ;;
     which)
@@ -1223,6 +1235,29 @@ test_mise_environment_cannot_override_bootstrap_manifest() {
 
     assert_common_links
     pass "Mise environment cannot override bootstrap runtime provisioning"
+}
+
+test_parent_mise_activation_does_not_override_bootstrap_environment() {
+    local command_name
+
+    new_fixture mise-parent-activation Darwin
+    mkdir -p "$FIXTURE_STATE/mise-shims"
+    for command_name in rustc cargo rustfmt; do
+        ln -s "$FIXTURE_FAKE_BIN/mise" \
+            "$FIXTURE_STATE/mise-shims/$command_name"
+    done
+    : >"$FIXTURE_STATE/mise-parent-activation"
+
+    (
+        export MISE_SHELL=fish
+        export __MISE_ORIG_PATH="$FIXTURE_STATE/parent-path"
+        run_installer
+    )
+
+    assert_common_links
+    assert_log_count 1 "mise env" "$FIXTURE_LOG"
+    assert_log_count 0 "mise activate" "$FIXTURE_LOG"
+    pass "parent Mise activation cannot override bootstrap runtime selection"
 }
 
 test_non_mise_runtime_command_is_rejected_before_linking() {
@@ -2196,6 +2231,7 @@ test_dependency_manifests_match_the_install_contract() {
 
 test_user_mise_config_does_not_override_bootstrap_manifest
 test_mise_environment_cannot_override_bootstrap_manifest
+test_parent_mise_activation_does_not_override_bootstrap_environment
 test_non_mise_runtime_command_is_rejected_before_linking
 test_mise_runtime_version_mismatch_is_rejected_before_linking
 test_install_cli_is_safe
