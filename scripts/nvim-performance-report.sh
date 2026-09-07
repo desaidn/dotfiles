@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)"
 
 NVIM_BIN="${NVIM_BIN:-nvim}"
 ITERATIONS="${ITERATIONS:-5}"
@@ -339,7 +339,7 @@ fi
   printf '%s\n\n' "$(startup_note "$config_avg")"
   printf '| Target | Runs | Min ms | Avg ms | Max ms |\n'
   printf '| --- | ---: | ---: | ---: | ---: |\n'
-  printf '| `nvim --clean` | %s | %s | %s | %s |\n' "$clean_n" "$clean_min" "$clean_avg" "$clean_max"
+  printf "| \`nvim --clean\` | %s | %s | %s | %s |\n" "$clean_n" "$clean_min" "$clean_avg" "$clean_max"
   printf '| repo config | %s | %s | %s | %s |\n' "$config_n" "$config_min" "$config_avg" "$config_max"
   printf '| config overhead | - | - | %s | - |\n\n' "$avg_delta"
 
@@ -359,7 +359,7 @@ fi
     printf '| Cost ms | Entry |\n'
     printf '| ---: | --- |\n'
     while IFS="$(printf '\t')" read -r cost entry; do
-      printf '| %s | `%s` |\n' "$cost" "$(markdown_escape "$entry")"
+      printf "| %s | \`%s\` |\n" "$cost" "$(markdown_escape "$entry")"
     done < "$HOTSPOTS_TSV"
     printf '\n'
   else

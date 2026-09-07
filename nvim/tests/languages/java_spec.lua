@@ -23,7 +23,6 @@ local original_registry = package.loaded['mason-registry']
 local original_jvm_args = vim.env.JDTLS_JVM_ARGS
 local package_spec
 local java_autocmd
-local registered_dap
 local started
 local starts = {}
 local trace = {}
@@ -56,14 +55,15 @@ assert(vim.fn.writefile({ '<project>', '  <modules>', '    <module>module</modul
 assert(vim.fn.writefile({ '<project />' }, maven_module .. '/pom.xml') == 0)
 assert(vim.fn.writefile({ '<project />' }, standalone_root .. '/pom.xml') == 0)
 
-vim.pack.add = function(spec) package_spec = spec end
-vim.api.nvim_create_autocmd = function(event, opts)
+local function capture_packages(spec, _) package_spec = spec end
+local function capture_autocmd(event, opts)
   if event == 'FileType' then java_autocmd = opts end
   return 1
 end
+vim.pack.add = capture_packages
+vim.api.nvim_create_autocmd = capture_autocmd
 package.loaded['custom.languages.dap'] = {
   ensure = function() trace[#trace + 1] = 'dap' end,
-  register_project = function(filetype, config) registered_dap = { filetype = filetype, config = config } end,
 }
 package.loaded['custom.languages.context'] = {
   for_buffer = function(bufnr, profile)
@@ -101,32 +101,35 @@ package.loaded.jdtls = {
 }
 vim.env.JDTLS_JVM_ARGS = '-Xmx2G -javaagent:/tmp/lombok.jar'
 
-local ok, adapter_or_err = xpcall(function() return dofile(nvim_root .. '/lua/custom/languages/adapters/java.lua') end, debug.traceback)
+local ok, adapter_or_err = xpcall(function()
+  local adapter = dofile(nvim_root .. '/lua/custom/languages/adapters/java.lua')
+  adapter.setup()
+  return adapter
+end, debug.traceback)
 
 check('adds nvim-jdtls and keeps Java DAP routing in the Java adapter', function()
   assert(ok, adapter_or_err)
   assert(package_spec and package_spec[1].src == 'https://github.com/mfussenegger/nvim-jdtls', 'missing nvim-jdtls package')
-  assert(registered_dap.filetype == 'java')
-  assert(registered_dap.config.lsp_client == 'jdtls')
-  assert(vim.deep_equal(registered_dap.config.launch_types, { 'java' }))
+  assert(adapter_or_err.dap_by_ft.java.lsp_client == 'jdtls')
+  assert(vim.deep_equal(adapter_or_err.dap_by_ft.java.launch_types, { 'java' }))
 end)
 
 check('prefers a Gradle workspace root over a nested module', function()
   local source = gradle_module .. '/src/main/java/Main.java'
   assert(vim.fn.writefile({}, source) == 0, 'failed to create Java source fixture')
-  assert(ok and adapter_or_err.root_profile.resolve(source) == gradle_root)
+  assert(ok and adapter_or_err.dap_by_ft.java.root_profile.resolve(source) == gradle_root)
 end)
 
 check('uses the Maven reactor rather than a nested module', function()
   local source = maven_module .. '/src/main/java/Main.java'
   assert(vim.fn.writefile({}, source) == 0, 'failed to create Java source fixture')
-  assert(ok and adapter_or_err.root_profile.resolve(source) == maven_root)
+  assert(ok and adapter_or_err.dap_by_ft.java.root_profile.resolve(source) == maven_root)
 end)
 
 check('uses an isolated module when no Java workspace marker exists', function()
   local source = standalone_root .. '/src/main/java/Main.java'
   assert(vim.fn.writefile({}, source) == 0, 'failed to create Java source fixture')
-  assert(ok and adapter_or_err.root_profile.resolve(source) == standalone_root)
+  assert(ok and adapter_or_err.dap_by_ft.java.root_profile.resolve(source) == standalone_root)
 end)
 
 check('uses one JDTLS identity per root and isolates same-basename roots', function()

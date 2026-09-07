@@ -16,7 +16,8 @@ end
 
 local original_pack_add = vim.pack.add
 local captured
-vim.pack.add = function(spec) captured = spec end
+local function capture_packages(spec, _) captured = spec end
+vim.pack.add = capture_packages
 package.loaded['custom.languages.dap'] = nil
 local dap = assert(loadfile(nvim_root .. '/lua/custom/languages/dap.lua'))()
 vim.pack.add = original_pack_add

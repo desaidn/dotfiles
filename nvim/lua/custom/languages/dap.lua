@@ -101,7 +101,7 @@ local function project_launch_configs(bufnr)
   local filtered = {}
   for _, config in ipairs(configs) do
     if vim.tbl_contains(dap_config.launch_types, config.type) then
-      local prepare = dap_config.prepare_launch or function(value) return value end
+      local prepare = dap_config.prepare_launch or function(value, _) return value end
       filtered[#filtered + 1] = with_configuration_values(
         config,
         configuration_variables(project),
@@ -136,12 +136,6 @@ function M.ensure()
 end
 
 function M.register_buffer_setup(bufnr, setup) buffer_setups[bufnr] = setup end
-
-function M.register_project(filetype, config)
-  assert(type(filetype) == 'string' and filetype ~= '', 'DAP project filetype is required')
-  assert(type(config) == 'table', 'DAP project configuration is required')
-  languages.dap_by_ft[filetype] = config
-end
 
 function M.ensure_buffer(bufnr)
   local dap = M.ensure()

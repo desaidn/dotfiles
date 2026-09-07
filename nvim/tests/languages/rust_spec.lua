@@ -18,9 +18,10 @@ local original_pack_add = vim.pack.add
 local original_config = vim.g.rustaceanvim
 local original_dap = package.loaded['custom.languages.dap']
 local captured
-vim.pack.add = function(spec) captured = spec end
+local function capture_packages(spec, _) captured = spec end
+vim.pack.add = capture_packages
 
-local ok, err = xpcall(function() dofile(nvim_root .. '/lua/custom/languages/adapters/rust.lua') end, debug.traceback)
+local ok, err = xpcall(function() dofile(nvim_root .. '/lua/custom/languages/adapters/rust.lua').setup() end, debug.traceback)
 vim.pack.add = original_pack_add
 
 check('loads rustaceanvim v9 before Rust buffers attach', function()

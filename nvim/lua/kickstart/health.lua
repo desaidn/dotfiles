@@ -6,17 +6,15 @@
 --]]
 
 local check_version = function()
-  local verstr = tostring(vim.version())
-  if not vim.version.ge then
-    vim.health.error(string.format("Neovim out of date: '%s'. Upgrade to latest stable or nightly", verstr))
+  local supported, message = require('custom.lib.neovim').check()
+  if not supported then
+    vim.health.error(message .. '. Install the latest stable release.')
     return
   end
 
-  if vim.version.ge(vim.version(), '0.12') then
-    vim.health.ok(string.format("Neovim version is: '%s'", verstr))
-  else
-    vim.health.error(string.format("Neovim out of date: '%s'. Upgrade to latest stable or nightly", verstr))
-  end
+  vim.health.ok(message)
+  vim.health.info 'The latest stable Neovim release is recommended.'
+  if vim.version().prerelease then vim.health.warn 'Prerelease build; stable-release validation does not cover it.' end
 end
 
 local check_external_reqs = function()

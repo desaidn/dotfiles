@@ -69,7 +69,8 @@ local function run()
   vim.opt.runtimepath:append(flatten_root)
 
   local pack_add = vim.pack.add
-  vim.pack.add = function() end
+  local function ignore_package_additions(_, _) end
+  vim.pack.add = ignore_package_additions
   local loaded, load_error = pcall(dofile, flatten_path)
   vim.pack.add = pack_add
   assert(loaded, load_error)

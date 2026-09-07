@@ -139,7 +139,7 @@ local function forget_stale_tab(state)
   end
 end
 
-local function close_tool_tab(tool, instance)
+local function close_tool_tab(_, instance)
   forget_stale_tab(instance)
   if not instance.tab then return true end
 

@@ -38,10 +38,11 @@ assert(vim.uv.fs_chmod(legacy_root .. '/node_modules/.bin/tsc', 493))
 
 local original_start = vim.lsp.start
 local starts = {}
-vim.lsp.start = function(config, options)
+local function capture_start(config, options)
   starts[#starts + 1] = { config = config, options = options }
   return #starts
 end
+vim.lsp.start = capture_start
 
 local setup_ok, setup_error = xpcall(function()
   vim.opt.packpath:prepend(vim.fn.stdpath 'data' .. '/site')
@@ -51,7 +52,7 @@ local setup_ok, setup_error = xpcall(function()
   for _, name in ipairs { 'tsc', 'ts_ls' } do
     vim.lsp.config(name, servers[name])
   end
-  local resolved_legacy = vim.lsp.config.ts_ls
+  local resolved_legacy = assert(vim.lsp.config.ts_ls, 'missing resolved ts_ls configuration')
   assert(vim.tbl_contains(resolved_legacy.filetypes, 'typescriptreact'), 'upstream ts_ls TSX filetype must survive merging')
   assert(type(resolved_legacy.on_attach) == 'function', 'upstream TypeScript buffer commands must survive merging')
   assert(resolved_legacy.handlers['_typescript.rename'], 'upstream TypeScript handlers must survive merging')

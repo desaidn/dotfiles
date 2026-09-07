@@ -23,7 +23,7 @@ repairs, or removes worktrees.
 
 If the user or project instructions do not already authorize a needed worktree
 change, ask first. Coordinate with human activity in a shared working folder
-and rerun devflow after a concurrent Git operation.
+and rerun validation and devflow after a concurrent Git operation.
 
 ## Start local work
 

@@ -19,9 +19,7 @@ local function check(name, body)
   io.stderr:write('FAIL ', name, '\n  ', tostring(err):gsub('\n', '\n  '), '\n')
 end
 
-local function create_file(path)
-  assert(vim.fn.writefile({}, path) == 0, 'failed to create ' .. path)
-end
+local function create_file(path) assert(vim.fn.writefile({}, path) == 0, 'failed to create ' .. path) end
 
 local fixture = vim.fn.tempname()
 assert(vim.fn.mkdir(fixture .. '/packages/assets/app/constants', 'p') == 1, 'failed to create fixture')
@@ -37,6 +35,7 @@ create_file(unconfigured_file)
 local original_pack_add = vim.pack.add
 local original_executable = vim.fn.executable
 local original_lint = package.loaded.lint
+local original_dap = package.loaded['custom.languages.dap']
 local captured
 
 local fake_lint = {
@@ -44,12 +43,15 @@ local fake_lint = {
   try_lint = function(_, opts) captured = opts end,
 }
 
-vim.pack.add = function() end
-vim.fn.executable = function(name) return name == 'eslint_d' and 1 or 0 end
+local function ignore_package_additions(_, _) end
+local function executable(name) return name == 'eslint_d' and 1 or 0 end
+vim.pack.add = ignore_package_additions
+vim.fn.executable = executable
 package.loaded.lint = fake_lint
+package.loaded['custom.languages.dap'] = { register_buffer_setup = function() end }
 
 local setup_ok, setup_error = xpcall(function()
-  dofile(nvim_root .. '/lua/custom/languages/lint.lua')
+  dofile(nvim_root .. '/lua/custom/languages/adapters/javascript.lua').setup()
 
   local bufnr = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_name(bufnr, file_path)
@@ -78,6 +80,7 @@ end, debug.traceback)
 vim.pack.add = original_pack_add
 vim.fn.executable = original_executable
 package.loaded.lint = original_lint
+package.loaded['custom.languages.dap'] = original_dap
 vim.api.nvim_buf_delete(0, { force = true })
 vim.fn.delete(fixture, 'rf')
 vim.fn.delete(unconfigured_file)

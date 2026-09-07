@@ -20,8 +20,12 @@ _Avoid_: Terminal float, tool window, Terminal Tool Surface
 The language-centered part of the Development Surface contract: source-language capabilities that require coordination across supporting tools are declared as one coherent capability.
 _Avoid_: Tool config, plugin-specific language setup
 
+**Language Adapter**:
+The owner of a coherent language family's tooling settings and custom project behavior within the Development Surface. A Language Adapter covers the family's capabilities together, including language intelligence, formatting, linting, and debugging where enabled. Families without language intelligence or debugging may share a grouped adapter.
+_Avoid_: Debug adapter, scattered language configuration
+
 **Language Tooling Inventory**:
-The canonical read-only catalogue of enabled LSP configurations, Mason packages, Treesitter parsers, Conform formatting policy, and nvim-lint mappings shared across supporting tools; it stays in plugin-native data shapes so those tools can consume it directly.
+The canonical read-only catalogue of enabled language capabilities and their supporting tools, shared consistently across the Development Surface.
 _Avoid_: LSP server list, formatter list, parser list
 
 **Review Surface**:

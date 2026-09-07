@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 type ChangeSetKind = Literal["wip", "external"]
-type JsonScalar = None | bool | int | float | str
+type JsonScalar = bool | int | float | str | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, JsonValue]
 

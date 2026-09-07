@@ -90,9 +90,7 @@ require('neo-tree').setup {
       event = 'file_opened',
       handler = function()
         vim.schedule(function()
-          local neo_tree_wins = vim.tbl_filter(function(win)
-            return vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'neo-tree'
-          end, vim.api.nvim_list_wins())
+          local neo_tree_wins = vim.tbl_filter(function(win) return vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'neo-tree' end, vim.api.nvim_list_wins())
 
           if #neo_tree_wins > 0 then vim.api.nvim_set_current_win(neo_tree_wins[1]) end
         end)

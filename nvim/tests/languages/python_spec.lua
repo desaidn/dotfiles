@@ -27,7 +27,7 @@ local original_has = vim.fn.has
 local original_exepath = vim.fn.exepath
 local captured
 local buffer_setups = {}
-local registered_project
+local adapter
 local dap_python
 local setup_calls = 0
 local commands = {}
@@ -40,17 +40,18 @@ local debugpy_root = pack_root .. '/debugpy'
 local fallback_root = pack_root .. '/fallback'
 local conda_root = project_root .. '/conda'
 
-vim.pack.add = function(spec) captured = spec end
-vim.api.nvim_create_user_command = function(name, callback) commands[name] = callback end
+local function capture_packages(spec, _) captured = spec end
+local function capture_user_command(name, callback, _) commands[name] = callback end
+vim.pack.add = capture_packages
+vim.api.nvim_create_user_command = capture_user_command
 package.loaded['custom.languages.dap'] = {
   register_buffer_setup = function(bufnr, setup) buffer_setups[bufnr] = setup end,
-  register_project = function(filetype, config) registered_project = { filetype = filetype, config = config } end,
 }
 package.loaded.dap = { configurations = { python = { { request = 'launch' }, { request = 'attach' } } } }
 package.preload['dap-python'] = function()
   dap_python = {
-    setup = function(adapter, options)
-      dap_python.adapter = adapter
+    setup = function(debugger_path, options)
+      dap_python.adapter = debugger_path
       dap_python.options = options
       setup_calls = setup_calls + 1
     end,
@@ -84,15 +85,16 @@ assert(vim.uv.fs_chmod(unrelated_venv .. '/bin/python', 493))
 assert(vim.uv.fs_chmod(project_root .. '/active/bin/python', 493))
 vim.o.packpath = pack_root .. ',' .. original_packpath
 
-local ok, err = xpcall(function() dofile(nvim_root .. '/lua/custom/languages/adapters/python.lua') end, debug.traceback)
-vim.pack.add = original_pack_add
+local ok, err = xpcall(function()
+  adapter = dofile(nvim_root .. '/lua/custom/languages/adapters/python.lua')
+  adapter.setup()
+end, debug.traceback)
 
 check('registers Python DAP only for Python buffers and initializes Mason debugpy once', function()
   assert(ok, err)
   assert(captured and captured[1] == 'https://github.com/mfussenegger/nvim-dap-python', 'missing nvim-dap-python package')
-  assert(registered_project.filetype == 'python')
-  assert(registered_project.config.lsp_client == 'basedpyright')
-  assert(vim.deep_equal(registered_project.config.launch_types, { 'python' }))
+  assert(adapter.dap_by_ft.python.lsp_client == 'basedpyright')
+  assert(vim.deep_equal(adapter.dap_by_ft.python.launch_types, { 'python' }))
 
   local python = vim.api.nvim_create_buf(false, true)
   local rust = vim.api.nvim_create_buf(false, true)
@@ -108,21 +110,22 @@ check('registers Python DAP only for Python buffers and initializes Mason debugp
   assert(dap_python.adapter == debugpy_root .. '/venv/bin/python', dap_python.adapter)
   assert(dap_python.resolve_python() == project_root .. '/.venv/bin/python')
   assert(package.loaded.dap.configurations.python[1].pythonPath() == project_root .. '/.venv/bin/python')
-  assert(registered_project.config.prepare_launch({}, { root = project_root }).pythonPath == project_root .. '/.venv/bin/python')
+  assert(adapter.dap_by_ft.python.prepare_launch({}, { root = project_root }).pythonPath == project_root .. '/.venv/bin/python')
 
   vim.env.VIRTUAL_ENV = unrelated_venv
   assert(dap_python.resolve_python() == project_root .. '/.venv/bin/python', 'must reject an unrelated active environment')
 
   vim.env.VIRTUAL_ENV = project_root .. '/active'
   assert(dap_python.resolve_python() == project_root .. '/active/bin/python', 'must prefer an in-root active environment')
-  assert(registered_project.config.prepare_launch({}, { root = project_root }).pythonPath == project_root .. '/active/bin/python')
-  assert(registered_project.config.prepare_launch({ pythonPath = '/configured/python' }, { root = project_root }).pythonPath == '/configured/python')
+  assert(adapter.dap_by_ft.python.prepare_launch({}, { root = project_root }).pythonPath == project_root .. '/active/bin/python')
+  assert(adapter.dap_by_ft.python.prepare_launch({ pythonPath = '/configured/python' }, { root = project_root }).pythonPath == '/configured/python')
 
   package.loaded['custom.languages.context'].for_buffer = function() return { root = fallback_root, path = fallback_root .. '/main.py' } end
-  vim.fn.exepath = function(name)
+  local function resolve_python(name)
     assert(name == 'python3')
     return '/mise/python3'
   end
+  vim.fn.exepath = resolve_python
   vim.env.VIRTUAL_ENV = nil
   assert(dap_python.resolve_python() == '/mise/python3')
 end)
@@ -138,21 +141,23 @@ check('exposes Python test debugging through commands, not keymaps', function()
 end)
 
 check('uses Windows virtualenv and Mason adapter paths when applicable', function()
-  vim.fn.has = function(feature)
+  local function has_windows(feature, _)
     if feature == 'win32' then return 1 end
     return original_has(feature)
   end
+  vim.fn.has = has_windows
   package.loaded['dap-python'] = nil
   package.loaded['custom.languages.context'].for_buffer = function() return { root = project_root, path = project_root .. '/src/main.py' } end
   vim.env.VIRTUAL_ENV = nil
   vim.env.CONDA_PREFIX = conda_root
-  dofile(nvim_root .. '/lua/custom/languages/adapters/python.lua')
+  dofile(nvim_root .. '/lua/custom/languages/adapters/python.lua').setup()
   commands.DapPythonTestClass()
   assert(dap_python.adapter == debugpy_root .. '/venv/Scripts/python.exe', dap_python.adapter)
   assert(dap_python.resolve_python() == conda_root .. '/python.exe')
   vim.fn.has = original_has
 end)
 
+vim.pack.add = original_pack_add
 vim.o.packpath = original_packpath
 vim.api.nvim_create_user_command = original_create_user_command
 vim.fn.delete(pack_root, 'rf')

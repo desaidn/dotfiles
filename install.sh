@@ -329,7 +329,7 @@ version_at_least() {
     local actual_rest="$1" minimum_rest="$2"
     local actual_component minimum_component index
 
-    for index in 1 2 3; do
+    for ((index = 0; index < 3; index++)); do
         actual_component="${actual_rest%%.*}"
         minimum_component="${minimum_rest%%.*}"
 
@@ -367,7 +367,7 @@ validate_brew_dependencies() {
 
     for command_name in \
         git fish zsh nvim herdr tmux lazygit hunk mise atuin gh rg \
-        tree-sitter uv ghcup
+        tree-sitter uv
     do
         command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
     done
@@ -386,14 +386,14 @@ validate_brew_dependencies() {
 
     output="$(tmux -V 2>/dev/null || true)"
     version="${output##* }"
-    version_at_least "$version" "3.7.0" ||
-        errors+=("tmux 3.7+ is required (found '${version:-unknown}')")
+    version_at_least "$version" "3.5.0" ||
+        errors+=("tmux 3.5+ is required for extended-keys-format (found '${version:-unknown}')")
 
     output="$(lazygit --version 2>/dev/null || true)"
     version="${output#*version=}"
     version="${version%%,*}"
-    version_at_least "$version" "0.56.0" ||
-        errors+=("LazyGit 0.56+ is required (found '${version:-unknown}')")
+    version_at_least "$version" "0.64.0" ||
+        errors+=("LazyGit 0.64+ is required for git.diffRenderers (found '${version:-unknown}')")
 
     output="$(hunk --version 2>/dev/null || true)"
     version="${output##* }"
@@ -405,10 +405,19 @@ validate_brew_dependencies() {
     version_at_least "$version" "0.26.1" ||
         errors+=("tree-sitter CLI 0.26.1+ is required (found '${version:-unknown}')")
 
-    output="$(nvim --version 2>/dev/null || true)"
-    output="${output%%$'\n'*}"
-    if [[ "$output" != "NVIM v0.12.5" ]]; then
-        errors+=("stable Neovim 0.12.5 is required (found '${output:-unknown}')")
+    if ! output="$(
+        DOTFILES_NVIM_CHECK="$REPO_ROOT/nvim/lua/custom/lib/neovim.lua" \
+            NVIM_LOG_FILE=/dev/null nvim --clean --headless -c 'lua
+                local loaded, supported, message = pcall(function()
+                    return dofile(vim.env.DOTFILES_NVIM_CHECK).check()
+                end)
+                if not loaded or not supported then
+                    io.stderr:write(tostring(loaded and message or supported), "\n")
+                    vim.cmd("cquit 1")
+                end
+            ' -c qa 2>&1
+    )"; then
+        errors+=("Neovim compatibility check failed: $output")
     fi
 
     if (( ${#errors[@]} > 0 )); then
@@ -497,10 +506,11 @@ install_mise_runtimes() (
     [[ -n "$rust_sysroot" && -d "$rust_sysroot/lib/rustlib/src/rust/library" ]] ||
         die "Mise's Rust toolchain is missing the configured rust-src component"
 
-    output="$(java -version 2>&1 || true)"
-    if [[ "$output" != *"Corretto-21."* ]]; then
-        die "Amazon Corretto JDK 21 is required (java -version did not report Corretto 21)"
-    fi
+    output="$(java -version 2>&1)" || die "Mise's Java runtime is not runnable"
+    version="${output#*\"}"
+    version="${version%%\"*}"
+    version_at_least "$version" "21.0.0" ||
+        die "Java runtime 21+ is required (found '${version:-unknown}')"
 
     output="$(javac -version 2>&1 || true)"
     version="${output##* }"
@@ -721,7 +731,6 @@ preflight_devflow_state() {
 
 resolve_mise_python_path() (
     cd -- "$REPO_ROOT"
-    export MISE_CONFIG_DIR="$MISE_BOOTSTRAP_CONFIG_DIR"
     unset \
         MISE_CONFIG_FILE \
         MISE_GLOBAL_CONFIG_FILE \
@@ -733,7 +742,7 @@ resolve_mise_python_path() (
         MISE_PYTHON_VERSION \
         MISE_RUST_VERSION \
         MISE_JAVA_VERSION
-    mise which python
+    MISE_CONFIG_DIR="$MISE_BOOTSTRAP_CONFIG_DIR" mise which python
 )
 
 run_devflow_uv() (
@@ -871,6 +880,7 @@ preflight_links() {
         herdr/config.toml
         hunk/config.toml
         mise/conf.d/00-dotfiles.toml
+        nvim/lua/custom/lib/neovim.lua
         zsh/.zshrc
         templates/local.fish
         templates/local.zsh

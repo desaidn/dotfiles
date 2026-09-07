@@ -4,13 +4,8 @@
 local gh = require('custom.lib.pack').gh
 
 vim.pack.add {
-  { src = gh 'L3MON4D3/LuaSnip', version = vim.version.range '2.*' },
-  gh 'rafamadriz/friendly-snippets',
   { src = gh 'saghen/blink.cmp', version = vim.version.range '1.*' },
 }
-
-require('luasnip').setup {}
-require('luasnip.loaders.from_vscode').lazy_load()
 
 require('blink.cmp').setup {
   keymap = {
@@ -23,8 +18,9 @@ require('blink.cmp').setup {
     preset = 'enter',
   },
 
-  -- For advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
-  --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
+  -- Neovim's native snippet engine expands LSP snippets and handles tab stops.
+  -- See `:help vim.snippet` and `:help blink-cmp-config-snippets` for personal VS Code
+  -- snippets in ~/.config/nvim/snippets/.
 
   appearance = {
     kind_icons = {},
@@ -57,9 +53,12 @@ require('blink.cmp').setup {
 
   sources = {
     default = { 'lsp', 'path', 'snippets' },
+    providers = {
+      snippets = {
+        opts = { friendly_snippets = false },
+      },
+    },
   },
-
-  snippets = { preset = 'luasnip' },
 
   -- Blink.cmp includes an optional, recommended rust fuzzy matcher,
   -- which automatically downloads a prebuilt binary when enabled.

@@ -45,10 +45,11 @@ local original_system = vim.system
 local original_get_client_by_id = vim.lsp.get_client_by_id
 local original_notify = vim.notify
 local started
-vim.lsp.rpc.start = function(command, dispatchers, options)
+local function capture_start(command, dispatchers, options)
   started = { command = command, dispatchers = dispatchers, options = options }
   return started
 end
+vim.lsp.rpc.start = capture_start
 
 local function root_for_config(server_config, path)
   local buffer = vim.fn.bufnr(path)
@@ -127,11 +128,13 @@ local ok, err = xpcall(function()
       config = { root_dir = expected_legacy_root },
       stop = function(_, force) stopped[#stopped + 1] = force end,
     }
-    vim.lsp.get_client_by_id = function(client_id)
+    local function get_fake_client(client_id)
       assert(client_id == 42)
       return fake_client
     end
-    vim.notify = function(message, level) notices[#notices + 1] = { message = message, level = level } end
+    local function capture_notice(message, level, _) notices[#notices + 1] = { message = message, level = level } end
+    vim.lsp.get_client_by_id = get_fake_client
+    vim.notify = capture_notice
 
     version_handler(nil, { version = '5.9.3', source = 'user-setting' }, { client_id = 42 })
     assert(#stopped == 0, 'the exact project TypeScript must remain attached')
@@ -150,8 +153,10 @@ local ok, err = xpcall(function()
     local missing_source = missing_root .. '/src/index.ts'
     create_file(missing_root .. '/package-lock.json')
     create_file(missing_source)
-    vim.fn.exepath = function() error 'must not inspect PATH' end
-    vim.fn.getcwd = function() error 'must not inspect Neovim cwd' end
+    local function unexpected_path_lookup(_) error 'must not inspect PATH' end
+    local function unexpected_cwd_lookup(_, _) error 'must not inspect Neovim cwd' end
+    vim.fn.exepath = unexpected_path_lookup
+    vim.fn.getcwd = unexpected_cwd_lookup
     local rooted, missing_result = pcall(function()
       assert(root_for(missing_source) == nil)
       return root_for_config(legacy_config, missing_source)
@@ -239,19 +244,22 @@ local ok, err = xpcall(function()
     local buffer = vim.api.nvim_create_buf(true, false)
     vim.api.nvim_buf_set_name(buffer, windows_source)
     vim.bo[buffer].filetype = 'typescript'
-    vim.fn.has = function(feature)
+    local function has_windows(feature, _)
       if feature == 'win32' then return 1 end
       return original_has(feature)
     end
-    vim.fn.executable = function(path)
+    local function windows_compiler_executable(path)
       if path == expected_windows_compiler then return 1 end
       return original_executable(path)
     end
-    vim.system = function(command, options)
+    local function compiler_version(command, options, _)
       assert(vim.deep_equal(command, { expected_windows_compiler, '--version' }), vim.inspect(command))
       assert(vim.deep_equal(options, { text = true }), vim.inspect(options))
-      return { wait = function() return { code = 0, stdout = 'Version 7.0.2' } end }
+      return { wait = function(_, _) return { code = 0, stdout = 'Version 7.0.2' } end }
     end
+    vim.fn.has = has_windows
+    vim.fn.executable = windows_compiler_executable
+    vim.system = compiler_version
     local root
     local rooted, root_error = pcall(config.root_dir, buffer, function(value) root = value end)
     vim.fn.has = original_has

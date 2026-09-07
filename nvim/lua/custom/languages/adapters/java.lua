@@ -1,9 +1,7 @@
 -- nvim-jdtls owns Java's project lifecycle and its JDT-specific DAP surface.
 
-local gh = require('custom.lib.pack').gh
 local capabilities = require 'custom.languages.capabilities'
 local context = require 'custom.languages.context'
-local dap = require 'custom.languages.dap'
 
 local workspace_markers = { 'gradlew', 'gradlew.bat', 'settings.gradle', 'settings.gradle.kts', 'mvnw', 'mvnw.cmd' }
 local module_markers = { 'build.gradle', 'build.gradle.kts', 'pom.xml' }
@@ -56,31 +54,43 @@ local function bundles()
   return result
 end
 
-dap.register_project('java', {
-  lsp_client = 'jdtls',
-  root_profile = root_profile,
-  launch_types = { 'java' },
-})
+local M = {
+  mason_tools = { 'jdtls', 'java-debug-adapter', 'java-test', 'google-java-format' },
+  treesitter_parsers = { 'java' },
+  formatters_by_ft = { java = { 'google-java-format' } },
+  dap_by_ft = {
+    java = {
+      lsp_client = 'jdtls',
+      root_profile = root_profile,
+      launch_types = { 'java' },
+    },
+  },
+}
 
-vim.pack.add { { src = gh 'mfussenegger/nvim-jdtls' } }
+function M.setup()
+  local gh = require('custom.lib.pack').gh
+  local dap = require 'custom.languages.dap'
 
-vim.api.nvim_create_autocmd('FileType', {
-  group = vim.api.nvim_create_augroup('java-jdtls', { clear = true }),
-  pattern = 'java',
-  callback = function(event)
-    local project = context.for_buffer(event.buf, root_profile)
-    if not project then return end
+  vim.pack.add { { src = gh 'mfussenegger/nvim-jdtls' } }
 
-    -- nvim-jdtls registers the Java adapter and generated-main provider only
-    -- when nvim-dap is already loaded.
-    dap.ensure()
-    require('jdtls').start_or_attach({
-      cmd = jdtls_command(project.root),
-      root_dir = project.root,
-      init_options = { bundles = bundles() },
-      on_attach = capabilities.disable_formatting,
-    }, { dap = {} }, { bufnr = event.buf })
-  end,
-})
+  vim.api.nvim_create_autocmd('FileType', {
+    group = vim.api.nvim_create_augroup('java-jdtls', { clear = true }),
+    pattern = 'java',
+    callback = function(event)
+      local project = context.for_buffer(event.buf, root_profile)
+      if not project then return end
 
-return { root_profile = root_profile }
+      -- nvim-jdtls registers the Java adapter and generated-main provider only
+      -- when nvim-dap is already loaded.
+      dap.ensure()
+      require('jdtls').start_or_attach({
+        cmd = jdtls_command(project.root),
+        root_dir = project.root,
+        init_options = { bundles = bundles() },
+        on_attach = capabilities.disable_formatting,
+      }, { dap = {} }, { bufnr = event.buf })
+    end,
+  })
+end
+
+return M

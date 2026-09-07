@@ -67,7 +67,8 @@ local setup_ok, setup_error = xpcall(function()
     },
     cache_enabled = 0,
   }
-  vim.pack.add = function() end
+  local function ignore_package_additions(_, _) end
+  vim.pack.add = ignore_package_additions
   vim.o.columns = 160
   vim.uv.new_fs_event = function()
     return {

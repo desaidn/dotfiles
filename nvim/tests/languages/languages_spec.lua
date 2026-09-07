@@ -8,7 +8,18 @@ package.path = table.concat({
   package.path,
 }, ';')
 
+local original_pack_add = vim.pack.add
+local original_autocmd = vim.api.nvim_create_autocmd
+local original_command = vim.api.nvim_create_user_command
+local original_rustaceanvim = vim.g.rustaceanvim
+local function unexpected_setup() error 'Collecting language settings must not activate plugins or register behavior' end
+vim.pack.add = unexpected_setup
+vim.api.nvim_create_autocmd = unexpected_setup
+vim.api.nvim_create_user_command = unexpected_setup
 local languages = require 'custom.languages.config'
+vim.pack.add = original_pack_add
+vim.api.nvim_create_autocmd = original_autocmd
+vim.api.nvim_create_user_command = original_command
 
 local function check(name, body)
   local ok, err = pcall(body)
@@ -39,6 +50,86 @@ local function assert_formatting_disabled(on_attach, server, server_capabilities
   assert(not server_capabilities.documentRangeFormattingProvider, server .. ' range formatting must be disabled')
   return client
 end
+
+check('collects complete declarations without activating adapters', function()
+  assert(package.loaded['custom.languages.dap'] == nil, 'inventory collection must not initialize shared DAP')
+  assert(vim.deep_equal(vim.g.rustaceanvim, original_rustaceanvim), 'inventory collection must not configure Rust')
+  assert(languages.dap_by_ft.java.lsp_client == 'jdtls', 'Java routing must exist before setup')
+  assert(languages.dap_by_ft.python.lsp_client == 'basedpyright', 'Python routing must exist before setup')
+end)
+
+check('deduplicates shared install requirements while preserving every consumer', function()
+  for _, field in ipairs { 'mason_tools', 'treesitter_parsers' } do
+    local seen = {}
+    for _, name in ipairs(languages[field]) do
+      assert(not seen[name], ('duplicate %s requirement: %s'):format(field, name))
+      seen[name] = true
+    end
+  end
+  for _, filetype in ipairs { 'javascript', 'javascriptreact', 'typescript', 'typescriptreact', 'json', 'jsonc', 'html', 'css', 'scss', 'markdown' } do
+    assert(vim.deep_equal(languages.formatters_by_ft[filetype], { 'prettierd', 'prettier', stop_after_first = true }), filetype)
+  end
+end)
+
+check('collects repeated tools and parsers once in first-declaration order', function()
+  local bash_name, css_name = 'custom.languages.adapters.bash', 'custom.languages.adapters.css'
+  local bash, css = package.loaded[bash_name], package.loaded[css_name]
+  package.loaded[bash_name] = { mason_tools = { 'shared-tool', 'first-tool' }, treesitter_parsers = { 'shared-parser', 'first-parser' } }
+  package.loaded[css_name] = { mason_tools = { 'shared-tool', 'second-tool' }, treesitter_parsers = { 'shared-parser', 'second-parser' } }
+  local ok, collected = pcall(dofile, nvim_root .. '/lua/custom/languages/config.lua')
+  package.loaded[bash_name], package.loaded[css_name] = bash, css
+  assert(ok, collected)
+  assert(vim.deep_equal(vim.list_slice(collected.mason_tools, 1, 3), { 'shared-tool', 'first-tool', 'second-tool' }))
+  assert(vim.deep_equal(vim.list_slice(collected.treesitter_parsers, 1, 3), { 'shared-parser', 'first-parser', 'second-parser' }))
+end)
+
+check('rejects overlapping map ownership even when definitions agree', function()
+  local bash_name = 'custom.languages.adapters.bash'
+  local css_name = 'custom.languages.adapters.css'
+  local bash, css = package.loaded[bash_name], package.loaded[css_name]
+  for _, field in ipairs { 'lsp_servers', 'formatters_by_ft', 'format_on_save_disabled_filetypes', 'linters_by_ft', 'dap_by_ft' } do
+    ---@type table|boolean
+    local value = {}
+    if field == 'format_on_save_disabled_filetypes' then value = false end
+    package.loaded[bash_name] = { [field] = { duplicate = value } }
+    package.loaded[css_name] = { [field] = { duplicate = value } }
+    local ok, err = pcall(dofile, nvim_root .. '/lua/custom/languages/config.lua')
+    package.loaded[bash_name], package.loaded[css_name] = bash, css
+    assert(not ok, field .. ' must reject duplicate owners')
+    for _, detail in ipairs { field, 'duplicate', 'bash', 'css' } do
+      assert(tostring(err):find(detail, 1, true), tostring(err))
+    end
+  end
+end)
+
+check('activates the collected adapters after every shared surface is ready', function()
+  local trace, saved_setups, saved_modules, saved_preloads = {}, {}, {}, {}
+  for _, name in ipairs { 'java', 'javascript', 'python', 'rust' } do
+    local adapter = require('custom.languages.adapters.' .. name)
+    saved_setups[name] = adapter.setup
+    adapter.setup = function() trace[#trace + 1] = name end
+  end
+  for _, name in ipairs { 'lsp', 'treesitter', 'format', 'dap' } do
+    local module = 'custom.languages.' .. name
+    saved_modules[module], saved_preloads[module] = package.loaded[module], package.preload[module]
+    package.loaded[module] = nil
+    package.preload[module] = function()
+      assert(require('custom.languages.config').dap_by_ft.python, 'declarations must be complete before shared setup')
+      trace[#trace + 1] = name
+      return {}
+    end
+  end
+  local ok, err = pcall(dofile, nvim_root .. '/lua/custom/languages/init.lua')
+  for name, setup in pairs(saved_setups) do
+    require('custom.languages.adapters.' .. name).setup = setup
+  end
+  for _, name in ipairs { 'lsp', 'treesitter', 'format', 'dap' } do
+    local module = 'custom.languages.' .. name
+    package.loaded[module], package.preload[module] = saved_modules[module], saved_preloads[module]
+  end
+  assert(ok, err)
+  assert(vim.deep_equal(trace, { 'lsp', 'treesitter', 'format', 'dap', 'java', 'javascript', 'python', 'rust' }), vim.inspect(trace))
+end)
 
 check('declares Fish parsing and language-server support', function()
   assert(contains(languages.treesitter_parsers, 'fish'), 'missing Fish Tree-sitter parser')

@@ -4,44 +4,30 @@ This file provides guidance to coding agents working in this repository. Codex r
 
 ## Repository Overview
 
-This is a personal dotfiles monorepo. It contains configurations for the tools below; an `install.sh` symlinks tracked configurations into `~/.config/<tool>/` and `zsh/.zshrc` to `~/.zshrc`. Herdr is linked as a single durable config file so its mutable runtime state remains local. Editing a file under this repo and editing the corresponding linked file under `~/.config/<tool>/` are the same write.
+This is a personal dotfiles monorepo. See [README.md](README.md) for the
+application layout, installation, dependency inventory, and tool usage guides.
+Editing a file under this repo and editing its linked counterpart under
+`~/.config/` are the same write.
 
-## Core Applications
-
-### Terminal & Shell
-
-- **Ghostty** (`ghostty/config`) - macOS terminal emulator config
-- **Fish** (`fish/`) - Primary shell, with custom λ prompt
-- **Zsh** (`zsh/.zshrc`) - Secondary shell, mirrored prompt and aliases
-- **Herdr** (`herdr/config.toml`) - Primary daily workspace manager; only durable configuration is tracked
-- **Tmux** (`tmux/tmux.conf`) - Retained fallback and compatibility multiplexer with directory preservation and 1-based indexing
-
-### Development Tools
-
-- **Neovim** (`nvim/`) - Primary editor for most languages (see `nvim/AGENTS.md` for details)
-- **LazyGit** (`lazygit/config.yml`) - Git Transaction Surface with nvim
-  integration, Hunk as its Diffing Solution, native staging, and a custom theme
-- **Hunk** (`hunk/config.toml`) - Full stacked working-tree and staged review surface from Neovim; only durable preferences are tracked
-- **Devflow** (`tools/devflow/`) - Small command-line tool for the common agent WIP, review, and squash-landing flow
-
-### Dependency ownership
+## Dependency ownership
 
 Keep provisioning ownership explicit:
 
 - **Platform bootstrap** owns Homebrew plus the compiler, download, and archive
   utilities required to install Homebrew and populate Neovim.
-- **Homebrew** owns applications and standalone CLIs: Git, Fish 3.2+, Zsh,
-  Neovim 0.12.5 stable, Herdr, tmux 3.7+, LazyGit 0.56+, Hunk 0.18.1+,
-  Mise, Atuin, `gh`, `uv`,
-  ripgrep, tree-sitter CLI 0.26.1+, and capability-specific tools such as
-  `ghcup`; on Linux it also owns `xclip` and `wl-clipboard`.
-- **Mise** owns Node.js/npm, Python, Rust/Cargo/Clippy/rustfmt/rust-src, and Amazon
-  Corretto JDK 21 (`corretto-21.0.12.8.1`). The tracked manifest uses exact
-  versions so reruns do not silently advance runtimes; update those pins
-  deliberately. Do not install these runtimes through Homebrew.
+- **Homebrew** owns applications and standalone CLIs. Preserve the package
+  inventory and version requirements in [README.md](README.md#dependency-ownership).
+- **Mise** owns language runtimes. Keep the tracked manifest's exact pins and
+  update them deliberately; do not install these runtimes through Homebrew.
 - **Neovim** owns its plugins, Treesitter parsers, and Mason packages. Do not
   duplicate Mason-managed LSPs, formatters, linters, or debuggers in the
   machine package list.
+
+Keep compatibility minimums separate from exact provisioning pins. Raise a
+minimum only for a required capability or documented incompatibility; recommend
+latest stable releases without adding network checks or update warnings to
+startup. Neovim installer, startup, and health checks must share
+[`nvim/lua/custom/lib/neovim.lua`](nvim/lua/custom/lib/neovim.lua).
 
 Ghostty and JetBrains Mono are macOS-only Homebrew casks. Linux needs a
 session-appropriate clipboard provider when a display is present; remote
@@ -53,8 +39,7 @@ or JetBrains Toolbox into required dependencies.
 `install.sh` implements this policy through the root `Brewfile` and
 `mise/conf.d/00-dotfiles.toml`. The Mise file is linked as a low-precedence
 global defaults fragment; never replace a user's main
-`~/.config/mise/config.toml`. See `docs/dependency-research.md` for the
-evidence behind this inventory.
+`~/.config/mise/config.toml`. See [the dependency research](docs/dependency-research.md) for source evidence.
 
 ## Configuration Philosophy
 
@@ -69,37 +54,15 @@ All configurations follow these principles:
 - Prefer small self-made or locally-owned performant development tools when native capabilities are not enough and the workflow should stay inspectable
 - Agent harnesses are adapters, not workflow owners; Codex, Claude Code, and future tools should use the same Neovim, Git, and review surfaces
 - Prefer upstream defaults unless a deviation directly supports the uniform code interface; avoid custom maintenance burden for taste-only changes
-- Development-focused workflows for TypeScript, Kotlin/Java, Python, and Rust
+- Development-focused workflows for TypeScript (Bun, Node.js, Browser), Kotlin/Java, Python, and Rust
 - Prefer standard, idiomatic shortcuts and conventions over custom bindings to ensure compatibility across systems (e.g., use Ctrl+W for delete-word rather than custom Cmd+Backspace)
 - Platform-agnostic rc files: no hardcoded `/opt/homebrew/...` paths in `fish/config.fish` or `zsh/.zshrc`. Per-machine state lives in `~/.local/share/dotfiles/local.{fish,zsh}`.
 
-## Common Development Workflows
+## Workflow constraints
 
-### Environment Setup
-
-```bash
-git clone <this-repo> ~/dotfiles
-~/dotfiles/install.sh           # Bootstrap dependencies, runtimes, and config links
-# Or, on hosts that cannot install the pinned runtimes:
-~/dotfiles/install.sh --skip-mise-runtimes
-# Linux: run the exact `exec ".../fish" -l` command printed by install.sh
-nvim                            # Start editor (see nvim/AGENTS.md for details)
-```
-
-### Terminal Usage
-
-```bash
-# Start or reattach the normal daily workspace
-herdr
-
-# Start a deliberate fallback/compatibility session directly
-tmux new-session -A -s dev
-
-# Inside fallback tmux: C-b c (new window), C-b " (vsplit), C-b % (hsplit)
-# All operations preserve current working directory
-```
-
-Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside Herdr for normal agent work.
+Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside
+Herdr for normal agent work. Usage is documented in the
+[Herdr](herdr/README.md) and [tmux](tmux/README.md) guides.
 
 ### Git Operations
 
@@ -108,24 +71,33 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 - Write commit subjects as short, imperative plain-language summaries (for
   example, `Add shell LSP support`); do not use Conventional Commit prefixes
   such as `feat:` or `fix:`.
-- Configured with custom theme matching development environment
-- Use direct Hunk from Neovim only for full stacked review: `<leader>gd` → `hunk diff --watch --mode stack` for the working tree, `<leader>gD` → the same review with `--staged`. Both inputs share one Tool Tab and one process, so exactly one session matches the repository and the `--repo .` selector on `hunk session` subcommands stays unambiguous.
+- Use direct Hunk from Neovim only for full stacked working-tree or staged
+  review. Both inputs must share one Tool Tab and process per repository so
+  the `--repo .` selector on `hunk session` subcommands remains unambiguous. See the
+  [Neovim Git guide](nvim/README.md#git) for mappings.
 - Keep gitsigns keymaps hunk-local; buffer-wide stage/reset operations belong in lazygit.
 
 ### Agent Development Workflow
 
-- These rules govern coding-agent actions only. Human Git and LazyGit operations
-  are unrestricted and remain the user's transaction surface; agents must not
-  block, intercept, or reinterpret them as Workflow Exceptions.
-- Follow the user's request and project instructions to choose or prepare the checkout, including any worktree. Devflow operates only where invoked and never manages worktrees. If neither source authorizes a needed branch or worktree action outside the common flow, ask first.
-- Start local work with `devflow start <feature>` from a clean checkout at the commit where work should begin. It creates `wip/<feature>` at the current commit or selects the existing branch without rewriting it. If that branch is checked out elsewhere, use that checkout instead of moving it.
-- Keep agent-authored WIP append-only. Ordinary commits and ordinary merges into WIP are allowed; never amend, rebase, reset, delete, or force-update WIP.
-- Review local WIP from its clean checkout with `devflow --json review --base <branch-or-commit>`. Devflow uses the current commit as the source and infers the name from `wip/<feature>`. Review someone else's current checked-out commit through the same Herdr, Neovim, and Hunk path by also passing `--name <review-name>`; this creates no WIP and cannot land.
-- Keep the checkout unchanged while review is open so Hunk's `e` action returns to the review tab's Neovim with normal project-root discovery and full language tooling. Inspect the exact returned Hunk session and add every actionable finding there before asking for the user's decision. After approval, the review tab may close and its checkout may be reused.
-- Apply feedback as new WIP commits and open a fresh review. Any WIP or Review Branch change makes an older approval stale. A review does not imply approval.
-- After the user explicitly approves the exact current local review, ask which existing local branch should receive it. From a clean checkout already on that target, run `devflow land <feature> --target <branch> --approved <review-id> --title <complete-feature-title>`. Derive the title from the feature name and complete WIP history; do not ask the user for it.
-- A landing target may use any project convention except `wip/*` or `review/*`, must contain the Review Base, and receives one squash commit. Devflow leaves WIP and review records intact and never creates targets, pushes, runs team-specific review tools, performs onward delivery, or cleans up successful work.
-- Devflow installs no repository hooks and reserves no ref or checkout against human activity. Coordinate shared-checkout activity and rerun validation after a concurrent human Git operation.
+Read and follow [the development workflow](docs/agents/development-workflow.md)
+before branch, review, or landing operations. Use `devflow` for the guarded
+start, review, and landing transitions; its deterministic checks are executable
+authority, not a replacement for these instructions.
+
+- These rules govern coding agents only. Never block, intercept, or reinterpret
+  human Git and LazyGit operations as Workflow Exceptions.
+- Follow user and project instructions to select the checkout. Devflow never
+  manages worktrees; ask before an otherwise unauthorized branch or worktree action.
+- Keep agent-authored WIP append-only: ordinary commits and merges are allowed;
+  never amend, rebase, reset, delete, or force-update it.
+- Review the exact clean WIP head. Keep the commit, staged state, and files
+  unchanged while review is open; inspect the returned Hunk session and add
+  every actionable finding there before asking for a decision.
+- A review is not approval. Land only after explicit approval of the exact
+  current local review and after asking which existing local branch receives
+  it. Any WIP or Review Branch change invalidates that approval.
+- Coordinate shared-checkout activity and rerun validation after a concurrent
+  human Git operation. Devflow reserves no ref or checkout against human use.
 
 ### Agent Harnesses
 
@@ -140,9 +112,16 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 
 - Each configured application maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked
 - `tools/` is the source workspace for small, independently named agent-facing utilities. It is not an umbrella command, plugin system, or shared framework; see `tools/README.md`.
-- Individual tools may have their own AGENTS.md files (e.g., `herdr/AGENTS.md`, `nvim/AGENTS.md`, `tmux/AGENTS.md`)
+- Follow tool-specific guidance where present: [Herdr](herdr/AGENTS.md),
+  [Neovim](nvim/AGENTS.md), and [tmux](tmux/AGENTS.md).
 - Long-lived architecture review reports that the user chooses to retain live under `docs/`; generated reports should not remain at the repository root
 - Configurations are environment-specific and not intended for multi-user scenarios
+- Keep documentation ownership explicit: the root README owns installation and
+  dependency inventory; tool READMEs own usage, commands, keybindings, and
+  troubleshooting; AGENTS files own constraints, ownership, and validation.
+  Keep workflow details in [the development workflow](docs/agents/development-workflow.md),
+  decisions in ADRs, and domain definitions in `CONTEXT.md`. Link to each owner
+  instead of duplicating its explanations.
 
 ### Tool Integration Points
 
@@ -154,12 +133,9 @@ Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside 
 - **Runtime Management**: Mise owns language runtimes; Mason owns editor tooling
 - **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty)
 
-### Dependencies
-
-- macOS-first setup; configs aim to remain Linux-compatible where practical
-- Primary languages: TypeScript (Bun, Node.js, Browser), Kotlin/Java, Python, Rust
-- Terminal tooling: Ghostty, Herdr, tmux, fish, zsh
-- Dependency package mappings and version floors are documented in `README.md`; keep this section and that inventory aligned
+Keep the macOS-first setup Linux-compatible where practical. Update the
+[root dependency inventory](README.md#dependency-ownership) when ownership or
+version requirements change.
 
 ## Agent skills
 
@@ -178,12 +154,6 @@ Use the default five-label triage vocabulary: `needs-triage`, `needs-info`, `rea
 ### Domain docs
 
 This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
-
-### Development workflow
-
-The harness-neutral branch, review, approval, and landing contract is documented
-in `docs/agents/development-workflow.md`. The Workflow Engine is the executable
-authority for its deterministic checks; agent instructions do not replace them.
 
 ## Install Contract
 
@@ -241,7 +211,8 @@ authority for its deterministic checks; agent instructions do not replace them.
   guidance. Those adapters require an explicit `devflow harness install`
   invocation.
 - Run `tests/install_test.sh` after installer, Brewfile, Mise manifest, or
-  per-machine activation-template changes.
+  per-machine activation-template changes. It needs Neovim to execute the shared
+  compatibility helper against simulated versions.
 
 ## Uninstall Contract
 

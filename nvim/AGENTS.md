@@ -2,9 +2,9 @@
 
 Guidance for coding agents working on the nvim config. See [`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions.
 
-## Neovim Configuration Overview
-
-This is a Neovim configuration based on kickstart.nvim, providing a well-documented starting point for Neovim customization. `init.lua` handles core settings, basic keymaps, native `vim.pack` build hooks, and core UI plugins; each modular plugin configuration lives under `lua/kickstart/plugins/`, `lua/custom/languages/`, or `lua/custom/plugins/`.
+Usage, keybindings, maintenance commands, and troubleshooting belong in
+[README.md](README.md). Keep this file focused on configuration ownership,
+constraints, and required validation.
 
 ## Core Architecture
 
@@ -13,22 +13,23 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `init.lua` - Core settings, basic keymaps, autocommands, native `vim.pack` build hooks, core UI plugins, and top-level module imports
 - `colors/custom.lua` - Custom colorscheme (transparent backgrounds, peach accents)
 - `lua/kickstart/plugins/` - Upstream-oriented Kickstart modules, explicitly loaded by `lua/kickstart/plugins/init.lua`.
-  - `blink-cmp.lua` - blink.cmp completion with LuaSnip
+  - `blink-cmp.lua` - blink.cmp completion with native Neovim snippets
   - `telescope.lua` - Telescope pickers and LSP reference/definition keymaps
   - `gitsigns.lua` - Git signs, blame, and hunk navigation keymaps
   - `neo-tree.lua` - File explorer (right-side, text-based icons)
   - `autopairs.lua` - Auto-close brackets, quotes, etc.
 - `lua/kickstart/health.lua` - Health check for `:checkhealth`
+- `lua/custom/lib/neovim.lua` - One Neovim minimum-version rule shared by the installer, startup, and health check; accept newer releases and keep prerelease advice in health reporting
 - `lua/custom/lib/pack.lua` - Shared `vim.pack` helper, GitHub URL helper, and `PackChanged` build hooks
 - `lua/custom/lib/terminal_tool.lua` - Shared launcher for Neovim-owned terminal tools; use this for future flows that should run in a persistent Tool Tab while leaving host tmux navigation available when Neovim is running in the tmux fallback
 - `lua/custom/languages/` - Repository-owned language tooling, loaded explicitly by `init.lua`:
   - `init.lua` - deterministic language-tooling bootstrap
-  - `config.lua` - canonical declarative LSP, Mason, Treesitter, formatting, and linting configuration
+  - `config.lua` - explicit adapter selection, inventory collection, ownership validation, and activation
   - `context.lua` - buffer-derived project roots and collision-resistant workspace-data paths; it never changes Neovim's current directory
   - `capabilities.lua` - shared LSP capability policy, including single-owner formatting
-  - `lsp.lua`, `treesitter.lua`, `format.lua`, `lint.lua`, and `dap.lua` - shared language surfaces
+  - `lsp.lua`, `treesitter.lua`, and `format.lua` - shared LSP, parsing, and formatting surfaces
   - `dap.lua` - shared lazy DAP lifecycle, UI, controls, buffer-specific debugger registration, and root-aware `launch.json` provider
-  - `adapters/java.lua`, `adapters/javascript.lua`, `adapters/python.lua`, and `adapters/rust.lua` - language-specific adapters
+  - `adapters/` - one file per language family with LSP/DAP support, plus `supporting.lua` for families without either capability; each owns its settings and project behavior
 - `lua/custom/plugins/` - Repository-owned plugin modules, explicitly required by `lua/custom/plugins/init.lua`:
   - `init.lua` - Custom plugin imports
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
@@ -38,6 +39,7 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/flatten_swap_spec.lua` - Two-Neovim regression proving that a live swap collision cannot abort a production Flatten handoff after Neovim installs the requested buffer
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
+- `tests/neovim_spec.lua` - Headless checks for Neovim version boundaries and consistent startup/health behavior
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
 - `tests/languages/` - Headless language-tooling regression harnesses for configuration, project context, JDTLS, linting, DAP, JavaScript/TypeScript, Python, and Rust behavior
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
@@ -45,50 +47,22 @@ This is a Neovim configuration based on kickstart.nvim, providing a well-documen
 
 ### Plugin Management
 
-Uses native `vim.pack` as the plugin manager. Plugin modules should stay simple and idiomatic: call `vim.pack.add()` for the package(s) they own, configure them directly, and avoid recreating lazy.nvim's trigger DSL. Prefer native Neovim APIs before adding plugins, and keep each plugin responsible for a clear capability that is not already covered by core Neovim or a local helper. Core plugins include:
+Use native `vim.pack`. Plugin modules own their `vim.pack.add()` calls and
+configure packages directly; do not recreate lazy.nvim's trigger DSL. Each
+plugin must supply a clear capability not already covered by Neovim or a local
+helper. Keep fff.nvim responsible for files/live grep and Telescope for the
+other pickers. Keep Blink's native snippet engine and personal VS Code source;
+bundled friendly-snippets discovery stays disabled.
 
-- **LSP**: nvim-lspconfig with Mason for auto-installation. Native Neovim 0.11+ server configuration lives in `lua/custom/languages/`; TypeScript semantics are project-owned and version-routed from a recognized root-local installation: 7+ uses native `tsc`, while earlier versions use Mason's `typescript-language-server` transport with the exact project `tsserver.js`.
-- **Completion**: blink.cmp with LuaSnip for snippets
-- **Fuzzy Finding**: fff.nvim for files and live grep (`<leader>sf`, `<leader>sg`); Telescope with fzf-native for help, keymaps, diagnostics, buffers, LSP symbols, and word-under-cursor grep
-- **Git Integration**: gitsigns (in-editor signs, blame, local hunks); Hunk (working-tree and staged review); lazygit (Git transaction UI)
-- **Treesitter**: Syntax highlighting, code parsing, and context (nvim-treesitter-context)
-- **Formatting**: conform.nvim for auto-formatting
-- **Linting**: nvim-lint with eslint_d; Ruff supplies Python diagnostics and actions through LSP
-- **Debugging**: nvim-dap with project-root-aware `launch.json`, JavaScript/TypeScript (Mason js-debug), Java (nvim-jdtls + Mason debug/test bundles), Python (Mason debugpy), and Rust (rustaceanvim + Mason CodeLLDB)
-- **UI**: which-key, mini.nvim (statusline, surround, text objects), undotree, todo-comments
+### Keymap ownership
 
-### Key Bindings Structure
-
-- Leader key: `<Space>`
-- Search operations: `<leader>s*` (files, grep, help, keymaps, diagnostics, etc.)
-- Toggle options: `<leader>t*` — `th` inlay hints, `tb` git blame line, `td` inline git diff, `ts` spell check
-- Git operations: `<leader>gg` (lazygit), `<leader>gd` / `<leader>gD` (Hunk working-tree and staged review), `<leader>g*` (hunk-local gitsigns actions), `]c`/`[c` (hunk navigation)
-- LSP operations: `gr*` prefix (Neovim 0.11 defaults for rename/code action, Telescope overrides for references/definitions)
-- Format: `<leader>f` (format buffer)
-- Explorer: `<leader>e` (neo-tree toggle)
-- Undo tree: `<leader>u` (toggle undotree)
-- Path copy: `<leader>p*` (copy absolute/relative file paths)
-- Debug: `<leader>b` (breakpoint), `F1-F3` (stepping), `F5` (continue), `F7` (DAP UI). These keys lazy-load and configure DAP on first use; `launch.json` is selected from the current buffer's language-specific project root. Rust also initializes it when rust-analyzer attaches so rustaceanvim can create CodeLLDB configurations.
-- Diagnostic quickfix: `<leader>q`
-
-The editing and debugging interface is language-neutral. Language plugins may
-provide backend-specific commands, but must not claim a separate keymap
-namespace or override shared LSP mappings. Rustaceanvim's advanced actions are
-available through `:RustLsp runnables`, `:RustLsp testables`, `:RustLsp
-debuggables`, `:RustLsp expandMacro`, and `:RustLsp hover actions` while a
-common target-selection interface is designed. Python's nvim-dap-python test
-actions are available through `:DapPythonTestClass` and
-`:DapPythonTestMethod`.
+Use the [documented keybindings](README.md#key-bindings). The editing and
+debugging interface is language-neutral: language plugins may expose
+backend-specific commands, but must not claim a separate keymap namespace or
+override shared LSP mappings. Keep DAP lazy on first use, with the Rust
+attachment initialization needed by rustaceanvim.
 
 ## Development Workflows
-
-### Plugin Management
-
-- `:lua vim.pack.update(nil, { offline = true })` - Inspect plugin state and pending updates
-- `:lua vim.pack.update()` - Update all plugins
-- `:Mason` - Manage LSP servers, formatters, linters, and debuggers
-- `:checkhealth` - Diagnose configuration issues
-- `nvim --clean --headless -l nvim/tests/pack_spec.lua` - Verify native package build hooks
 
 ### Headless Specs
 
@@ -109,38 +83,36 @@ done
 `--clean` excludes the normal user configuration. Each harness adds this
 repository's `nvim/lua` directory to `package.path` and loads the production
 module under test, using focused API/plugin stubs where a real server or
-adapter is outside the test's scope. The real-PTY Hunk check is separate; run
-`/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` when that surface
-changes.
+adapter is outside the test's scope.
 
-### Terminal Tool Launcher
+Run the matching checks when their surface changes:
 
-- `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` - Run the terminal-tool regression checks from the repository root
-- `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` - Compare real Hunk in a direct PTY and through two production Tool Tabs, then verify switching, isolated exit, native resize behavior, and host tmux prefix routing; requires Expect, tmux, Git, Hunk, and Neovim on `PATH`
+- `nvim --clean --headless -l nvim/tests/diagnostics.lua` scans every Neovim Lua file, including tests, with the installed Lua language server and this configuration's Neovim workspace settings. It checks every diagnostic severity and requires the Mason-managed `lua-language-server`.
+- `nvim --clean --headless -l nvim/tests/neovim_spec.lua` for the shared Neovim minimum, prerelease handling, and startup/health consumers.
+- `nvim --clean --headless -l nvim/tests/pack_spec.lua` for native package build hooks.
+- `nvim --clean --headless -l nvim/tests/neo_tree_spec.lua` for selected-node path copying and refresh after a missed filesystem change.
+- `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` for terminal-tool lifecycle, handoff, and host input routing.
+- `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` for real Hunk rendering, switching, isolated exit, resize, and host tmux prefix routing. It requires Expect, tmux, Git, Hunk, and Neovim on `PATH`.
 
 ### LSP and Language Support
 
-Configured with multiple language servers (TypeScript, Python, Rust, Lua, JSON, YAML, HTML, CSS, Haskell, Java, Kotlin). Three config layers (lowest to highest priority):
+Three config layers apply, from lowest to highest priority:
 
 1. **`vim.lsp.config('*')` in `lua/custom/languages/lsp.lua`** — shared client capabilities
 2. **nvim-lspconfig defaults** — cmd, filetypes, root_dir, commands (no files needed)
-3. **Named configurations in `lua/custom/languages/config.lua`** — server-specific settings, callbacks, and declared DAP root/type routing applied through `vim.lsp.config()` and the DAP provider
+3. **Named configurations in `lua/custom/languages/adapters/`** — server-specific settings, callbacks, and declared DAP root/type routing collected by `config.lua` and applied through `vim.lsp.config()` and the DAP provider
 
-Common language configuration lives in `lua/custom/languages/config.lua`; shared lifecycle, buffer-derived context, and language adapters live beside it in the same folder. Its fields use the native data shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, nvim-lint, and nvim-dap. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes.
+Each language adapter owns its native configuration and language-specific behavior. Importing an adapter must not load plugins, register commands/autocommands, or start servers. `config.lua` collects one explicit ordered adapter list, shared tooling initializes, then the same adapters' optional `setup()` functions activate integration. Keep debugger setup lazy. JavaScript owns ESLint scheduling and project policy; Python owns Ruff capability overlap.
+
+Adapters explicitly declare their full Mason and parser requirements, including names shared with other adapters. The collector deduplicates only these lists and rejects duplicate LSP or filetype mappings within a category, naming both owners. Its fields retain the native shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, nvim-lint, and nvim-dap. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes. See [ADR 0014](../docs/adr/0014-co-locate-language-settings-and-behavior.md) for the ownership decision.
 
 Java and Rust are intentional lifecycle exceptions: nvim-jdtls and rustaceanvim own their respective language-server startup, so neither server appears in generic `vim.lsp.enable` configuration. Java's adapter starts JDTLS per project and initializes its DAP integration before attachment.
 
-TypeScript is a semantic-ownership exception rather than a lifecycle exception.
-Generic native LSP startup enables two mutually exclusive routes after the
-shared JavaScript/TypeScript profile finds a package-manager/Git root and
-excludes a nearer Deno project: a parseable root-local TypeScript 7+ starts its
-exact `node_modules/.bin/tsc`, while an earlier version with root-local
-`node_modules/typescript/lib/tsserver.js` starts Mason's
-`typescript-language-server` transport pointed at that exact language service.
-The compatibility client accepts only the expected `$/typescriptVersion`
-report from `user-setting` and terminates wrapper fallbacks or mismatches.
-Missing, unparseable, unowned, and Deno projects receive neither client. Mason
-owns the compatibility transport, js-debug, and `eslint_d`; projects own
+Preserve the [TypeScript semantic-ownership contract](README.md#language-project-requirements):
+only the exact root-local compiler/language service may supply project
+semantics, selected by version after root recognition and Deno exclusion.
+The compatibility client must reject fallback or mismatched version reports.
+Mason owns the compatibility transport, js-debug, and `eslint_d`; projects own
 TypeScript, ESLint, runtime semantics, and non-trivial Node/browser
 `.vscode/launch.json` files.
 
@@ -152,18 +124,19 @@ tasks or silent trust expansion.
 
 To add a new language server:
 
-1. Add the server's nvim-lspconfig name and native configuration to `lsp_servers` in `lua/custom/languages/config.lua`; use an empty table when nvim-lspconfig defaults are sufficient.
-2. Add its Mason package to `mason_tools` only when Mason owns installation, and add the required Treesitter parsers to `treesitter_parsers`.
-3. Add native Conform or nvim-lint filetype mappings and any format-on-save policy in the same configuration when the language needs them.
-4. Restart Neovim, then use `:Mason` to inspect installation status.
+1. Add or extend the language family's adapter under `lua/custom/languages/adapters/`. Declare the server's nvim-lspconfig name and native configuration in `lsp_servers`; use an empty table when upstream defaults suffice.
+2. Declare its complete Mason-owned packages and Treesitter parsers in that adapter, including shared tools such as Prettier.
+3. Keep native formatter/linter/DAP mappings, format-on-save policy, project roots, and optional integration setup in the same adapter. Java and Rust retain their specialized LSP startup.
+4. Add a new adapter to the one ordered list in `config.lua`; files are not automatically enabled. Families without LSP/DAP belong in `supporting.lua`.
+5. Restart Neovim, then use `:Mason` to inspect installation status.
 
 ### Terminal Integration
 
-Minimal terminal integration: Herdr owns the daily top-level workspace, tmux remains the top-level fallback/compatibility multiplexer, and Neovim does not duplicate either manager's navigation:
-
-- `<Esc><Esc>` - Exit terminal mode when needed
-- `<C-h/j/k/l>` - Navigate between windows
-- flatten.nvim redirects nested `nvim +line file` calls from terminal tools back into the host Neovim instance. `terminal_tool.lua` privately owns the source marker and opaque handoff payload; declarations should not set handoff environment variables or override `EDITOR`.
+Herdr owns the daily workspace and tmux remains the top-level fallback. Do not
+duplicate either manager's navigation in Neovim. `terminal_tool.lua` privately
+owns the source marker and opaque Editor Handoff payload used by flatten.nvim;
+declarations must not set handoff environment variables or override `EDITOR`.
+See [terminal navigation](README.md#terminal-navigation) for usage.
 
 ### Neovim-Owned Terminal Tools
 
@@ -215,69 +188,26 @@ is atomic so a rejected declaration preserves existing mappings and commands.
 
 ### Git Integration
 
-Focused on in-editor git context and full review of the working tree and the index. Git transactions and object selection are handled by lazygit:
+Keep gitsigns actions hunk-local and use LazyGit for Git transactions and object
+selection. Hunk owns full stacked working-tree and staged review. Hunk's two
+review inputs share a Tool Tab and process per working directory to keep
+`--watch` live and the `--repo .` selector on `hunk session` subcommands unambiguous. See the
+[Git guide](README.md#git) for mappings and Editor Handoff behavior.
 
-- **gitsigns**: In-editor git signs, blame, and hunk navigation
-- `<leader>gg` - Toggle lazygit's Git transaction Tool Tab (custom plugin: `lua/custom/plugins/lazygit.lua`)
-- `<leader>gd` / `<leader>gD` - Toggle Hunk's stacked review Tool Tab on the working tree or the index (custom plugin: `lua/custom/plugins/hunk.lua`). Each working directory owns one instance; both keys drive that instance's Tool Tab and process, and pressing the other input's key retargets the review in place. This keeps `--watch` live and keeps the `--repo .` selector on `hunk session` subcommands matching exactly one session per repository for agent notes. When the Workflow Engine supplies a validated base and head object ID, `<leader>gd` and `:HunkReview` instead share the aggregate `BASE...HEAD` review toggle. The Workflow Engine roots the process in its Invoking Checkout; the Neovim adapter only consumes the immutable object IDs and fails before registration if either is absent or malformed. Hunk's `e` action therefore returns through flatten.nvim to the review tab's Neovim, with normal project-root discovery and full language tooling using that checkout's project state.
-- Lazygit and Hunk use the shell-owned global editor contract (`EDITOR=nvim`) for native Editor Handoff; flatten.nvim returns nested Neovim invocations to the Host Window while preserving the originating Tool Tab.
-- `<leader>tb` - Toggle git blame line
-- `<leader>td` - Toggle inline git diff (deleted lines + word diff)
-- `<leader>ga` / `<leader>gr` / `<leader>gu` / `<leader>gp` - Hunk-local actions (stage/add, reset, undo stage, preview)
-- `]c` / `[c` - Navigate between git hunks
-
-### File Explorer
-
-Neo-tree file explorer is enabled with right-side positioning and minimal styling:
-
-- `<leader>e` - Toggle neo-tree (reveals current file location)
-- Supports multiple sources: filesystem, buffers, git status
-- Key mappings: `?` for help, `a` to add files, `d` to delete, `r` to rename
-- `<leader>pa` / `<leader>pr` - Copy the selected file or directory's absolute/tree-root-relative path
-- Switch sources with `<Tab>` (filesystem → buffers → git_status)
-- Configured without icons for clean, text-based interface
-- Git status colors match the main colorscheme (+, ~, -, etc.)
-- `nvim --clean --headless -l nvim/tests/neo_tree_spec.lua` - Verify selected-node path copying and refresh on `FocusGained` after a watcher failure
-
-### Customization Points
-
-- `lua/custom/plugins/` - Add a module here and explicitly require it from `lua/custom/plugins/init.lua`
-- `lua/custom/languages/` - Add or change declarative language configuration, shared lifecycle/context, or a language-specific adapter
-
-### Important Settings
-
-- Leader key is Space (`vim.g.mapleader = ' '`)
-- Auto-formatting on save enabled (can be disabled per filetype)
-- Clipboard integration with system clipboard enabled. Remote sessions with no
-  display and no tmux fall back to a copy-only OSC 52 provider (`init.lua`)
-- Icons disabled - clean text-based interface without Nerd Font requirements
+When devflow supplies validated base and head object IDs, `<leader>gd` and
+`:HunkReview` share the aggregate `BASE...HEAD` review toggle. The Neovim
+adapter only consumes immutable IDs and must fail before registration if
+either is absent or malformed. Devflow roots the process in its Invoking
+Checkout; Hunk's `e` action returns through flatten.nvim to that review tab's
+Neovim with normal project-root discovery and full language tooling.
 
 ## Dependencies
 
-Keep installation ownership aligned with the repository-level dependency
-inventory:
-
-- The host provides exactly stable Neovim 0.12.5, `git`, `curl`, `tar`,
-  `gzip`, `unzip`, `diff`, a C compiler, `rg`, and tree-sitter CLI 0.26.1 or
-  newer.
-- The host also provides `lazygit` and `hunk` for their production Tool Tabs,
-  plus a platform clipboard provider where a display is available; remote
-  sessions rely on the OSC 52 fallback instead.
-- Hunk must be version 0.18.1 or newer for concurrent watch sessions.
-- Mise owns Node.js/npm, Python, Rust with Cargo, Clippy, rustfmt, and rust-src, and
-  Amazon Corretto JDK 21 (`corretto-21.0.12.8.1`). Mason owns Python's
-  debugpy adapter.
-- Haskell is an explicit ownership exception: the current Mason HLS recipe
-  invokes `ghcup`, so `ghcup` must be available before Mason performs a clean
-  inventory install.
-- Neovim owns plugins and Treesitter parsers; Mason owns the packages listed in
-  `mason_tools`. Do not duplicate those tools as machine packages.
-
-`make` is optional and only enables telescope-fzf-native and LuaSnip's
-jsregexp build. `fd` is not a base dependency because fff.nvim owns normal file
-finding. `/usr/bin/expect` is required only by the real-PTY Hunk regression
-test. See `../docs/dependency-research.md` for package mappings and source
-evidence.
+Follow the [root dependency inventory](../README.md#dependency-ownership),
+including its Neovim minimum and tool version floors. Neovim owns
+plugins and parsers; Mason owns `mason_tools`. Do not duplicate those tools as
+machine packages or move Mise-owned runtimes into Homebrew. Keep display-aware
+clipboard selection and the copy-only OSC 52 fallback in `init.lua`.
 
 ## Configuration Philosophy
 

@@ -29,14 +29,11 @@ Kickstart Guide:
 -- Neovim version check and Lua module cache
 -- ============================================================
 do
-  local version = vim.version()
-  local has_supported_version = version.major == 0 and version.minor == 12 and version.patch == 5 and not version.prerelease
-  if not has_supported_version then
+  local supported, message = require('custom.lib.neovim').check()
+  if not supported then
     vim.api.nvim_echo({
-      { ("Unsupported Neovim version: '%s'. Install Neovim 0.12.5.\n"):format(version), 'ErrorMsg' },
-      { 'This config follows the latest kickstart.nvim mainline baseline and requires exactly Neovim 0.12.5.' },
+      { message .. '. Install the latest stable release.', 'ErrorMsg' },
     }, true, {})
-    vim.fn.getchar()
     os.exit(1)
   end
 
@@ -121,12 +118,7 @@ do
   --  Copy only: OSC 52 reads block until the terminal answers, and most never
   --  do. Paste replays the last copy, which also preserves the regtype that
   --  `getregtype()` would report unusably for blockwise yanks.
-  if
-    vim.env.SSH_TTY ~= nil
-    and vim.env.DISPLAY == nil
-    and vim.env.WAYLAND_DISPLAY == nil
-    and vim.env.TMUX == nil
-  then
+  if vim.env.SSH_TTY ~= nil and vim.env.DISPLAY == nil and vim.env.WAYLAND_DISPLAY == nil and vim.env.TMUX == nil then
     local osc52 = require 'vim.ui.clipboard.osc52'
     local cache = { ['+'] = { { '' }, 'v' }, ['*'] = { { '' }, 'v' } }
     local function copy(reg)

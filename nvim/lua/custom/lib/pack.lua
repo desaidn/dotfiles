@@ -41,11 +41,6 @@ function M.setup()
         return
       end
 
-      if name == 'LuaSnip' then
-        if vim.fn.has 'win32' ~= 1 and vim.fn.executable 'make' == 1 then run_build(name, { 'make', 'install_jsregexp' }, ev.data.path) end
-        return
-      end
-
       if name == 'fff.nvim' then
         if packadd_if_needed(name, ev.data.active) then install_fff_binary() end
         return

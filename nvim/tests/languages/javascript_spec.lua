@@ -17,6 +17,7 @@ end
 local original_pack_add = vim.pack.add
 local original_cmd_packadd = vim.cmd.packadd
 local original_exepath = vim.fn.exepath
+local original_lint = package.loaded.lint
 local original_dap = package.loaded.dap
 local original_dapui = package.loaded.dapui
 local original_shared_dap = package.loaded['custom.languages.dap']
@@ -31,15 +32,19 @@ local fake_dap = {
 local dapui_setup_calls = 0
 local js_debug_exepath_calls = 0
 local js_debug_available = false
-vim.pack.add = function() end
-vim.cmd.packadd = function() end
-vim.fn.exepath = function(name)
+local function ignore_package_additions(_, _) end
+local function ignore_packadd(_) end
+local function resolve_debug_adapter(name)
   if name == 'js-debug-adapter' then
     js_debug_exepath_calls = js_debug_exepath_calls + 1
     return js_debug_available and '/mason/bin/js-debug-adapter' or ''
   end
   return original_exepath(name)
 end
+vim.pack.add = ignore_package_additions
+vim.cmd.packadd = ignore_packadd
+vim.fn.exepath = resolve_debug_adapter
+package.loaded.lint = { try_lint = function() end }
 package.loaded.dap = fake_dap
 package.loaded.dapui = { setup = function() dapui_setup_calls = dapui_setup_calls + 1 end }
 package.loaded['custom.languages.dap'] = nil
@@ -62,7 +67,7 @@ vim.bo[rust].filetype = 'rust'
 local setup_ok, setup_error = xpcall(function()
   local shared_dap = assert(loadfile(nvim_root .. '/lua/custom/languages/dap.lua'))()
   package.loaded['custom.languages.dap'] = shared_dap
-  dofile(nvim_root .. '/lua/custom/languages/adapters/javascript.lua')
+  dofile(nvim_root .. '/lua/custom/languages/adapters/javascript.lua').setup()
 
   vim.api.nvim_exec_autocmds('FileType', { buffer = javascript })
   vim.api.nvim_exec_autocmds('FileType', { buffer = rust })
@@ -169,6 +174,7 @@ end, debug.traceback)
 vim.pack.add = original_pack_add
 vim.cmd.packadd = original_cmd_packadd
 vim.fn.exepath = original_exepath
+package.loaded.lint = original_lint
 package.loaded.dap = original_dap
 package.loaded.dapui = original_dapui
 package.loaded['custom.languages.dap'] = original_shared_dap

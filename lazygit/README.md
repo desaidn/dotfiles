@@ -4,7 +4,7 @@ Part of [dotfiles](../README.md).
 
 ## Dependencies
 
-- LazyGit 0.56 or newer — provides the configured `git.pagers` interface
+- LazyGit 0.64.0 or newer — provides the configured `git.diffRenderers` interface
 - Git
 - Hunk 0.18.1 or newer — supplies the Diffing Solution through `hunk pager`
   and the efficient watch loop used by concurrent Neovim review sessions

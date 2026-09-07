@@ -333,16 +333,16 @@ case "${1:-}" in
         if [[ -e "$DOTFILES_TEST_STATE/mise-parent-activation" &&
             -n "${__MISE_ORIG_PATH:-}" ]]
         then
-            printf 'export PATH="%s:$PATH"\n' \
+            printf "export PATH=\"%s:\$PATH\"\n" \
                 "$DOTFILES_TEST_STATE/mise-shims"
         else
-            printf 'export PATH="%s:$PATH"\n' "$DOTFILES_TEST_FAKE_BIN"
+            printf "export PATH=\"%s:\$PATH\"\n" "$DOTFILES_TEST_FAKE_BIN"
         fi
         ;;
     env)
         [[ "${2:-}" == "--shell" && "${3:-}" == "bash" ]] || exit 2
         printf 'mise env\n' >>"$DOTFILES_TEST_LOG"
-        printf 'export PATH="%s:$PATH"\n' "$DOTFILES_TEST_FAKE_BIN"
+        printf "export PATH=\"%s:\$PATH\"\n" "$DOTFILES_TEST_FAKE_BIN"
         ;;
     which)
         if [[ -e "$DOTFILES_TEST_STATE/mise-which-mismatch" ]]; then
@@ -361,7 +361,11 @@ SCRIPT
 #!/usr/bin/env bash
 case "${0##*/}" in
     java)
-        printf 'openjdk version "21.0.12"\n' >&2
+        java_version=21.0.12
+        if [[ -f "$DOTFILES_TEST_STATE/java-version" ]]; then
+            IFS= read -r java_version <"$DOTFILES_TEST_STATE/java-version"
+        fi
+        printf 'openjdk version "%s"\n' "$java_version" >&2
         if [[ -e "$DOTFILES_TEST_STATE/non-corretto-java" ]]; then
             printf 'OpenJDK Runtime Environment Temurin-21.0.12+8\n' >&2
         else
@@ -397,7 +401,11 @@ case "${0##*/}" in
         printf 'rustfmt 1.8.0-stable\n'
         ;;
     javac)
-        printf 'javac 21.0.12\n'
+        javac_version=21.0.12
+        if [[ -f "$DOTFILES_TEST_STATE/javac-version" ]]; then
+            IFS= read -r javac_version <"$DOTFILES_TEST_STATE/javac-version"
+        fi
+        printf 'javac %s\n' "$javac_version"
         ;;
 esac
 SCRIPT
@@ -487,13 +495,11 @@ case "${1:-} ${2:-}" in
             "    { name = \"devflow\", install-path = \"$bin_dir/devflow\", from = \"dotfiles-devflow\" }," \
             ']' \
             >"$tool_dir/dotfiles-devflow/uv-receipt.toml"
-        for executable in devflow; do
-            cp "$DOTFILES_TEST_GENERIC_TEMPLATE" \
-                "$tool_dir/dotfiles-devflow/bin/$executable"
-            chmod +x "$tool_dir/dotfiles-devflow/bin/$executable"
-            ln -s "$tool_dir/dotfiles-devflow/bin/$executable" \
-                "$bin_dir/$executable"
-        done
+        cp "$DOTFILES_TEST_GENERIC_TEMPLATE" \
+            "$tool_dir/dotfiles-devflow/bin/devflow"
+        chmod +x "$tool_dir/dotfiles-devflow/bin/devflow"
+        ln -s "$tool_dir/dotfiles-devflow/bin/devflow" \
+            "$bin_dir/devflow"
         if [[ -e "$DOTFILES_TEST_STATE/uv-interrupt-after-install" ]]; then
             printf 'consumed\n' \
                 >"$DOTFILES_TEST_STATE/uv-interrupt-after-install"
@@ -532,21 +538,37 @@ case "${0##*/}" in
         fi
         ;;
     nvim)
+        nvim_version='NVIM v0.12.5'
         if [[ -f "$DOTFILES_TEST_STATE/nvim-version" ]]; then
             IFS= read -r nvim_version <"$DOTFILES_TEST_STATE/nvim-version"
+        fi
+        if [[ "${1:-}" == "--version" ]]; then
             printf '%s\n' "$nvim_version"
         else
-            printf 'NVIM v0.12.5\n'
+            DOTFILES_TEST_NVIM_VERSION="${nvim_version#NVIM v}" \
+                exec "$DOTFILES_TEST_REAL_NVIM" --cmd 'lua
+                    local original = vim.version
+                    vim.version = setmetatable({}, {
+                        __index = original,
+                        __call = function()
+                            return original.parse(vim.env.DOTFILES_TEST_NVIM_VERSION)
+                        end,
+                    })
+                ' "$@"
         fi
         ;;
     tmux)
-        printf 'tmux 3.7b\n'
+        if [[ -e "$DOTFILES_TEST_STATE/old-tmux" ]]; then
+            printf 'tmux 3.4\n'
+        else
+            printf 'tmux 3.5\n'
+        fi
         ;;
     lazygit)
         if [[ -e "$DOTFILES_TEST_STATE/old-lazygit" ]]; then
-            printf 'commit=, build date=, build source=Homebrew, version=0.55.2, os=darwin, arch=arm64\n'
+            printf 'commit=, build date=, build source=Homebrew, version=0.63.1, os=darwin, arch=arm64\n'
         else
-            printf 'commit=, build date=, build source=Homebrew, version=0.63.0, os=darwin, arch=arm64\n'
+            printf 'commit=, build date=, build source=Homebrew, version=0.64.0, os=darwin, arch=arm64\n'
         fi
         ;;
     hunk)
@@ -569,7 +591,7 @@ SCRIPT
 #!/usr/bin/env bash
 install_formula_commands() {
     local command_name
-    for command_name in git fish zsh nvim herdr tmux lazygit atuin gh rg tree-sitter hunk ghcup wl-copy wl-paste xclip; do
+    for command_name in git fish zsh nvim herdr tmux lazygit atuin gh rg tree-sitter hunk wl-copy wl-paste xclip; do
         cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
         chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
     done
@@ -597,7 +619,7 @@ cask_name() {
 
 case "${1:-}" in
     shellenv)
-        printf 'export PATH="%s:$PATH"\n' "$DOTFILES_TEST_FAKE_BIN"
+        printf "export PATH=\"%s:\$PATH\"\n" "$DOTFILES_TEST_FAKE_BIN"
         ;;
     bundle)
         case " $* " in
@@ -609,7 +631,7 @@ case "${1:-}" in
                 ;;
         esac
         case " $* " in
-            *" --file=$DOTFILES_TEST_REPO_ROOT/Brewfile "*|*" --file=$DOTFILES_TEST_REPO_ROOT/Brewfile")
+            *" --file=$DOTFILES_TEST_REPO_ROOT/Brewfile "*)
                 ;;
             *)
                 printf 'brew bundle did not receive the tracked Brewfile: %s\n' "$*" >&2
@@ -713,6 +735,7 @@ new_fixture() {
     FIXTURE_OS="$os_name"
     FIXTURE_REAL_MKDIR="$(command -v mkdir)"
     FIXTURE_REAL_MV="$(command -v mv)"
+    FIXTURE_REAL_NVIM="$(command -v nvim)"
     FIXTURE_REAL_PYTHON="$(command -v python3)"
     FIXTURE_REAL_RMDIR="$(command -v rmdir)"
     if [[ -n "$package_manager" ]]; then
@@ -773,6 +796,7 @@ run_installer() {
             DOTFILES_TEST_REPO_ROOT="$FIXTURE_INSTALL_REPO_ROOT" \
             DOTFILES_TEST_REAL_MKDIR="$FIXTURE_REAL_MKDIR" \
             DOTFILES_TEST_REAL_MV="$FIXTURE_REAL_MV" \
+            DOTFILES_TEST_REAL_NVIM="$FIXTURE_REAL_NVIM" \
             DOTFILES_TEST_REAL_PYTHON="$FIXTURE_REAL_PYTHON" \
             DOTFILES_TEST_REAL_RMDIR="$FIXTURE_REAL_RMDIR" \
             DOTFILES_TEST_RUNTIME_TEMPLATE="$FIXTURE_RUNTIME_TEMPLATE" \
@@ -1156,16 +1180,41 @@ test_linux_handoff_is_validated_before_linking() {
     pass "Linux Fish handoff is validated before configuration mutations"
 }
 
-test_non_corretto_jdk_is_rejected_before_linking() {
+test_compatible_jdk_vendor_is_accepted() {
     new_fixture non-corretto-jdk Darwin
     : >"$FIXTURE_STATE/non-corretto-java"
 
+    run_installer
+
+    assert_common_links
+    pass "compatible JDKs are accepted independently of their vendor banner"
+}
+
+test_incompatible_java_versions_are_rejected_before_linking() {
+    local command_name
+    for command_name in java javac; do
+        new_fixture "old-$command_name" Darwin
+        printf '20.0.2\n' >"$FIXTURE_STATE/$command_name-version"
+
+        run_installer failure
+
+        grep -Fq '21+ is required' "$FIXTURE_OUTPUT" ||
+            fail "old $command_name failure was not actionable"
+        assert_not_exists "$FIXTURE_HOME/.config"
+    done
+    pass "Java runtimes and compilers below 21 are rejected before linking"
+}
+
+test_incompatible_tmux_is_rejected_before_linking() {
+    new_fixture old-tmux Darwin
+    : >"$FIXTURE_STATE/old-tmux"
+
     run_installer failure
 
-    grep -Fq 'Amazon Corretto JDK 21 is required' "$FIXTURE_OUTPUT" ||
-        fail "non-Corretto JDK failure was not actionable"
+    grep -Fq 'tmux 3.5+ is required' "$FIXTURE_OUTPUT" ||
+        fail "old tmux failure was not actionable"
     assert_not_exists "$FIXTURE_HOME/.config"
-    pass "non-Corretto JDKs are rejected before configuration mutations"
+    pass "tmux below the extended-keys-format floor is rejected before linking"
 }
 
 test_incompatible_git_tool_versions_are_rejected_before_linking() {
@@ -1175,7 +1224,7 @@ test_incompatible_git_tool_versions_are_rejected_before_linking() {
 
     run_installer failure
 
-    grep -Fq 'LazyGit 0.56+ is required' "$FIXTURE_OUTPUT" ||
+    grep -Fq 'LazyGit 0.64+ is required' "$FIXTURE_OUTPUT" ||
         fail "old LazyGit failure was not actionable"
     grep -Fq 'Hunk 0.18.1+ is required' "$FIXTURE_OUTPUT" ||
         fail "old Hunk failure was not actionable"
@@ -1186,19 +1235,65 @@ test_incompatible_git_tool_versions_are_rejected_before_linking() {
 test_incompatible_neovim_versions_are_rejected_before_linking() {
     local found fixture_name
 
-    for found in 'NVIM v0.12.4' 'NVIM v0.12.6' 'NVIM v0.12.5-dev'; do
+    for found in 'NVIM v0.12.4' 'NVIM v0.12.5-dev' 'invalid'; do
         fixture_name="incompatible-neovim-${found#NVIM v}"
         new_fixture "$fixture_name" Darwin
         printf '%s\n' "$found" >"$FIXTURE_STATE/nvim-version"
 
         run_installer failure
 
-        grep -Fq "stable Neovim 0.12.5 is required (found '$found')" "$FIXTURE_OUTPUT" ||
+        grep -Fq 'Neovim compatibility check failed: Neovim' "$FIXTURE_OUTPUT" ||
             fail "unsupported Neovim version failure was not actionable: $found"
         assert_not_exists "$FIXTURE_HOME/.config"
     done
 
-    pass "Neovim versions outside the exact stable pin are rejected before linking"
+    pass "Neovim versions below the shared minimum are rejected before linking"
+}
+
+test_newer_neovim_versions_are_accepted() {
+    local found
+    for found in 'NVIM v0.12.6' 'NVIM v0.13.0' 'NVIM v0.13.0-dev'; do
+        new_fixture "compatible-neovim-${found#NVIM v}" Darwin
+        printf '%s\n' "$found" >"$FIXTURE_STATE/nvim-version"
+
+        run_installer
+
+        assert_common_links
+    done
+    pass "newer Neovim releases pass the shared compatibility check"
+}
+
+test_neovim_check_failures_precede_configuration_links() {
+    local condition fixture_repo source_name
+    for condition in missing broken; do
+        new_fixture "neovim-check-$condition" Darwin
+        fixture_repo="$FIXTURE_ROOT/repo"
+        mkdir -p "$fixture_repo/nvim/lua/custom/lib"
+        cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
+        for source_name in fish ghostty herdr hunk lazygit mise templates tmux tools zsh; do
+            ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
+        done
+        FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
+        if [[ "$condition" == broken ]]; then
+            printf "error('fixture compatibility failure')\n" \
+                >"$fixture_repo/nvim/lua/custom/lib/neovim.lua"
+        fi
+
+        run_installer failure
+
+        if [[ "$condition" == missing ]]; then
+            grep -Fq 'missing or invalid tracked configuration file:' "$FIXTURE_OUTPUT" ||
+                fail "missing Neovim check was not caught during preflight"
+            assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+            assert_log_count 0 "brew bundle install" "$FIXTURE_LOG"
+        else
+            grep -Fq 'fixture compatibility failure' "$FIXTURE_OUTPUT" ||
+                fail "broken Neovim check did not propagate its error"
+        fi
+        assert_not_exists "$FIXTURE_HOME/.config"
+        assert_not_exists "$FIXTURE_HOME/.local"
+    done
+    pass "missing or broken Neovim checks fail before configuration links"
 }
 
 test_user_mise_config_does_not_override_bootstrap_manifest() {
@@ -1633,7 +1728,7 @@ test_devflow_rejects_an_ambiguous_editable_source_marker() {
 }
 
 test_devflow_uv_receipt_inventory_is_exact() {
-    local executable inventory snapshot tool_environment uv_receipt
+    local inventory snapshot tool_environment uv_receipt
 
     for inventory in \
         extra-requirement \
@@ -1665,11 +1760,9 @@ test_devflow_uv_receipt_inventory_is_exact() {
             "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
         assert_injected_devflow_inventory_artifact \
             "$inventory" "$tool_environment"
-        for executable in devflow; do
-            assert_symlink \
-                "$FIXTURE_HOME/.local/bin/$executable" \
-                "$tool_environment/bin/$executable"
-        done
+        assert_symlink \
+            "$FIXTURE_HOME/.local/bin/devflow" \
+            "$tool_environment/bin/devflow"
         assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
         assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
 
@@ -1686,11 +1779,9 @@ test_devflow_uv_receipt_inventory_is_exact() {
             "$FIXTURE_HOME/.local/share/dotfiles/devflow-tool.receipt"
         assert_injected_devflow_inventory_artifact \
             "$inventory" "$tool_environment"
-        for executable in devflow; do
-            assert_symlink \
-                "$FIXTURE_HOME/.local/bin/$executable" \
-                "$tool_environment/bin/$executable"
-        done
+        assert_symlink \
+            "$FIXTURE_HOME/.local/bin/devflow" \
+            "$tool_environment/bin/devflow"
         assert_log_prefix_count 1 "uv tool install|" "$FIXTURE_LOG"
         assert_log_prefix_count 0 "uv tool uninstall|" "$FIXTURE_LOG"
     done
@@ -1732,19 +1823,19 @@ test_devflow_uv_invocations_are_hermetic() {
     : >"$FIXTURE_STATE/expect-uv-isolation"
 
     (
-        export UV_CONFIG_FILE="$hostile_config"
-        export UV_TOOL_DIR="$FIXTURE_ROOT/hostile-tools"
-        export UV_TOOL_BIN_DIR="$FIXTURE_ROOT/hostile-bin"
-        export UV_PROJECT_ENVIRONMENT="$FIXTURE_ROOT/hostile-project"
-        export PYTHONHOME="$FIXTURE_ROOT/hostile-python-home"
-        export PYTHONPATH="$FIXTURE_ROOT/hostile-python-path"
-        export VIRTUAL_ENV="$FIXTURE_ROOT/hostile-venv"
-        export CONDA_PREFIX="$FIXTURE_ROOT/hostile-conda"
-        export PIP_INDEX_URL="https://packages.example/simple"
-        export HTTP_PROXY="http://proxy.example:8080"
-        export HTTPS_PROXY="https://proxy.example:8443"
-        export NO_PROXY="localhost,127.0.0.1"
-        export SSL_CERT_FILE="$FIXTURE_STATE/test-ca.pem"
+        UV_CONFIG_FILE="$hostile_config" \
+        UV_TOOL_DIR="$FIXTURE_ROOT/hostile-tools" \
+        UV_TOOL_BIN_DIR="$FIXTURE_ROOT/hostile-bin" \
+        UV_PROJECT_ENVIRONMENT="$FIXTURE_ROOT/hostile-project" \
+        PYTHONHOME="$FIXTURE_ROOT/hostile-python-home" \
+        PYTHONPATH="$FIXTURE_ROOT/hostile-python-path" \
+        VIRTUAL_ENV="$FIXTURE_ROOT/hostile-venv" \
+        CONDA_PREFIX="$FIXTURE_ROOT/hostile-conda" \
+        PIP_INDEX_URL="https://packages.example/simple" \
+        HTTP_PROXY="http://proxy.example:8080" \
+        HTTPS_PROXY="https://proxy.example:8443" \
+        NO_PROXY="localhost,127.0.0.1" \
+        SSL_CERT_FILE="$FIXTURE_STATE/test-ca.pem" \
         run_installer
     )
 
@@ -1753,19 +1844,19 @@ test_devflow_uv_invocations_are_hermetic() {
     assert_not_exists "$FIXTURE_ROOT/hostile-bin"
 
     (
-        export UV_CONFIG_FILE="$hostile_config"
-        export UV_TOOL_DIR="$FIXTURE_ROOT/hostile-tools"
-        export UV_TOOL_BIN_DIR="$FIXTURE_ROOT/hostile-bin"
-        export UV_PROJECT_ENVIRONMENT="$FIXTURE_ROOT/hostile-project"
-        export PYTHONHOME="$FIXTURE_ROOT/hostile-python-home"
-        export PYTHONPATH="$FIXTURE_ROOT/hostile-python-path"
-        export VIRTUAL_ENV="$FIXTURE_ROOT/hostile-venv"
-        export CONDA_PREFIX="$FIXTURE_ROOT/hostile-conda"
-        export PIP_INDEX_URL="https://packages.example/simple"
-        export HTTP_PROXY="http://proxy.example:8080"
-        export HTTPS_PROXY="https://proxy.example:8443"
-        export NO_PROXY="localhost,127.0.0.1"
-        export SSL_CERT_FILE="$FIXTURE_STATE/test-ca.pem"
+        UV_CONFIG_FILE="$hostile_config" \
+        UV_TOOL_DIR="$FIXTURE_ROOT/hostile-tools" \
+        UV_TOOL_BIN_DIR="$FIXTURE_ROOT/hostile-bin" \
+        UV_PROJECT_ENVIRONMENT="$FIXTURE_ROOT/hostile-project" \
+        PYTHONHOME="$FIXTURE_ROOT/hostile-python-home" \
+        PYTHONPATH="$FIXTURE_ROOT/hostile-python-path" \
+        VIRTUAL_ENV="$FIXTURE_ROOT/hostile-venv" \
+        CONDA_PREFIX="$FIXTURE_ROOT/hostile-conda" \
+        PIP_INDEX_URL="https://packages.example/simple" \
+        HTTP_PROXY="http://proxy.example:8080" \
+        HTTPS_PROXY="https://proxy.example:8443" \
+        NO_PROXY="localhost,127.0.0.1" \
+        SSL_CERT_FILE="$FIXTURE_STATE/test-ca.pem" \
         run_uninstaller 0
     )
 
@@ -2200,7 +2291,6 @@ test_dependency_manifests_match_the_install_contract() {
         'brew "ripgrep"'
         'brew "tree-sitter-cli"'
         'brew "uv"'
-        'brew "ghcup"'
         'brew "xclip" if OS.linux?'
         'brew "wl-clipboard" if OS.linux?'
     )
@@ -2258,9 +2348,13 @@ test_linux_manager_fresh_and_second_run yum
 test_linux_manager_fresh_and_second_run pacman
 test_unsupported_linux_package_manager
 test_linux_handoff_is_validated_before_linking
-test_non_corretto_jdk_is_rejected_before_linking
+test_compatible_jdk_vendor_is_accepted
+test_incompatible_java_versions_are_rejected_before_linking
+test_incompatible_tmux_is_rejected_before_linking
 test_incompatible_git_tool_versions_are_rejected_before_linking
 test_incompatible_neovim_versions_are_rejected_before_linking
+test_newer_neovim_versions_are_accepted
+test_neovim_check_failures_precede_configuration_links
 test_uninstall_cli_is_safe
 test_install_and_uninstall_reject_unsafe_homes
 test_uninstall_removes_only_owned_links

@@ -29,8 +29,11 @@ ORIENTATION                                      *dotfiles-nvim-orientation*
 require a Nerd Font; plugin UI and the custom colorscheme intentionally use
 text and plain symbols.
 
-This revision requires exactly Neovim 0.12.5; startup stops on any other
-version so upstream baseline changes are adopted deliberately.
+Use the latest stable Neovim release. Installation, startup, and
+`:checkhealth kickstart` share a minimum of 0.12.5 and accept newer releases.
+Prereleases above that stable minimum can start with a health-check advisory;
+0.12.5-dev remains below the minimum. Acceptance does not mean a release has
+been tested. These checks do not query for updates online.
 
 The main workflow boundaries are:
 
@@ -106,11 +109,10 @@ or read `:help MiniAi` and `:help MiniSurround`.
 LANGUAGE TOOLING                                 *dotfiles-nvim-languages*
                                            *dotfiles-nvim-language-tooling*
 
-The language configuration in `lua/custom/languages/config.lua` is the source of
-truth for enabled LSP configurations, Mason-owned packages, Treesitter
-parsers, formatters, format-on-save policy, and linters. The surrounding
-plugin modules consume that inventory; language intent is not duplicated in
-each plugin configuration.
+Each language family in `lua/custom/languages/adapters/` owns its LSP
+configuration, Mason-owned packages, Treesitter parsers, formatters,
+format-on-save policy, linters, and project behavior. `config.lua` explicitly
+selects adapters and collects their inventory for the shared plugin modules.
 
 LSP navigation and actions ~
 K              Show hover documentation
@@ -222,9 +224,13 @@ educational comments:
     Repo-owned integrations. Add a sibling `*.lua` module here for a new
     personal plugin capability; require it explicitly from its `init.lua`.
 
+`lua/custom/languages/adapters/`
+    Language settings and project behavior. Add capabilities to the language
+    family's adapter; families without LSP or DAP belong in `supporting.lua`.
+
 `lua/custom/languages/config.lua`
-    The canonical Language Tooling Inventory. Add a language capability here
-    instead of scattering tool-specific declarations across plugin modules.
+    Explicit adapter selection and inventory collection. Add new adapters to
+    its ordered list to enable them.
 
 `lua/custom/lib/terminal_tool.lua`
     The shared launcher for a future Neovim-owned interactive terminal tool.
@@ -256,9 +262,9 @@ Plugin and tool maintenance ~
 
 Health and diagnosis ~
 `:checkhealth kickstart`
-    Run the inherited Kickstart baseline check. It accepts Neovim 0.12 or
-    newer and checks `git`, `make`, `unzip`, and `rg`. It is narrower than
-    this repo's current contract.
+    Check the same Neovim minimum as installation and startup, recommend the
+    latest stable release, and report an advisory for accepted prereleases.
+    Also check `git`, `make`, `unzip`, and `rg`.
 
 `:checkhealth vim.lsp`
     Inspect LSP configuration, attached clients, roots, and file watching.
@@ -266,8 +272,8 @@ Health and diagnosis ~
 `:messages`
     Review startup, package-build, formatter, linter, and tool notifications.
 
-Use the root `install.sh` prerequisite check together with the exact Neovim
-0.12.5 startup guard. This Neovim workflow also requires `tree-sitter`,
+Use the root `install.sh` prerequisite check together with the shared Neovim
+minimum. This Neovim workflow also requires `tree-sitter`,
 `lazygit`, and `hunk`; Mason provisions the Python debug adapter. See the root
 `README.md` for environment setup. Implementation and test guidance lives
 in `nvim/AGENTS.md`; architectural rationale lives under `docs/adr/`, and

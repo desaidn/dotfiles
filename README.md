@@ -19,32 +19,22 @@ The setup is designed around one uniform code interface: Herdr is the daily work
 | `tools/`            | `~/.local/bin/` per tool       | Source workspace for small, independently named agent tools. |
 | `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
 
-Each subdirectory has its own `README.md` (and `AGENTS.md` where relevant).
-
-## Code interface contract
-
-This repo keeps the interface to code agent-harness agnostic:
-
-- Start and return to Neovim for editing.
-- Use Herdr as the normal top-level workspace manager; use tmux directly only for fallback or compatibility work rather than nesting it inside Herdr.
-- Prefer native Neovim features and Lua APIs when they can express the workflow clearly.
-- Keep external dependencies narrow, durable, and easy to replace; avoid plugin layers that only wrap behavior Neovim already owns.
-- Use self-made or locally-owned performant tools when a workflow needs more than native Neovim but should remain inspectable, fast, and independent of an agent harness.
-- Use gitsigns for local in-buffer hunk operations.
-- Use Hunk as the Diffing Solution: directly from Neovim for full stacked
-  working-tree (`<leader>gd`) and staged (`<leader>gD`) review, and inside
-  lazygit for rendered diffs.
-- Use lazygit as the Git Transaction Surface for Git state, staging, stashes,
-  history, branches, and commits.
-- Let shell configuration declare Neovim as the global editor through `EDITOR`, `VISUAL`, and `GIT_EDITOR`.
-- Use flatten.nvim for editor handoff from terminal tools back into the host Neovim instance.
-- Keep Neovim gitsigns actions hunk-local; buffer-wide Git transactions belong in lazygit.
-- Prefer upstream defaults unless a deviation directly supports the uniform code interface.
-- Keep Codex, Claude Code, and future harnesses as adapters over the same files, commands, and review surfaces.
-
-Harness-specific files should only bridge into the shared workflow. They should not introduce a second review model, separate Git transaction surface, or different way to open code. The workflow contract governs coding agents only: human Git and LazyGit are unrestricted, and devflow installs no repository hooks or Git configuration that intercepts them.
+Usage guides: [Neovim](nvim/README.md), [Herdr](herdr/README.md),
+[tmux](tmux/README.md), [LazyGit](lazygit/README.md), [Fish](fish/README.md),
+[Zsh](zsh/README.md), [Ghostty](ghostty/README.md), and
+[agent tools](tools/README.md). Coding-agent constraints live in
+[AGENTS.md](AGENTS.md) and the relevant tool's guidance.
 
 ## Quick start
+
+| Platform | Repository support |
+| --- | --- |
+| macOS | Primary platform; local editor integration and installer fixture tests pass. |
+| Linux | Installer support and simulated bootstrap tests; the complete setup has not been validated on a Linux host. |
+| Native Windows | Unsupported by this setup: the installer targets Unix and devflow uses Unix file locking. |
+
+Neovim itself supports macOS, Linux, and Windows; its [platform support](https://neovim.io/doc/user/support.html)
+does not imply that this entire dotfiles setup supports each platform.
 
 ```bash
 git clone https://github.com/desaidn/dotfiles.git ~/dotfiles
@@ -109,7 +99,7 @@ tmux new-session -A -s dev
 
 These are top-level alternatives. Plain `herdr` starts or reattaches the daily workspace; tmux remains independently available when a tmux-specific workflow is required.
 
-## Agent development workflow
+## Workflow Engine installation
 
 The full install exposes `devflow` from `~/.local/bin`. The
 `dotfiles-devflow` distribution
@@ -142,45 +132,10 @@ These commands manage only their marked guidance blocks. The generic dotfiles
 installer does not create or edit `~/.codex/AGENTS.md` or
 `~/.claude/CLAUDE.md`.
 
-Devflow is a small command-line tool for one common agent workflow:
-
-```text
-start -> wip/<feature> -> review/<name> -> one squash commit
-```
-
-The user and project instructions choose the checkout or worktree, the explicit
-review base, the landing target, and what happens afterward. Devflow operates
-where it is invoked and never manages worktrees. A new WIP branch starts at the
-checkout's current commit, and agent-authored WIP remains append-only.
-
-Local and external reviews use the current checked-out commit and the same
-Herdr, Neovim, and Hunk path. Pressing `e` in Hunk returns to the review tab's
-Neovim with the checkout's normal project root, dependencies, and full language
-tooling. External review is review-only; locally authored and explicitly
-approved WIP can land as one squash commit on any existing local branch except
-the reserved `wip/*` and `review/*` names.
-
-These restrictions apply to coding agents, not to the developer. Human Git and
-LazyGit remain wholly unrestricted. Devflow never pushes, runs project-specific
-review tools, or performs onward delivery. Its commands and JSON results are
-the composition surface; it has no plugin or project-configuration system. See
-[`docs/agents/development-workflow.md`](docs/agents/development-workflow.md)
-for the full operational contract.
-
-The agent supplies an explicit base for review:
-
-```bash
-devflow --json review --base <branch-or-commit>
-devflow --json review --base <branch-or-commit> --name <external-review-name>
-```
-
-After the user approves the exact local review, the agent asks where to land,
-derives a cohesive commit title from the feature and its WIP history, and runs
-the command from a clean checkout already on that target:
-
-```bash
-devflow land <feature> --target <branch> --approved <review-id> --title "<complete feature title>"
-```
+The [agent development workflow](docs/agents/development-workflow.md) owns the
+complete WIP, review, approval, and landing procedure. It uses Herdr, Neovim,
+and Hunk for local and external reviews. These rules apply only to coding
+agents; human Git and LazyGit operations remain unrestricted.
 
 ## Dependency ownership
 
@@ -202,18 +157,17 @@ layer:
 | `git` | Plugin retrieval and all Git-facing tools |
 | `fish` | Primary shell; version 3.2 or newer |
 | `zsh` | Secondary/login-shell handoff |
-| `neovim` | `nvim`; exactly stable 0.12.5 |
+| `neovim` | `nvim`; version 0.12.5 or newer |
 | `herdr` | Daily workspace manager |
-| `tmux` | Fallback multiplexer; version 3.7 or newer |
-| `lazygit` | Git Transaction Surface; version 0.56 or newer for the configured Diffing Solution |
+| `tmux` | Fallback multiplexer; version 3.5 or newer for `extended-keys-format` |
+| `lazygit` | Git Transaction Surface; version 0.64.0 or newer for `git.diffRenderers` |
 | `hunk` | Diffing Solution and stacked working-tree and staged Review Surface; version 0.18.1 or newer for efficient concurrent watch sessions (0.12 introduced LazyGit rendering) |
 | `mise` | Language runtime manager |
 | `atuin` | Shell history integration |
 | `gh` | GitHub issue workflows described under `docs/agents/` |
 | `ripgrep` | `rg`; Neovim Telescope grep |
 | `tree-sitter-cli` | `tree-sitter` 0.26.1 or newer; parser management |
-| `uv` | Installs the Python 3.14 Workflow Engine in an isolated persistent tool environment |
-| `ghcup` | Haskell Language Server installation; capability-specific |
+| `uv` | Installs the Python 3.14+ Workflow Engine with Mise's pinned interpreter in an isolated persistent tool environment |
 | `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
 
 On macOS, the configured UI also uses the `ghostty` and
@@ -222,16 +176,13 @@ On macOS, the configured UI also uses the `ghostty` and
 ### Mise runtimes
 
 The enabled Neovim language capabilities require Node.js/npm, Python, Rust
-with Cargo, Clippy, rustfmt, and rust-src, and Amazon Corretto JDK 21. These runtimes
-belong to Mise; Mason installs the declared editor tooling. TypeScript is a
-project-owned semantic exception: a recognized non-Deno JavaScript/TypeScript
-workspace supplies its root-local compiler. TypeScript 7+ runs its native
-`tsc` LSP; earlier versions run through Mason's `typescript-language-server`
-transport, which is pointed at that exact project's
-`node_modules/typescript/lib/tsserver.js`. Mason owns only the compatibility
-transport, never the project's TypeScript semantics. Haskell is the current
-host-tool exception: Mason's Haskell Language Server recipe invokes `ghcup`
-directly.
+with Cargo, Clippy, rustfmt, and rust-src, and a Java runtime and compiler at
+version 21 or newer. These runtimes belong to Mise; Mason installs the declared
+editor tooling. TypeScript is a
+project-owned semantic exception: each recognized non-Deno workspace supplies
+its root-local compiler, and Mason owns only the compatibility transport.
+See [Neovim's project requirements](nvim/README.md#language-project-requirements)
+for version routing and debugging setup.
 
 The installer uses the tracked global defaults fragment
 [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml). It pins exact
@@ -242,6 +193,11 @@ evaluates the tracked fragment in an isolated Mise config directory so user
 overrides cannot mask missing pinned runtimes. A user's normal
 `~/.config/mise/config.toml` remains untouched and has higher precedence in
 interactive shells.
+
+Java compatibility is independent of vendor; Corretto is the deliberate
+provisioning choice in the manifest. Devflow accepts Python 3.14 and newer;
+the pinned 3.14.7 baseline and isolated 3.15 release-candidate validation are
+recorded in [ADR 0009](docs/adr/0009-use-modern-typed-python-for-workflow-automation.md).
 
 `--skip-mise-runtimes` is an explicit degraded setup for hosts that cannot run
 the pinned versions. Other dependencies and configurations are installed, but
@@ -261,10 +217,24 @@ enhancements. Expect is needed only for the real-PTY Hunk regression test.
 `fd` is not a base dependency: fff.nvim owns normal file finding and `rg` is
 already available to Telescope.
 
-The exact Neovim 0.12.5 requirement is deliberately validated after Brew
-installation. Because Homebrew formulae are rolling, a future Neovim formula
-that no longer supplies 0.12.5 will cause a clear validation failure rather
-than linking an incompatible editor configuration.
+### Version policy and updates
+
+Use the latest stable applications. Compatibility checks enforce minimums tied
+to required capabilities or a validated baseline; newer versions are accepted
+without requiring a matching version in this repository. Untested releases are
+not automatically incompatible. Neovim installation, startup, and health checks
+share [one minimum-version rule](nvim/lua/custom/lib/neovim.lua), currently 0.12.5.
+Prereleases that meet the minimum are allowed, with an advisory in `:checkhealth`.
+
+Check available Homebrew updates deliberately with `brew update` followed by
+`brew outdated`; install chosen updates with `brew upgrade <package>`.
+These checks do not run during shell or editor startup. The installer retains
+its `--no-upgrade` policy. ([Homebrew commands](https://docs.brew.sh/Manpage))
+
+Keep runtime updates as exact Mise manifest edits and retain the plugin lockfile.
+Use [Neovim's maintenance commands](nvim/README.md#configuration) for plugin and
+editor-tool updates. Validate relevant workflows after updates and raise a
+minimum only when a required capability or known incompatibility justifies it.
 
 See [the dependency research note](docs/dependency-research.md) for package
 mapping and primary-source evidence.
@@ -294,6 +264,8 @@ The shared shell rc files set `EDITOR`, `VISUAL`, and `GIT_EDITOR` to `nvim`; pe
 The test runs the real installer and uninstaller against isolated macOS and
 Linux fixtures with fake Homebrew, Mise, `uv`, `apt-get`, DNF, YUM, and Pacman
 commands.
+It requires a working Neovim executable to exercise the shared compatibility
+helper against simulated versions in an isolated process.
 It verifies fresh provisioning, manifest ownership, preflight failures,
 Workflow Engine ownership, semantic receipt validation, hostile environment
 isolation, backup/link behavior, explicit runtime-skip setup, safe restoration,

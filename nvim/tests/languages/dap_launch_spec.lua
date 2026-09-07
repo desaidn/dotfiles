@@ -23,7 +23,7 @@ local original_context = package.loaded['custom.languages.context']
 local original_get_clients = vim.lsp.get_clients
 
 local fake_dap = {
-  providers = { configs = { ['dap.global'] = function() return {} end, ['dap.launch.json'] = function() return {} end } },
+  providers = { configs = { ['dap.global'] = function(_) return {} end, ['dap.launch.json'] = function(_) return {} end } },
   listeners = { after = { event_initialized = {} }, before = { event_terminated = {}, event_exited = {} } },
 }
 local launch_path
@@ -48,12 +48,15 @@ local java_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[java_buffer].filetype = 'java'
 local javascript_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[javascript_buffer].filetype = 'javascript'
-vim.pack.add = function() end
-vim.cmd.packadd = function() end
-vim.lsp.get_clients = function()
+local function ignore_package_additions(_, _) end
+local function ignore_packadd(_) end
+local function get_fake_clients(_)
   if client_root then return { { config = { root_dir = client_root } } } end
   return {}
 end
+vim.pack.add = ignore_package_additions
+vim.cmd.packadd = ignore_packadd
+vim.lsp.get_clients = get_fake_clients
 package.loaded.dap = fake_dap
 package.loaded.dapui = { setup = function() end }
 package.loaded['dap.ext.vscode'] = {
@@ -105,12 +108,6 @@ package.loaded['custom.languages.context'] = {
 package.loaded['custom.languages.dap'] = nil
 local dap = assert(loadfile(nvim_root .. '/lua/custom/languages/dap.lua'))()
 dap.ensure()
-dap.register_project('java', {
-  lsp_client = 'jdtls',
-  root_profile = { markers = { 'pom.xml' } },
-  launch_types = { 'java' },
-})
-dap.register_project('javascript', require('custom.languages.config').dap_by_ft.javascript)
 
 check('uses the initiating buffer root for launch.json without changing cwd', function()
   local configs = fake_dap.providers.configs['dap.launch.json'](rust_buffer)

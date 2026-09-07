@@ -1,10 +1,6 @@
 -- Python owns debugpy; the shared DAP module remains language-neutral.
 
-local gh = require('custom.lib.pack').gh
 local context = require 'custom.languages.context'
-local dap = require 'custom.languages.dap'
-
-vim.pack.add({ gh 'mfussenegger/nvim-dap-python' }, { load = function() end })
 
 local did_setup = false
 local root_profile = {
@@ -52,16 +48,6 @@ local function debugpy_python()
   return vim.fs.joinpath(root, 'venv', directory, executable)
 end
 
-dap.register_project('python', {
-  lsp_client = 'basedpyright',
-  root_profile = root_profile,
-  launch_types = { 'python' },
-  prepare_launch = function(config, project)
-    config.pythonPath = config.pythonPath or project_python(project)
-    return config
-  end,
-})
-
 local function ensure_debugpy()
   if did_setup then return end
 
@@ -79,18 +65,62 @@ local function ensure_debugpy()
   did_setup = true
 end
 
-vim.api.nvim_create_user_command('DapPythonTestClass', function()
-  ensure_debugpy()
-  require('dap-python').test_class { config = { pythonPath = project_python } }
-end, { desc = 'Debug Python test class' })
+-- BasedPyright provides semantic hover while Ruff diagnostics/actions remain.
+local function disable_ruff_overlap(client)
+  client.server_capabilities.hoverProvider = false
+  require('custom.languages.capabilities').disable_formatting(client)
+end
 
-vim.api.nvim_create_user_command('DapPythonTestMethod', function()
-  ensure_debugpy()
-  require('dap-python').test_method { config = { pythonPath = project_python } }
-end, { desc = 'Debug Python test method' })
+local M = {
+  lsp_servers = {
+    basedpyright = {
+      -- Neovim 0.12 pull diagnostics expose every edit as work progress.
+      -- Push workspace diagnostics retain cross-file feedback and startup status.
+      init_options = { disablePullDiagnostics = true },
+      settings = {
+        basedpyright = {
+          analysis = { diagnosticMode = 'workspace' },
+          disableOrganizeImports = true,
+        },
+      },
+    },
+    ruff = { on_attach = disable_ruff_overlap },
+  },
+  mason_tools = { 'basedpyright', 'ruff', 'debugpy' },
+  treesitter_parsers = { 'python' },
+  formatters_by_ft = { python = { 'ruff_fix', 'ruff_format', 'ruff_organize_imports' } },
+  dap_by_ft = {
+    python = {
+      lsp_client = 'basedpyright',
+      root_profile = root_profile,
+      launch_types = { 'python' },
+      prepare_launch = function(config, project)
+        config.pythonPath = config.pythonPath or project_python(project)
+        return config
+      end,
+    },
+  },
+}
 
-vim.api.nvim_create_autocmd('FileType', {
-  group = vim.api.nvim_create_augroup('python-dap-setup', { clear = true }),
-  pattern = 'python',
-  callback = function(event) require('custom.languages.dap').register_buffer_setup(event.buf, ensure_debugpy) end,
-})
+function M.setup()
+  local gh = require('custom.lib.pack').gh
+  vim.pack.add({ gh 'mfussenegger/nvim-dap-python' }, { load = function() end })
+
+  vim.api.nvim_create_user_command('DapPythonTestClass', function()
+    ensure_debugpy()
+    require('dap-python').test_class { config = { pythonPath = project_python } }
+  end, { desc = 'Debug Python test class' })
+
+  vim.api.nvim_create_user_command('DapPythonTestMethod', function()
+    ensure_debugpy()
+    require('dap-python').test_method { config = { pythonPath = project_python } }
+  end, { desc = 'Debug Python test method' })
+
+  vim.api.nvim_create_autocmd('FileType', {
+    group = vim.api.nvim_create_augroup('python-dap-setup', { clear = true }),
+    pattern = 'python',
+    callback = function(event) require('custom.languages.dap').register_buffer_setup(event.buf, ensure_debugpy) end,
+  })
+end
+
+return M

@@ -932,7 +932,8 @@ check('a failed launch names the requested input, not the running one', function
   local running = setup_variants()
   running.invoke('n', '<leader>gD')
   running.invoke('n', '<leader>gD')
-  vim.fn.getcwd = function() error 'no working directory' end
+  local function unavailable_cwd(_, _) error 'no working directory' end
+  vim.fn.getcwd = unavailable_cwd
   assert(not running.invoke('n', '<leader>gd'), 'expected the working-tree request to fail')
   assert(
     running.notifications[#running.notifications].message:match '^Hunk diff:',

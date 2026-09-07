@@ -44,7 +44,7 @@ tmux -f ~/.config/tmux/tmux.conf new-session -d -s test \; kill-session -t test
 **File Structure**: Single configuration file approach
 **Target Location**: `~/.config/tmux/tmux.conf` (XDG Base Directory specification)
 **Scope**: Terminal multiplexer behavior customization
-**Dependencies**: tmux 3.7 or newer; no plugins or additional runtime tools
+**Dependencies**: tmux 3.5 or newer for `extended-keys-format`; no plugins or additional runtime tools. Newer prompt-cursor styles are optional and ignored on older versions.
 
 ## Key Configuration Features
 

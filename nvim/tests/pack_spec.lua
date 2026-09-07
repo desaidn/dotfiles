@@ -43,7 +43,8 @@ local function run_treesitter_hook(kind)
   package.loaded['treesitter-context'] = { setup = function() end }
 
   local original_pack_add = vim.pack.add
-  vim.pack.add = function() end
+  local function ignore_package_additions(_, _) end
+  vim.pack.add = ignore_package_additions
   dofile(nvim_root .. '/lua/custom/languages/treesitter.lua')
   vim.pack.add = original_pack_add
   vim.api.nvim_exec_autocmds('PackChanged', {
@@ -60,7 +61,10 @@ end
 local function assert_treesitter_call(kind, expected_operation)
   local call = run_treesitter_hook(kind)
   assert(call.operation == expected_operation, string.format('expected %s(), got %s()', expected_operation, tostring(call.operation)))
-  assert(vim.deep_equal(call.languages, require('custom.languages.config').treesitter_parsers), expected_operation .. ' did not receive the configured parser set')
+  assert(
+    vim.deep_equal(call.languages, require('custom.languages.config').treesitter_parsers),
+    expected_operation .. ' did not receive the configured parser set'
+  )
   assert(call.wait_timeout == 60000, string.format('expected a 60000 ms wait, got %s', tostring(call.wait_timeout)))
 end
 

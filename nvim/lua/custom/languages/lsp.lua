@@ -81,7 +81,7 @@ vim.api.nvim_create_autocmd('LspAttach', {
 
 -- LSP servers and clients are able to communicate to each other what features they support.
 --  By default, Neovim doesn't support everything that is in the LSP specification.
---  When you add blink.cmp, luasnip, etc. Neovim now has *more* capabilities.
+--  Blink.cmp adds completion capabilities, including native snippet expansion.
 --  So, we create new capabilities with blink.cmp, and then broadcast that to the servers.
 local capabilities = require('blink.cmp').get_lsp_capabilities()
 
