@@ -1,5 +1,5 @@
 ---
-status: amended by ADR-0013
+status: amended by ADR-0013 and ADR-0015
 ---
 
 # Operate devflow in the invoking checkout

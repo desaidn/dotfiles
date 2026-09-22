@@ -33,36 +33,20 @@ A focused place for inspecting complete changesets before deciding what to keep,
 _Avoid_: Diff viewer, pager
 
 **WIP Branch**:
-The append-only development history for one feature, named `wip/<feature>`. Devflow creates it from the Invoking Checkout's current commit or resumes it without rewriting it.
+The append-only development history for one feature, named `wip/<feature>`. It begins at the chosen starting commit and resumes without rewriting existing history.
 _Avoid_: Feature branch, topic branch, mutable work branch
 
 **WIP Guard**:
-The agent-only rule that WIP changes append history. Harness guidance constrains agent actions and devflow validates transitions it owns; no repository hook constrains human Git or LazyGit.
+The agent-only rule that WIP changes append history. It governs agent actions without constraining human Git or LazyGit.
 _Avoid_: Repository hook, global Git policy, security boundary
 
 **Work Flow**:
-The part of devflow that creates or resumes a WIP Branch and carries locally authored work into Review Flow.
+The development sequence that creates or resumes a WIP Branch and carries locally authored work into Review Flow.
 _Avoid_: WIP workflow, development flow, review workflow
 
-**Workflow Engine**:
-The `devflow` Agent Tool that orchestrates Work Flow, Review Flow, and Squash Landing while accepting project-specific choices as explicit inputs.
-_Avoid_: Shell script, agent prompt, Git wrapper
-
-**Agent Tool**:
-A small independently named utility that agent instructions, skills, scripts, people, and other tools can invoke directly.
-_Avoid_: Plugin, workflow framework, generic subcommand
-
-**Tool Workspace**:
-The repository's `tools/` directory, which organizes independent Agent Tools such as `tools/devflow/`. It is a source layout rather than an umbrella command, plugin registry, or shared framework.
-_Avoid_: Tools CLI, plugin directory, application framework
-
 **Project Workflow**:
-The team-specific process composed around devflow, including checkout or worktree preparation, branch conventions, publishing, team review, queues, and onward delivery.
-_Avoid_: Devflow plugin, built-in team workflow, hard-coded convention
-
-**Composition Surface**:
-The small command-line and JSON interface through which a Project Workflow supplies explicit choices and consumes validated results. Devflow has no plugin, callback, hook, or project-configuration layer.
-_Avoid_: Plugin API, workflow hooks, embedded team configuration
+The project-specific choices surrounding the shared agent workflow, including checkout preparation, validation, publishing, team review, and onward delivery.
+_Avoid_: Built-in team workflow, hard-coded convention
 
 **Target Merge**:
 An append-only merge of Landing Target changes into WIP when integration requires feature changes before landing. The resulting WIP must be reviewed again.
@@ -88,16 +72,16 @@ _Avoid_: WIP workflow, development workflow, landing flow
 The exact Change Set presented through the Review Surface, including its Review Base, source revision, and resulting tree. A local snapshot names the exact WIP head; an external snapshot remains review-only.
 _Avoid_: Review copy, synthetic squash, review commit
 
-**Review Record**:
-The durable immutable evidence for one successfully opened Review Snapshot, identified by its review ID.
-_Avoid_: Approval record, mutable review state, workflow log
+**Review Summary**:
+The conversation evidence identifying a Review Snapshot, its review session, validation, findings, and user decision. It establishes continuity only when that evidence remains available and unambiguous.
+_Avoid_: Approval database, durable review record, branch approval
 
 **Invoking Checkout**:
-The project directory from which devflow is invoked, whether it is the primary checkout or a worktree.
+The project directory selected for the current workflow operation, whether it is the primary checkout or a worktree.
 _Avoid_: Canonical checkout, managed checkout, repository checkout
 
 **In-place Checkout**:
-The invariant that devflow operates in its Invoking Checkout and leaves worktree topology to the Project Workflow.
+The invariant that review uses the selected checkout at the reviewed state, while worktree topology belongs to the Project Workflow.
 _Avoid_: Checkout mode, no-worktree repository, automatic checkout
 
 **Review Branch**:
@@ -109,7 +93,7 @@ The user's explicit authorization that one exact local WIP Review Snapshot repre
 _Avoid_: Base approval, branch approval, blanket approval, teammate approval
 
 **Mainline Branch**:
-The project's normal shared integration history, commonly named `main`, `mainline`, or `master`. It is one possible Landing Target rather than the only branch devflow may land onto.
+The project's normal shared integration history, commonly named `main`, `mainline`, or `master`. It is one possible Landing Target rather than a required destination.
 _Avoid_: Base branch, development branch, mandatory landing branch
 
 **Landing Target**:
@@ -129,7 +113,7 @@ The single-commit integration of one exact reviewed and approved local feature f
 _Avoid_: Merge commit, partial landing, direct mainline commit
 
 **Workflow Exception**:
-Any coding-agent branch or worktree action that is neither part of the common devflow contract nor authorized by direct user or project instructions. It requires explicit user approval before execution and never classifies the user's own Git or LazyGit actions.
+Any coding-agent branch or worktree action that is neither part of the shared workflow nor authorized by direct user or project instructions. It requires explicit user approval before execution and never classifies the user's own Git or LazyGit actions.
 _Avoid_: Edge case, implicit permission, automatic recovery
 
 **Diffing Solution**:
@@ -153,7 +137,7 @@ A review workflow where a local agent inspects and annotates the same Hunk sessi
 _Avoid_: AI review, bot review
 
 **Agent Harness**:
-The product or runtime that hosts a coding agent, such as Codex or Claude Code.
+The product or runtime that hosts a coding agent, such as Codex, Claude Code, or pi.
 _Avoid_: Agent, assistant, AI tool
 
 **Code Interface**:

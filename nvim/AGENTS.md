@@ -194,12 +194,14 @@ review inputs share a Tool Tab and process per working directory to keep
 `--watch` live and the `--repo .` selector on `hunk session` subcommands unambiguous. See the
 [Git guide](README.md#git) for mappings and Editor Handoff behavior.
 
-When devflow supplies validated base and head object IDs, `<leader>gd` and
-`:HunkReview` share the aggregate `BASE...HEAD` review toggle. The Neovim
-adapter only consumes immutable IDs and must fail before registration if
-either is absent or malformed. Devflow roots the process in its Invoking
-Checkout; Hunk's `e` action returns through flatten.nvim to that review tab's
-Neovim with normal project-root discovery and full language tooling.
+When `HUNK_REVIEW_BASE_OID` and `HUNK_REVIEW_HEAD_OID` supply full commit
+object IDs, `<leader>gd` and `:HunkReview` share the aggregate `BASE...HEAD`
+review toggle. If either variable is present, the Neovim adapter must reject
+incomplete, malformed, or mismatched-length IDs before registration. The caller
+owns commit resolution, review-base selection, and launching Neovim in the
+intended checkout. Hunk's `e` action returns through flatten.nvim to that
+review's Neovim with normal project-root discovery and full language tooling.
+Keep the environment contract independent of any workflow CLI or agent harness.
 
 ## Dependencies
 

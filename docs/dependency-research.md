@@ -1,6 +1,6 @@
 # Dependency installation research
 
-Checked 2026-07-26 against [`install.sh`](../install.sh), the Neovim inventory and bootstrap notes in [`nvim/`](../nvim/), and the repository's [`gh` issue-tracker contract](agents/issue-tracker.md); compatibility minimums were audited 2026-09-07. The resulting installer uses Homebrew as the declared package owner, then validates effective commands on `PATH`; Ghostty and JetBrains Mono also accept manually installed app/font files so Brew never overwrites them.
+Checked 2026-07-26 against [`install.sh`](../install.sh), the Neovim inventory and bootstrap notes in [`nvim/`](../nvim/), and the repository's [`gh` issue-tracker contract](agents/issue-tracker.md); compatibility minimums were audited 2026-09-07. Workflow installation notes were updated 2026-09-21 after retiring the standalone devflow package. The resulting installer uses Homebrew as the declared package owner, then validates effective commands on `PATH`; Ghostty and JetBrains Mono also accept manually installed app/font files so Brew never overwrites them.
 
 ## Homebrew bootstrap boundary
 
@@ -28,7 +28,7 @@ This makes CLT/Xcode on macOS and distro development tools on Linux the correct 
 | `rg` | [`ripgrep`](https://formulae.brew.sh/formula/ripgrep) formula | Both | Required search tool; formula name differs from command |
 | `tree-sitter` | [`tree-sitter-cli`](https://formulae.brew.sh/formula/tree-sitter-cli) formula | Both | Required parser-management CLI; formula name differs from command. **Effective floor: 0.26.1**, required by the configured nvim-treesitter main branch. ([nvim-treesitter requirements](https://github.com/nvim-treesitter/nvim-treesitter#requirements)) |
 | `hunk` | [`hunk`](https://formulae.brew.sh/formula/hunk) formula | Both | Required Diffing Solution and stacked working-tree Review Surface. **Effective floor: 0.18.1** for concurrent watch sessions: 0.18 replaced the 250 ms Git polling loop with filesystem event hints, an authoritative Git signature, and a 10-second safety check. Hunk's frozen campaign measured 35–36 times fewer Git invocations and 1.8–6.4 times lower idle main-process CPU per session, subject to its stated platform and projection caveats. ([Hunk 0.18.1 release](https://github.com/modem-dev/hunk/releases/tag/v0.18.1), [watch benchmark](https://github.com/modem-dev/hunk/blob/d6e967bf5c5a3a93bb7796aa50e67ee3fec58179/docs/watch-benchmark-final.md#L9-L28)) |
-| `uv` | [`uv`](https://formulae.brew.sh/formula/uv) formula | Both | Installs the Python 3.14+ Workflow Engine as a persistent isolated tool tied to Mise's exact interpreter. |
+| `uv` | [`uv`](https://formulae.brew.sh/formula/uv) formula | Both | Python project and dependency management CLI; Python runtime provisioning remains owned by Mise. |
 | `xclip` / `wl-copy` | [`xclip`](https://formulae.brew.sh/formula/xclip) / [`wl-clipboard`](https://formulae.brew.sh/formula/wl-clipboard) | Linux (`xclip` also has macOS bottles) | X11 and Wayland clipboard providers installed by the Linux Brewfile |
 | `Ghostty.app` or `ghostty` | [`ghostty`](https://formulae.brew.sh/cask/ghostty) cask (`brew install --cask ghostty`) | macOS only | Required only on macOS; the installer explicitly skips its config on Linux |
 
@@ -41,24 +41,17 @@ Neovim prereleases that meet the minimum are accepted with a health-check
 advisory. A newer version's lack of recorded test coverage does not by itself
 make it incompatible. The repository is tested on macOS; Linux provisioning
 has simulated bootstrap coverage, not full validation on a Linux host. Native
-Windows is unsupported by the Unix installer and devflow's `fcntl` locking,
+Windows is unsupported by the Unix installer,
 although [Neovim itself supports all three platforms](https://neovim.io/doc/user/support.html).
 
-After Mise provisions the pinned Python, `install.sh` resolves that interpreter
-inside the isolated bootstrap configuration and installs the repository's
-`dotfiles-devflow` package with
-`uv tool install --python <path> --no-python-downloads --editable`.
-`UV_TOOL_DIR` is confined to
-`~/.local/share/dotfiles/uv-tools`, while public entry points go to
-`~/.local/bin`. A source-and-interpreter receipt supplies the ownership proof
-for a strict second-run no-op and conservative uninstall; unreceipted or
-ambiguous state is preserved. Before `uv` runs, an exact pending receipt makes
-interrupted installation resumable: an empty attempt may retry, and a fully
-matching environment may finalize without reinstalling, but partial state
-fails closed. The degraded `--skip-mise-runtimes` mode skips this
-runtime-dependent installation and retains any existing owned tool.
-Harness-global Codex and Claude adapters remain explicit `devflow harness
-install` operations rather than generic installer side effects.
+The agent workflow now uses Git, Herdr, Neovim, and Hunk directly through shared
+instructions. `install.sh` links the complete workflow into Codex, Pi, and
+Claude Code's global instruction locations without installing a workflow
+package or a private Python environment. The same links are installed in
+`--skip-mise-runtimes` mode. See [shared agent instructions](../README.md#shared-agent-instructions)
+for paths and migration behaviour. `uv` remains in the Brewfile as an independent
+Python development CLI; it does not own this workflow or the tracked Python
+runtime.
 
 Ghostty's tracked configuration also selects **JetBrains Mono**. Homebrew maps that presentation dependency to the macOS-only [`font-jetbrains-mono`](https://formulae.brew.sh/cask/font-jetbrains-mono) cask. `install.sh` accepts either its Brew receipt or a matching font file in the standard macOS font directories.
 
@@ -86,11 +79,6 @@ and Amazon Corretto JDK 21 at `corretto-21.0.12.8.1`. Exact selectors make a
 successful second install a stable no-op; advancing a runtime is an explicit
 manifest change rather than a side effect of resolving `latest`, `lts`, or a
 moving major-version channel.
-
-The devflow package accepts Python 3.14 and newer, independently of the exact
-Mise pin. Its 48 tests pass on 3.14.7 and in an isolated 3.15.0rc2 environment;
-packaging and installation also pass on that preview. Python 3.15 stable was
-not yet released during this validation. ([Python 3.15.0rc2 release](https://www.python.org/downloads/release/python-3150rc2/))
 
 Java compatibility requires both `java` and `javac` at version 21 or newer,
 without a vendor restriction. Mise still provisions the exact Corretto

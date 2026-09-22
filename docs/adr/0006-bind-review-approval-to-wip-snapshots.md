@@ -1,5 +1,5 @@
 ---
-status: amended by ADR-0013
+status: amended by ADR-0013 and ADR-0015
 ---
 
 # Bind review approval to WIP snapshots

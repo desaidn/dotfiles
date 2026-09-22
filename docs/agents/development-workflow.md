@@ -1,150 +1,176 @@
 # Agent development workflow
 
-`devflow` is a small command-line tool for one common coding-agent workflow:
+Apply this workflow to coding-agent work in every project. Read the project's
+instructions before acting; the user and project supply the checkout, feature,
+review base, target, validation, and delivery requirements. These are agent
+instructions, not executable guards. Human Git and LazyGit remain unrestricted.
+Use native Git, Herdr, Neovim, and Hunk; do not require a workflow CLI or skill.
 
-```text
-start -> wip/<feature> -> review/<name> -> one squash commit
-```
+## Choose the checkout and start work
 
-It coordinates Git, Herdr, Neovim, and Hunk. Project instructions and the user
-decide where the checkout lives, whether to use a worktree, what to review
-against, where to land, and what happens after landing.
+- Inspect `git status --short --branch` and `git worktree list --porcelain`.
+  Respect unfinished work and concurrent human activity. Never stash, discard,
+  or move someone else's changes to make a command succeed.
+- Use the checkout authorized by the user/project. Ask before an otherwise
+  unauthorized branch or worktree action. Worktree creation and cleanup belong
+  to the project workflow; do not silently create a review copy.
+- From a clean checkout at the intended starting commit, validate the chosen
+  name with `git check-ref-format --branch "wip/$feature"`. Create it with
+  `git switch --no-overwrite-ignore -c "wip/$feature"`, or resume it with
+  `git switch --no-overwrite-ignore "wip/$feature"`. If it is checked out
+  elsewhere, use that checkout. Never force a switch or rewrite an existing ref.
+- Keep agent-authored WIP append-only: ordinary commits and merges are allowed;
+  never amend, rebase, reset, delete, or force-update it. Commit subjects are
+  short, imperative plain-language summaries without Conventional Commit prefixes.
+- Run project validation and commit the intended changes before formal review.
+  Recheck Git state after concurrent human operations; no ref or checkout is
+  reserved against human use by these instructions.
 
-These rules govern coding agents only. Human Git and LazyGit operations remain
-unrestricted. Devflow installs no repository hooks and does not intercept human
-commands.
+## Identify the exact review
 
-## Choose the checkout
+The examples below use POSIX-shell variables. Set each input deliberately and
+check every command's exit status before continuing; do not paste placeholders
+or continue after a failed check. Run Git commands in the selected checkout.
 
-Follow the user's request and the project's instructions to prepare the checkout
-where work should happen. It may be the primary checkout or a worktree. Devflow
-operates only in the checkout where it is invoked and never creates, moves,
-repairs, or removes worktrees.
+For local work, the source must be the current `wip/<feature>` head and the
+review name is the feature name. For externally authored code, choose a unique
+review name and record the kind as **external**; do not create WIP or land it.
+Both use the same read-only review procedure.
 
-If the user or project instructions do not already authorize a needed worktree
-change, ask first. Coordinate with human activity in a shared working folder
-and rerun validation and devflow after a concurrent Git operation.
-
-## Start local work
-
-From a clean checkout at the commit where the feature should begin, run:
-
-```sh
-devflow start <feature>
-```
-
-For a new feature, this creates `wip/<feature>` at the checkout's current
-commit. If that WIP branch already exists, devflow selects it without moving or
-rewriting it. If it is checked out elsewhere, use the reported checkout instead
-of moving the branch.
-
-Agent-authored WIP is append-only. Add ordinary commits; never amend, rebase,
-reset, delete, or force-update WIP. When a target branch must be incorporated,
-merge it into WIP normally, resolve and test there, then review the new WIP
-head.
-
-## Review local work
-
-From a clean checkout on the exact `wip/<feature>` commit to review, pass the
-comparison point explicitly:
+Require no staged, unstaged, or untracked changes and no merge, rebase,
+cherry-pick, or revert in progress. Choose an explicit ancestor base; never infer
+it from a default branch. Capture full object IDs and the canonical checkout:
 
 ```sh
-devflow --json review --base <branch-or-commit>
+checkout=$(git rev-parse --show-toplevel)
+base_oid=$(git rev-parse --verify "$review_base^{commit}")
+head_oid=$(git rev-parse --verify 'HEAD^{commit}')
+tree_oid=$(git rev-parse --verify 'HEAD^{tree}')
+git merge-base --is-ancestor "$base_oid" "$head_oid"
+git check-ref-format "refs/heads/review/$review_name"
 ```
 
-The base must be an ancestor of the current commit. Devflow infers the review
-name from `wip/<feature>` and records `review/<feature>` at that exact WIP head.
-The Review Branch is a marker for the reviewed code, not a second working
-branch or a squashed commit.
+Record the repository/checkout, local or external kind, source branch (if any),
+review name, base/head/tree IDs, and validation results in the conversation.
+Inspect any existing `review/<name>` ref and record its old ID before changing
+it. Do not move a Review Branch checked out in any worktree or used by an open
+review. A Review Branch is a snapshot marker, never a second working branch.
 
-Devflow opens a Herdr tab rooted in the same checkout, starts Neovim there, and
-opens the complete `BASE...HEAD` change in Hunk. Hunk's `e` action returns to
-that Neovim with normal project-root discovery, dependencies, and language
-tooling. Devflow publishes the Review Branch and Review Record only after the
-review session has opened and been verified successfully.
+## Open Neovim and Hunk
 
-Take `checkout` and `session_id` from the JSON response and inspect that exact
-session:
+Use a visible Neovim host rooted in the review checkout. Set
+`review_herdr=${HERDR_BIN_PATH:-herdr}` to use the host-supplied compatible binary
+when available. Prefer the intended Herdr session/workspace; inspect
+`"$review_herdr" workspace list` and capture actual IDs.
+From outside a Herdr pane, use explicit session/workspace targeting rather than
+assuming the focused workspace is correct. Apply the same `--session NAME`
+selector to every call when selecting a named server. Do not nest tmux in Herdr.
+
+Inspect `hunk session list --json` first. Keep one Hunk process per checkout;
+do not silently close another review or launch an ambiguous second instance.
+Reuse an existing session only after verifying the exact checkout and revisions.
+Otherwise create the review tab with immutable context:
 
 ```sh
-hunk session review <session-id> --include-patch --include-notes --json
+"$review_herdr" tab create --workspace "$workspace_id" --cwd "$checkout" \
+  --label "review/$review_name" --env "HUNK_REVIEW_BASE_OID=$base_oid" \
+  --env "HUNK_REVIEW_HEAD_OID=$head_oid" --focus
 ```
 
-Review the complete change and add each actionable finding to that session:
+Read `result.tab.tab_id` and `result.root_pane.pane_id` from the returned JSON,
+then run `"$review_herdr" pane run "$pane_id" nvim +HunkReview`. The configured Neovim
+adapter opens full Hunk with `diff BASE...HEAD --watch --mode stack`; it validates
+the object-ID format, not Git state or approval. Hunk's `e` returns to this host
+Neovim with project language tooling. In a separately authorized terminal or
+tmux fallback, the equivalent launch from the checkout is:
 
 ```sh
-hunk session comment add <session-id> --file <path> --new-line <n> \
-  --summary <text> --rationale <text> --author <name> --json
+env HUNK_REVIEW_BASE_OID="$base_oid" HUNK_REVIEW_HEAD_OID="$head_oid" nvim +HunkReview
 ```
 
-Use `--old-line` instead of `--new-line` for removed code. Keep the checkout's
-commit, staged state, and files unchanged while the review is open so editor
-handoff stays tied to the reviewed project state.
-
-If the user requests changes, return to WIP and append commits. Then open a new
-review. Any WIP or Review Branch change makes the older approval stale. A
-review does not imply approval; only the user's explicit approval of the exact
-returned review ID authorizes landing. After approval, the review tab may close
-and its checkout may be reused; the unchanged WIP and Review Branch preserve
-the approved snapshot.
-
-## Review someone else's code
-
-Review-only code uses the same Herdr, Neovim, Hunk, and agent-review path. From
-a clean checkout at the exact commit being reviewed, run:
+A launched pane does not prove the review is ready. Inspect the live Hunk list
+until the intended session registers (use a bounded wait, normally ten seconds).
+Verify `cwd`, `repoRoot`, and `sourceLabel` identify the selected checkout,
+`inputKind` is `vcs`, and the title identifies the full `BASE...HEAD` pair.
+Stop on mismatch, ambiguity, unavailable presentation, or timeout; close only a
+tab created by this failed attempt. Do not report a successful review yet.
 
 ```sh
-devflow --json review --base <branch-or-commit> --name <review-name>
+hunk session get "$session_id" --json
+hunk session review "$session_id" --include-patch --include-notes --json
 ```
 
-The source is always the checkout's current commit. Supplying `--name` marks the
-review as external, so devflow creates no WIP branch and cannot land it. The
-base must be an ancestor of the current commit.
+Check that the actual patch covers the intended full change set. Recheck the
+checkout is clean at `head_oid`, its tree is `tree_oid`, and local WIP still
+points there. Only then publish `refs/heads/review/$review_name` using
+`git update-ref <ref> <head_oid> <previous_oid>`; use an empty previous-ID argument
+for an absent ref. This compare-and-update must fail if the ref changed during
+launch. Do not force it through a concurrent change. Record the verified Hunk
+session ID and Herdr tab/pane IDs alongside the snapshot in the conversation.
 
-## Land approved local work
+## Findings and approval
 
-After the user approves the exact current local review, ask which existing
-local branch should receive it. The target may follow any project convention
-except the reserved `wip/*` and `review/*` names.
-
-Prepare a clean checkout already on that target, derive one complete imperative
-commit title from the feature name and complete WIP history, then run:
+Review the whole change set. Add every actionable finding to that exact live
+session before asking the user for a decision:
 
 ```sh
-devflow land <feature> --target <branch> --approved <review-id> --title "<title>"
+hunk session comment add "$session_id" --file "$path" --new-line "$line" \
+  --summary "$summary" --rationale "$rationale" --author "$author" --json
 ```
 
-The target must contain the review's explicit base. It may have gained newer
-compatible commits since review. Devflow verifies that WIP and Review Branch
-still identify the approved commit, then adds the complete reviewed change to
-the target as one squash commit. It leaves WIP, the Review Branch, and the
-Review Record intact.
+Use `--old-line` for removed code. Keep HEAD, index, and files unchanged while
+review is open. Hunk notes belong to its live process; conversation summaries
+must capture the findings and decision needed for continuity, not assume notes
+survive process exit. End the review before editing its checkout. Apply requested
+changes as new WIP commits, then review the new snapshot and obtain new approval.
 
-If the change conflicts or needs integration work, devflow stops. Return to
-WIP, merge the target into it, resolve and test with append-only commits, and
-open a fresh review before trying again.
+Approval is the user's explicit authorization of one exact **local** snapshot,
+recorded in the conversation with its base/head/tree and Review Branch. Opening
+a review, an agent's review result, a Git ref, or an old record is not approval.
+Any WIP or Review Branch change invalidates it. Once approved, the review tab
+may close and its checkout may be reused while the approved refs stay unchanged.
+If another session cannot establish the snapshot and approval from available
+conversation evidence, perform a fresh review and obtain fresh approval.
+Create no custom approval database or on-disk review-record format. Preserve
+historical records and refs; they do not independently authorize landing.
 
-Landing is the end of devflow's responsibility. It never creates the target,
-pushes, opens a team review, runs team-specific tools, merges onward, or cleans
-up successful work. The project workflow handles those steps.
+## Land the approved change
 
-## Composition and exceptions
+Only after explicit approval, ask which **existing local branch** should receive
+it. The target cannot be `wip/*` or `review/*`. Use a clean checkout already on
+that target, with no Git operation in progress. Do not reuse an open review's
+checkout before approval. Derive one complete-feature imperative title from the
+feature name and complete WIP history, following project commit rules.
 
-Other workflows use devflow through its commands and JSON output. It has no
-plugin system, callbacks, or project-specific configuration. Project
-instructions and skills supply its explicit inputs and use its results.
+Before changing the target, verify all of the following:
 
-Use devflow for the guarded `start`, `review`, and `land` transitions. An agent
-branch or worktree action outside this contract is allowed when the user or
-project instructions authorize it; otherwise ask first. The user's own Git and
-LazyGit actions are never Workflow Exceptions.
+- The approval evidence names this local feature, exact base/head/tree, and
+  Review Branch. External reviews cannot land.
+- `refs/heads/wip/<feature>` and `refs/heads/review/<feature>` still equal the
+  approved head, and that commit still has the approved tree. Any known movement
+  since approval requires fresh review even if a ref was later moved back.
+- The target contains the approved base (`git merge-base --is-ancestor`). Capture
+  its current full HEAD ID; refuse a feature already contained in that history.
+- `git merge-tree --write-tree "$target_oid" "$head_oid"` succeeds without
+  conflicts. Capture its resulting tree. A failed preflight must not mutate the
+  checkout; integrate the target into WIP, resolve and test there, then re-review.
 
-Harness-global adapters are installed explicitly and non-destructively:
+Recheck target branch/HEAD, clean state, source refs, and approval immediately
+before applying. In the target checkout, run:
 
 ```sh
-devflow harness install codex
-devflow harness install claude
+git merge --squash --no-overwrite-ignore "$head_oid"
 ```
 
-They manage only their marked guidance blocks and preserve all other
-user-authored harness instructions.
+Require success, no unresolved files or unstaged changes, and `git write-tree`
+equal to the preflight tree. Refuse an empty/already-applied change. Recheck that
+HEAD is still `target_oid` and the reviewed refs/approval remain valid, then run
+`git commit -m "$title"`. Verify the resulting commit has exactly that target
+parent and expected tree and the checkout is clean. If concurrent changes or
+unexpected results appear, stop and inspect; never commit mixed state or discard
+human work. Do not solve conflicts in the landing checkout or automatically reset
+after a failed operation; coordinate recovery, then return integration work to WIP.
+
+Leave WIP, the Review Branch, and historical evidence intact. Pushing, team
+review, onward delivery, target creation, and cleanup are separate project/user
+decisions. Never infer authorization for them from local review approval.

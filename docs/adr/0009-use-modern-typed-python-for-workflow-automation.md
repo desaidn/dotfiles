@@ -1,5 +1,5 @@
 ---
-status: amended by ADR-0012
+status: superseded by ADR-0015
 ---
 
 # Use modern typed Python for workflow automation

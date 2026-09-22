@@ -95,7 +95,28 @@ labels without requiring a Nerd Font.
 - `<leader>td` - Toggle inline git diff
 - `]c` / `[c` - Navigate git hunks
 
-Lazygit and Hunk open files through the shell-owned `EDITOR=nvim` contract. flatten.nvim routes nested Neovim calls back into the host editor and hides the originating Git surface. Workflow reviews run Hunk in devflow's Invoking Checkout, so pressing `e` opens in the review tab's Neovim with normal project-root discovery and full language tooling using that checkout's project and build context.
+Lazygit and Hunk open files through the shell-owned `EDITOR=nvim` contract.
+flatten.nvim routes nested Neovim calls back into the host editor and hides the
+originating Git surface. Start a review from the intended checkout so pressing
+`e` opens in that review's Neovim with normal project-root discovery and full
+language tooling using the checkout's project and build context.
+
+To open an aggregate commit review, resolve the base and head to full commit
+object IDs, then launch this Neovim configuration from the checkout root:
+
+```sh
+env HUNK_REVIEW_BASE_OID='<full-base-oid>' \
+  HUNK_REVIEW_HEAD_OID='<full-head-oid>' nvim +HunkReview
+```
+
+Replace both placeholders with lowercase hexadecimal IDs of the same length
+(40 for SHA-1 or 64 for SHA-256). Both variables must be supplied together;
+malformed or incomplete context stops Hunk's declaration before registration.
+This configuration validates their format; the caller owns commit resolution
+and review-base selection. `:HunkReview` and `<leader>gd` share one toggle for
+`hunk diff BASE...HEAD --watch --mode stack`. Without either variable,
+`<leader>gd` reviews the working tree and `:HunkReview` is not registered.
+`<leader>gD` continues to select staged changes in either context.
 
 Each terminal tool uses a persistent Tool Tab. LazyGit restarts in its existing
 tab when the working directory changes; Hunk keeps an instance per working

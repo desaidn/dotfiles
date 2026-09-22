@@ -71,8 +71,8 @@ Herdr for normal agent work. Usage is documented in the
 - Write commit subjects as short, imperative plain-language summaries (for
   example, `Add shell LSP support`); do not use Conventional Commit prefixes
   such as `feat:` or `fix:`.
-- Use direct Hunk from Neovim only for full stacked working-tree or staged
-  review. Both inputs must share one Tool Tab and process per repository so
+- Use Hunk from Neovim for full stacked working-tree, staged, or exact-revision
+  review. These inputs must share one Tool Tab and process per checkout so
   the `--repo .` selector on `hunk session` subcommands remains unambiguous. See the
   [Neovim Git guide](nvim/README.md#git) for mappings.
 - Keep gitsigns keymaps hunk-local; buffer-wide stage/reset operations belong in lazygit.
@@ -80,24 +80,27 @@ Herdr for normal agent work. Usage is documented in the
 ### Agent Development Workflow
 
 Read and follow [the development workflow](docs/agents/development-workflow.md)
-before branch, review, or landing operations. Use `devflow` for the guarded
-start, review, and landing transitions; its deterministic checks are executable
-authority, not a replacement for these instructions.
+before branch, review, or landing operations. Carry out its checks directly with
+Git, Herdr, Neovim, and Hunk; no workflow executable or skill is required. This
+same complete document is installed as global guidance for all three harnesses.
 
 - These rules govern coding agents only. Never block, intercept, or reinterpret
   human Git and LazyGit operations as Workflow Exceptions.
-- Follow user and project instructions to select the checkout. Devflow never
-  manages worktrees; ask before an otherwise unauthorized branch or worktree action.
+- Follow user and project instructions to select the checkout; ask before an
+  otherwise unauthorized branch or worktree action.
 - Keep agent-authored WIP append-only: ordinary commits and merges are allowed;
   never amend, rebase, reset, delete, or force-update it.
 - Review the exact clean WIP head. Keep the commit, staged state, and files
-  unchanged while review is open; inspect the returned Hunk session and add
+  unchanged while review is open; verify and inspect the exact Hunk session and add
   every actionable finding there before asking for a decision.
 - A review is not approval. Land only after explicit approval of the exact
   current local review and after asking which existing local branch receives
   it. Any WIP or Review Branch change invalidates that approval.
 - Coordinate shared-checkout activity and rerun validation after a concurrent
-  human Git operation. Devflow reserves no ref or checkout against human use.
+  human Git operation. No ref or checkout is reserved against human use.
+- Record exact snapshot identity and explicit approval in the conversation. If
+  that evidence is unavailable or uncertain, perform fresh review and obtain
+  fresh approval. Do not create a replacement persistent review-record format.
 
 ### Agent Harnesses
 
@@ -111,7 +114,7 @@ authority, not a replacement for these instructions.
 ### File Organization
 
 - Each configured application maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked
-- `tools/` is the source workspace for small, independently named agent-facing utilities. It is not an umbrella command, plugin system, or shared framework; see `tools/README.md`.
+- The complete portable agent workflow lives in `docs/agents/development-workflow.md`; harness-global instruction paths link directly to it. Keep dotfiles-specific constraints here.
 - Follow tool-specific guidance where present: [Herdr](herdr/AGENTS.md),
   [Neovim](nvim/AGENTS.md), and [tmux](tmux/AGENTS.md).
 - Long-lived architecture review reports that the user chooses to retain live under `docs/`; generated reports should not remain at the repository root
@@ -160,7 +163,10 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 `install.sh` MUST stay non-destructive:
 
 - Never `rm` or `rm -rf` any user path.
-- If a target exists, rename it to `<target>.bak.$(date +%s)` and create the symlink.
+- For ordinary configuration links, if a target exists, rename it to
+  `<target>.bak.$(date +%s)` and create the symlink. Shared workflow instruction
+  destinations are protected: reject unmanaged content for explicit migration
+  rather than silently removing it from the agent's active context.
 - If the target is already a path-equivalent symlink to its expected source in
   this repo, skip silently.
 - Re-running the script after a successful install is a no-op.
@@ -186,30 +192,15 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
   runtime installation and validation and does not create or update the
   tracked Mise fragment link. Never remove an existing managed or user-owned
   Mise fragment in this mode.
-- After full Mise provisioning, install `dotfiles-devflow` through `uv` with
-  the exact isolated `mise which python`, the private
-  `~/.local/share/dotfiles/uv-tools` tool directory, and `~/.local/bin` for
-  its `devflow` entry point. A source-and-interpreter ownership receipt must
-  make the unchanged second run a no-op; never overwrite unreceipted or
-  ambiguous tool state and never use `--force`.
-- Run every owned `uv tool` transaction with `--no-config` in a subshell that
-  removes inherited `UV_*`, `PYTHON*`, `VIRTUAL_ENV*`, `CONDA_*`, and `PIP_*`
-  variables before setting only the private tool and entry-point directories.
-  Preserve general proxy and TLS/CA variables needed for network access.
-- Validate the private environment's `uv-receipt.toml` semantically with the
-  exact receipted Python 3.14 interpreter and `tomllib`. Accept irrelevant TOML
-  formatting, ordering, and comments, but require the exact editable source,
-  interpreter, distribution, and single owned `devflow` entry point with no
-  extra, duplicate, missing, malformed, or non-string inventory. The receipt and
-  source marker must be regular files; the public entry point must be the exact
-  owned symlink.
-- Write an ownership-safe pending receipt before `uv` changes tool state. A
-  rerun may retry an exact pending install only when no tool artifacts exist,
-  or finalize it without reinstalling only when its environment and entry point
-  are fully valid; preserve and reject every partial mismatch.
-- Generic installation must not create or edit harness-global Codex or Claude
-  guidance. Those adapters require an explicit `devflow harness install`
-  invocation.
+- Link the complete shared workflow into Codex and pi global `AGENTS.md` files
+  and Claude's global `rules/development-workflow.md`, including in degraded
+  mode. Honor validated `CODEX_HOME` and `PI_CODING_AGENT_DIR` overrides.
+- Preserve unrelated global instructions and skills. Reject conflicting global
+  overrides, unmanaged destinations, legacy devflow guidance, and blocked parent
+  paths during preflight; migration is explicit, not a hidden installer rewrite.
+- Do not provision a workflow executable, private Python environment, harness
+  plugin, hooks, or new review-state storage. The shared document is the only
+  maintained workflow policy; native harness loaders supply its full contents.
 - Run `tests/install_test.sh` after installer, Brewfile, Mise manifest, or
   per-machine activation-template changes. It needs Neovim to execute the shared
   compatibility helper against simulated versions.
@@ -228,13 +219,11 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 - Leave older backups, foreign links, installed packages and runtimes,
   per-machine activation files, and unrelated state under
   `~/.local/share/dotfiles/` untouched. A successful second run is a no-op.
-- Remove the Workflow Engine only when its receipt, editable source,
-  interpreter record, private environment, and public entry point establish
-  unambiguous ownership of the single `devflow` entry point. Preserve foreign
-  or partial state, and never uninstall Homebrew's `uv` or Mise's Python.
-- Reuse the installer's exact semantic `uv-receipt.toml` ownership predicate
-  independently inside `uninstall.sh`, and run the owned `uv tool uninstall`
-  with the same config and environment isolation.
+- Remove only owned global instruction links, preserving personal guidance,
+  other rules/skills, custom profile contents, and historical review records.
+  Do not follow redirected harness containers to remove another profile's files.
+- Retired executable installations require an explicit ownership-checked migration;
+  generic uninstall leaves installed packages and legacy records untouched.
 
 ## Modification Guidelines
 

@@ -6,26 +6,27 @@ Allow a new machine with curl and Git to begin dotfiles installation from one
 documented curl-fed Bash command. The flow must establish or safely reuse a
 durable repository checkout before invoking the checkout's local installer, so
 the existing `install.sh` remains the installation authority and every managed
-link and editable package source remains valid after bootstrap exits.
+configuration and shared instruction link remains valid after bootstrap exits.
 
 ## Current evidence
 
 The documented quick start requires cloning the repository, changing into the
 checkout, and running `./install.sh`. The installer derives `REPO_ROOT` from
 `BASH_SOURCE[0]`, preflights files and directories throughout that checkout,
-links configuration targets directly to sources below `REPO_ROOT`, and installs
-devflow as an editable package from `REPO_ROOT/tools/devflow`.
+links configuration and harness-global instruction targets directly to sources
+below `REPO_ROOT`.
 
 Piping the current installer directly to Bash cannot satisfy those assumptions:
 a script read from standard input has no usable source-file location, and the
 rest of the repository is not present. A temporary archive is also insufficient
-because successful installation intentionally retains absolute links and an
-editable package relationship to the source checkout.
+because successful installation intentionally retains absolute links to the
+source checkout.
 
 The existing manual workflow already requires Git before `install.sh` begins.
 The installer then owns platform prerequisites, Homebrew, Mise runtimes,
-devflow, configuration links, and its existing `--skip-mise-runtimes` degraded
-mode. Bootstrap should not duplicate those responsibilities.
+configuration and shared instruction links, and its existing
+`--skip-mise-runtimes` degraded mode. Bootstrap should not duplicate those
+responsibilities.
 
 ## Scope
 
@@ -44,13 +45,13 @@ mode. Bootstrap should not duplicate those responsibilities.
 ## Boundaries / non-goals
 
 - Do not make bootstrap a second implementation of dependency provisioning,
-  linking, devflow installation, or uninstall behavior.
+  configuration or instruction linking, or uninstall behavior.
 - Do not fetch, pull, switch, reset, clean, or otherwise update an existing
   checkout implicitly. Repository updates remain an explicit user Git action.
 - Do not overwrite, relocate, or delete an existing foreign checkout or
   non-repository destination.
-- Do not use an ephemeral checkout whose removal would leave managed links or
-  the editable devflow installation pointing at missing sources.
+- Do not use an ephemeral checkout whose removal would leave managed
+  configuration or instruction links pointing at missing sources.
 - Do not remove the existing `install.sh`, `uninstall.sh`, or documented local
   invocation paths.
 
@@ -74,8 +75,8 @@ mode. Bootstrap should not duplicate those responsibilities.
 
 - From outside any checkout, the documented curl command establishes a durable
   checkout and successfully hands execution to that checkout's installer.
-- The installed configuration and devflow ownership receipt refer to the
-  durable checkout rather than temporary bootstrap files.
+- The installed configuration and shared instruction links refer to the durable
+  checkout rather than temporary bootstrap files.
 - Installer arguments are forwarded exactly, including degraded mode.
 - Repeating the curl command against a recognized checkout performs no implicit
   Git update and preserves the installer's ordinary second-run behavior.

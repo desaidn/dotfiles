@@ -1152,8 +1152,8 @@ check('production Hunk review context exposes the aggregate Change Set through o
     local base_oid = string.rep('a', oid_length)
     local head_oid = string.rep('b', oid_length)
     local fixture, loaded, load_error = load_production_hunk {
-      DEVFLOW_REVIEW_BASE_OID = base_oid,
-      DEVFLOW_REVIEW_HEAD_OID = head_oid,
+      HUNK_REVIEW_BASE_OID = base_oid,
+      HUNK_REVIEW_HEAD_OID = head_oid,
     }
     assert(loaded, load_error)
 
@@ -1185,12 +1185,12 @@ check('production Hunk fails closed for incomplete or malformed review identity'
 
   for _, context in ipairs(invalid_contexts) do
     local fixture, loaded, load_error = load_production_hunk {
-      DEVFLOW_REVIEW_BASE_OID = context.base,
-      DEVFLOW_REVIEW_HEAD_OID = context.head,
+      HUNK_REVIEW_BASE_OID = context.base,
+      HUNK_REVIEW_HEAD_OID = context.head,
     }
 
     assert(not loaded, context.name .. ' review context unexpectedly loaded Hunk')
-    assert(tostring(load_error):match 'DEVFLOW review context', context.name .. ' failed without a clear review-context error')
+    assert(tostring(load_error):match 'Hunk review context', context.name .. ' failed without a clear review-context error')
     assert(fixture.mapping('n', '<leader>gd') == nil, context.name .. ' registered a Hunk mapping before failing')
     assert(fixture.user_commands.HunkReview == nil, context.name .. ' registered :HunkReview before failing')
   end

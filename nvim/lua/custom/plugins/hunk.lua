@@ -4,14 +4,14 @@
 --- selector in `hunk session comment add` usable for agent review notes while
 --- allowing concurrent reviews in different repositories or worktrees.
 --- Requires: hunk (https://github.com/modem-dev/hunk)
-local review_base_oid = vim.env.DEVFLOW_REVIEW_BASE_OID
-local review_head_oid = vim.env.DEVFLOW_REVIEW_HEAD_OID
+local review_base_oid = vim.env.HUNK_REVIEW_BASE_OID
+local review_head_oid = vim.env.HUNK_REVIEW_HEAD_OID
 
 local function valid_review_oid(value) return type(value) == 'string' and (#value == 40 or #value == 64) and value:match '^[0-9a-f]+$' ~= nil end
 
 local review_context_present = review_base_oid ~= nil or review_head_oid ~= nil
 if review_context_present and (not valid_review_oid(review_base_oid) or not valid_review_oid(review_head_oid) or #review_base_oid ~= #review_head_oid) then
-  error('invalid DEVFLOW review context: base and head must be same-length full lowercase hexadecimal object IDs', 0)
+  error('invalid Hunk review context: base and head must be same-length full lowercase hexadecimal object IDs', 0)
 end
 
 local working_tree_variant = {

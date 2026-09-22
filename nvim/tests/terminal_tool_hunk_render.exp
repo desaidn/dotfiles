@@ -352,9 +352,9 @@ proc run_test {} {
 
   set render_init "$repo_root/nvim/tests/terminal_tool_hunk_render_init.lua"
   exec tmux -S $startup_host_socket -f /dev/null new-session -d -x 80 -y 24 -s startup -c $startup_fixture \
-    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$startup_fixture HUNK_RENDER_SECOND_FIXTURE=$startup_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup DEVFLOW_REVIEW_BASE_OID=$review_base DEVFLOW_REVIEW_HEAD_OID=$review_head nvim --clean --listen $startup_nvim_socket -u $render_init +HunkReview"
+    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$startup_fixture HUNK_RENDER_SECOND_FIXTURE=$startup_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup HUNK_REVIEW_BASE_OID=$review_base HUNK_REVIEW_HEAD_OID=$review_head nvim --clean --listen $startup_nvim_socket -u $render_init +HunkReview"
   exec tmux -S $manual_host_socket -f /dev/null new-session -d -x 80 -y 24 -s manual -c $manual_fixture \
-    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$manual_fixture HUNK_RENDER_SECOND_FIXTURE=$manual_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=manual DEVFLOW_REVIEW_BASE_OID=$review_base DEVFLOW_REVIEW_HEAD_OID=$review_head nvim --clean --listen $manual_nvim_socket -u $render_init"
+    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$manual_fixture HUNK_RENDER_SECOND_FIXTURE=$manual_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=manual HUNK_REVIEW_BASE_OID=$review_base HUNK_REVIEW_HEAD_OID=$review_head nvim --clean --listen $manual_nvim_socket -u $render_init"
 
   set startup_hunk_pid [wait_for_nvim_terminal_pid $startup_nvim_socket]
   set manual_hunk_pid [wait_for_nvim_terminal_pid $manual_nvim_socket]

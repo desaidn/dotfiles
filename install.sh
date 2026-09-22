@@ -68,16 +68,115 @@ HOME_DIRECTORY="$(cd -P -- "$HOME" 2>/dev/null && pwd -P)" ||
     die "HOME must not resolve to the filesystem root"
 (( EUID != 0 )) || die "do not run this installer as root; run it as the user whose dotfiles are being installed"
 LOCAL_DIR="$HOME/.local/share/dotfiles"
-DEVFLOW_SOURCE="$REPO_ROOT/tools/devflow"
-DEVFLOW_DISTRIBUTION="dotfiles-devflow"
-DEVFLOW_TOOL_DIR="$LOCAL_DIR/uv-tools"
-DEVFLOW_TOOL_ENV="$DEVFLOW_TOOL_DIR/$DEVFLOW_DISTRIBUTION"
-DEVFLOW_BIN_DIR="$HOME/.local/bin"
-DEVFLOW_RECEIPT="$LOCAL_DIR/devflow-tool.receipt"
-DEVFLOW_INSTALL_STATE=""
-DEVFLOW_RECEIPT_STATUS=""
-DEVFLOW_RECEIPT_SOURCE=""
-DEVFLOW_RECEIPT_PYTHON=""
+# Harness roots are configurable; never silently install instructions to an
+# unused default location. Reject ambiguous paths before touching user files.
+normalize_agent_directory() {
+    local directory="$1"
+    while [[ "$directory" == *//* ]]; do
+        directory="${directory//\/\///}"
+    done
+    while [[ "$directory" == */ && "$directory" != / ]]; do
+        directory="${directory%/}"
+    done
+    printf '%s' "$directory"
+}
+CODEX_DIRECTORY="$(normalize_agent_directory "${CODEX_HOME-$HOME/.codex}")"
+PI_DIRECTORY="$(normalize_agent_directory "${PI_CODING_AGENT_DIR-$HOME/.pi/agent}")"
+WORKFLOW_HOME="$(normalize_agent_directory "$HOME")"
+
+# HOME's own ancestry was validated above. Preserve redirects below it and
+# at custom locations; do not follow them to another profile's instructions.
+redirected_agent_parent() {
+    local directory="$1"
+    while [[ "$directory" != / ]]; do
+        if [[ -L "$directory" ]]; then
+            case "$WORKFLOW_HOME/" in
+                "$directory/"*) ;;
+                *) printf '%s' "$directory"; return ;;
+            esac
+        fi
+        directory="$(dirname "$directory")"
+    done
+}
+
+validate_agent_directory() {
+    local directory="$1" setting="$2" ancestor
+    [[ "$directory" == /* && "$directory" != / ]] ||
+        die "$setting must name an absolute directory other than /"
+    case "$directory/" in
+        */./*|*/../*)
+            die "$setting must not contain . or .. path components"
+            ;;
+    esac
+    ancestor="$directory"
+    while [[ "$ancestor" != / ]]; do
+        if [[ ( -e "$ancestor" || -L "$ancestor" ) && ! -d "$ancestor" ]]; then
+            die "'$ancestor' blocks required configuration directory"
+        fi
+        ancestor="$(dirname "$ancestor")"
+    done
+    if [[ -d "$directory" && "$(cd -P -- "$directory" && pwd -P)" == / ]]; then
+        die "$setting must not resolve to the filesystem root"
+    fi
+}
+
+preflight_workflow_links() {
+    local directory target line redirected protected
+    local managed_targets=(
+        .config/fish .config/ghostty .config/herdr/config.toml
+        .config/hunk/config.toml .config/lazygit .config/mise/conf.d/00-dotfiles.toml
+        .config/nvim .config/tmux .zshrc
+        .local/share/dotfiles/local.fish .local/share/dotfiles/local.zsh
+        .claude/rules/development-workflow.md
+    )
+    validate_agent_directory "$CODEX_DIRECTORY" CODEX_HOME
+    validate_agent_directory "$PI_DIRECTORY" PI_CODING_AGENT_DIR
+    # Never place a harness root inside a link that installation will create.
+    for directory in "$CODEX_DIRECTORY" "$PI_DIRECTORY"; do
+        for target in "${managed_targets[@]}"; do
+            case "$directory/" in
+                "$WORKFLOW_HOME/$target/"*)
+                    die "agent configuration directory overlaps a managed link: $directory ($WORKFLOW_HOME/$target)"
+                    ;;
+            esac
+        done
+        for protected in "$CODEX_DIRECTORY/AGENTS.md" "$PI_DIRECTORY/AGENTS.md"; do
+            case "$directory/" in
+                "$protected/"*) die "agent configuration directories overlap an instruction file: $directory" ;;
+            esac
+        done
+    done
+    # These containers can hold unrelated agent state and are never replaced.
+    for directory in "$CODEX_DIRECTORY" "$PI_DIRECTORY" "$WORKFLOW_HOME/.claude/rules"; do
+        validate_agent_directory "$directory" "agent configuration directory"
+        redirected="$(redirected_agent_parent "$directory")"
+        [[ -z "$redirected" ]] ||
+            die "agent configuration directory is a symlink; preserve it and reconcile the workflow link explicitly: $redirected"
+    done
+    for target in "$CODEX_DIRECTORY/AGENTS.md" "$PI_DIRECTORY/AGENTS.md" \
+        "$HOME/.claude/rules/development-workflow.md"
+    do
+        if [[ -e "$target" || -L "$target" ]] &&
+            ! symlink_points_to "$target" "$REPO_ROOT/docs/agents/development-workflow.md"
+        then
+            die "existing global instructions must remain active; reconcile their content with the shared workflow before linking: $target"
+        fi
+    done
+    if [[ -e "$CODEX_DIRECTORY/AGENTS.override.md" ||
+        -L "$CODEX_DIRECTORY/AGENTS.override.md" ]]
+    then
+        die "Codex AGENTS.override.md shadows the shared workflow; reconcile it explicitly before installing: $CODEX_DIRECTORY/AGENTS.override.md"
+    fi
+    if [[ -f "$HOME/.claude/CLAUDE.md" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            case "$line" in
+                *'<!-- dotfiles-devflow:begin'*)
+                    die "retire the legacy dotfiles-devflow block in $HOME/.claude/CLAUDE.md while preserving unrelated guidance before installing"
+                    ;;
+            esac
+        done <"$HOME/.claude/CLAUDE.md"
+    fi
+}
 
 ensure_sudo() {
     command -v sudo >/dev/null 2>&1 || die "sudo is required to install system prerequisites and Homebrew"
@@ -536,300 +635,9 @@ symlink_points_to() {
     [[ -L "$1" && "$1" -ef "$2" ]]
 }
 
-load_devflow_receipt() {
-    local line
-    local lines=()
-
-    [[ -f "$DEVFLOW_RECEIPT" && ! -L "$DEVFLOW_RECEIPT" ]] || return 1
-    while IFS= read -r line; do
-        lines+=("$line")
-    done <"$DEVFLOW_RECEIPT"
-    [[ ${#lines[@]} == 3 ]] || return 1
-    case "${lines[0]}" in
-        dotfiles-devflow-v2)
-            DEVFLOW_RECEIPT_STATUS="final"
-            ;;
-        dotfiles-devflow-pending-v2)
-            DEVFLOW_RECEIPT_STATUS="pending"
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-    [[ -n "${lines[1]}" && -n "${lines[2]}" ]] || return 1
-
-    DEVFLOW_RECEIPT_SOURCE="${lines[1]}"
-    DEVFLOW_RECEIPT_PYTHON="${lines[2]}"
-}
-
-clear_devflow_resolver_environment() {
-    local variable
-
-    while IFS= read -r variable; do
-        case "$variable" in
-            UV_*|PYTHON*|VIRTUAL_ENV*|CONDA_*|PIP_*)
-                unset "$variable"
-                ;;
-        esac
-    done < <(compgen -e)
-}
-
-devflow_uv_receipt_matches() {
-    local expected_python="$1" expected_source="$2"
-
-    [[ -f "$DEVFLOW_TOOL_ENV/uv-receipt.toml" &&
-        ! -L "$DEVFLOW_TOOL_ENV/uv-receipt.toml" ]] || return 1
-    (
-        clear_devflow_resolver_environment
-        "$expected_python" - \
-            "$DEVFLOW_TOOL_ENV/uv-receipt.toml" \
-            "$expected_python" \
-            "$expected_source" \
-            "$DEVFLOW_BIN_DIR" \
-            "$DEVFLOW_DISTRIBUTION" <<'PYTHON'
-from __future__ import annotations
-
-import sys
-import tomllib
-from collections.abc import Mapping, Sequence
-
-
-def records_match(
-    value: object,
-    *,
-    keys: tuple[str, ...],
-    expected: frozenset[tuple[str, ...]],
-) -> bool:
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        return False
-    records: list[tuple[str, ...]] = []
-    for item in value:
-        if not isinstance(item, Mapping) or set(item) != set(keys):
-            return False
-        record = tuple(item[key] for key in keys)
-        if not all(isinstance(field, str) for field in record):
-            return False
-        records.append(record)
-    return len(records) == len(expected) and frozenset(records) == expected
-
-
-receipt_path, expected_python, expected_source, bin_dir, distribution = sys.argv[1:]
-try:
-    with open(receipt_path, "rb") as receipt_file:
-        receipt = tomllib.load(receipt_file)
-except (OSError, UnicodeError, tomllib.TOMLDecodeError):
-    raise SystemExit(1) from None
-
-if set(receipt) != {"tool"} or not isinstance(receipt["tool"], Mapping):
-    raise SystemExit(1)
-tool = receipt["tool"]
-if set(tool) != {"requirements", "python", "entrypoints"}:
-    raise SystemExit(1)
-if tool["python"] != expected_python:
-    raise SystemExit(1)
-if not records_match(
-    tool["requirements"],
-    keys=("name", "editable"),
-    expected=frozenset({(distribution, expected_source)}),
-):
-    raise SystemExit(1)
-expected_entrypoints = frozenset(
-    {("devflow", f"{bin_dir}/devflow", distribution)}
-)
-if not records_match(
-    tool["entrypoints"],
-    keys=("name", "install-path", "from"),
-    expected=expected_entrypoints,
-):
-    raise SystemExit(1)
-PYTHON
-    )
-}
-
-devflow_environment_matches() {
-    local expected_python="$1" expected_source="$2"
-    local candidate line
-    local source_markers=() source_lines=()
-
-    devflow_uv_receipt_matches "$expected_python" "$expected_source" ||
-        return 1
-    symlink_points_to "$DEVFLOW_TOOL_ENV/bin/python" "$expected_python" ||
-        return 1
-
-    for candidate in \
-        "$DEVFLOW_TOOL_ENV"/lib/python*/site-packages/dotfiles_devflow.pth
-    do
-        [[ -f "$candidate" && ! -L "$candidate" ]] || continue
-        source_markers+=("$candidate")
-    done
-    [[ ${#source_markers[@]} == 1 ]] || return 1
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        source_lines+=("$line")
-    done <"${source_markers[0]}"
-    [[ ${#source_lines[@]} == 1 &&
-        "${source_lines[0]}" == "$expected_source/src" ]]
-}
-
-devflow_public_entrypoints_match() {
-    symlink_points_to \
-        "$DEVFLOW_BIN_DIR/devflow" \
-        "$DEVFLOW_TOOL_ENV/bin/devflow"
-}
-
-devflow_installation_matches() {
-    local expected_python="$1" expected_source="$2"
-
-    [[ -d "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] ||
-        return 1
-    devflow_environment_matches "$expected_python" "$expected_source" ||
-        return 1
-    devflow_public_entrypoints_match
-}
-
-devflow_installation_is_absent() {
-    [[ ! -e "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] ||
-        return 1
-    [[ ! -e "$DEVFLOW_BIN_DIR/devflow" && ! -L "$DEVFLOW_BIN_DIR/devflow" ]]
-}
-
-preflight_devflow_state() {
-    if [[ ! -e "$DEVFLOW_RECEIPT" && ! -L "$DEVFLOW_RECEIPT" ]]; then
-        devflow_installation_is_absent ||
-            die "existing Workflow Engine files have no dotfiles ownership receipt; preserve or remove them explicitly"
-        DEVFLOW_INSTALL_STATE="absent"
-        return 0
-    fi
-
-    load_devflow_receipt ||
-        die "the Workflow Engine ownership receipt is invalid or ambiguous: $DEVFLOW_RECEIPT"
-    [[ "$DEVFLOW_RECEIPT_SOURCE" == "$DEVFLOW_SOURCE" ]] ||
-        die "the Workflow Engine ownership receipt belongs to a different source: $DEVFLOW_RECEIPT_SOURCE"
-
-    case "$DEVFLOW_RECEIPT_STATUS" in
-        final)
-            devflow_installation_matches \
-                "$DEVFLOW_RECEIPT_PYTHON" "$DEVFLOW_RECEIPT_SOURCE" ||
-                die "the Workflow Engine environment does not match its ownership receipt"
-            DEVFLOW_INSTALL_STATE="owned"
-            ;;
-        pending)
-            if devflow_installation_is_absent; then
-                DEVFLOW_INSTALL_STATE="pending-empty"
-            elif devflow_installation_matches \
-                "$DEVFLOW_RECEIPT_PYTHON" "$DEVFLOW_RECEIPT_SOURCE"
-            then
-                DEVFLOW_INSTALL_STATE="pending-complete"
-            else
-                die "the pending Workflow Engine installation is partial or does not match its ownership receipt"
-            fi
-            ;;
-        *)
-            die "internal error: unsupported Workflow Engine receipt state"
-            ;;
-    esac
-}
-
-resolve_mise_python_path() (
-    cd -- "$REPO_ROOT"
-    unset \
-        MISE_CONFIG_FILE \
-        MISE_GLOBAL_CONFIG_FILE \
-        MISE_GLOBAL_CONFIG_ROOT \
-        MISE_IGNORED_CONFIG_PATHS \
-        MISE_NO_CONFIG \
-        MISE_DISABLE_TOOLS \
-        MISE_NODE_VERSION \
-        MISE_PYTHON_VERSION \
-        MISE_RUST_VERSION \
-        MISE_JAVA_VERSION
-    MISE_CONFIG_DIR="$MISE_BOOTSTRAP_CONFIG_DIR" mise which python
-)
-
-run_devflow_uv() (
-    clear_devflow_resolver_environment
-    export UV_TOOL_DIR="$DEVFLOW_TOOL_DIR"
-    export UV_TOOL_BIN_DIR="$DEVFLOW_BIN_DIR"
-    uv --no-config "$@"
-)
-
-write_devflow_receipt() {
-    local marker="$1" python_path="$2"
-    local receipt_temporary="$DEVFLOW_RECEIPT.tmp.$$"
-
-    mkdir -p "$LOCAL_DIR"
-    [[ ! -e "$receipt_temporary" && ! -L "$receipt_temporary" ]] ||
-        die "temporary Workflow Engine receipt already exists: $receipt_temporary"
-    (
-        umask 077
-        printf '%s\n%s\n%s\n' \
-            "$marker" "$DEVFLOW_SOURCE" "$python_path" \
-            >"$receipt_temporary"
-    )
-    mv "$receipt_temporary" "$DEVFLOW_RECEIPT"
-}
-
-install_devflow() {
-    local python_path
-
-    section "Installing Workflow Engine"
-    python_path="$(resolve_mise_python_path)" ||
-        die "Mise could not resolve the tracked Python interpreter for the Workflow Engine"
-    [[ "$python_path" == /* && -x "$python_path" ]] ||
-        die "Mise returned an invalid Python interpreter for the Workflow Engine: $python_path"
-
-    if [[ "$DEVFLOW_INSTALL_STATE" == "owned" ]]; then
-        [[ "$DEVFLOW_RECEIPT_PYTHON" == "$python_path" ]] ||
-            die "the owned Workflow Engine uses a different Python interpreter; uninstall it explicitly before reinstalling"
-        "$DEVFLOW_BIN_DIR/devflow" --help >/dev/null 2>&1 ||
-            die "the owned Workflow Engine executable is not runnable"
-        echo "Workflow Engine is already installed."
-        return 0
-    fi
-
-    mkdir -p "$DEVFLOW_TOOL_DIR" "$DEVFLOW_BIN_DIR"
-    case "$DEVFLOW_INSTALL_STATE" in
-        absent)
-            write_devflow_receipt \
-                "dotfiles-devflow-pending-v2" "$python_path"
-            ;;
-        pending-empty|pending-complete)
-            [[ "$DEVFLOW_RECEIPT_PYTHON" == "$python_path" ]] ||
-                die "the pending Workflow Engine installation uses a different Python interpreter"
-            ;;
-        *)
-            die "internal error: unknown Workflow Engine install state '$DEVFLOW_INSTALL_STATE'"
-            ;;
-    esac
-
-    if [[ "$DEVFLOW_INSTALL_STATE" == "pending-complete" ]]; then
-        "$DEVFLOW_BIN_DIR/devflow" --help >/dev/null 2>&1 ||
-            die "the pending Workflow Engine executable is not runnable"
-        write_devflow_receipt "dotfiles-devflow-v2" "$python_path"
-        echo "Workflow Engine installation resumed."
-        return 0
-    fi
-
-    run_devflow_uv tool install \
-        --python "$python_path" \
-        --no-python-downloads \
-        --editable "$DEVFLOW_SOURCE"
-
-    [[ -d "$DEVFLOW_TOOL_ENV" && ! -L "$DEVFLOW_TOOL_ENV" ]] ||
-        die "uv completed without creating the Workflow Engine environment"
-    devflow_environment_matches "$python_path" "$DEVFLOW_SOURCE" ||
-        die "uv created a Workflow Engine environment with unexpected provenance"
-    symlink_points_to \
-        "$DEVFLOW_BIN_DIR/devflow" \
-        "$DEVFLOW_TOOL_ENV/bin/devflow" ||
-        die "uv completed without creating the expected Workflow Engine executable: devflow"
-    "$DEVFLOW_BIN_DIR/devflow" --help >/dev/null 2>&1 ||
-        die "uv installed a Workflow Engine executable that is not runnable"
-
-    write_devflow_receipt "dotfiles-devflow-v2" "$python_path"
-}
-
 link() {
-    local src="$REPO_ROOT/$1" dst="$HOME/$2"
+    local src="$REPO_ROOT/$1" dst="$2"
+    [[ "$dst" == /* ]] || dst="$HOME/$dst"
     if symlink_points_to "$dst" "$src"; then
         return 0
     fi
@@ -859,7 +667,7 @@ link_nested() {
 
 preflight_links() {
     local source required_directory
-    local directory_sources file_sources package_directories required_directories
+    local directory_sources file_sources required_directories
 
     directory_sources=(
         fish
@@ -873,10 +681,7 @@ preflight_links() {
 
     file_sources=(
         Brewfile
-        tools/devflow/pyproject.toml
-        tools/devflow/src/devflow/__init__.py
-        tools/devflow/src/devflow/guidance.md
-        tools/devflow/uv.lock
+        docs/agents/development-workflow.md
         herdr/config.toml
         hunk/config.toml
         mise/conf.d/00-dotfiles.toml
@@ -884,10 +689,6 @@ preflight_links() {
         zsh/.zshrc
         templates/local.fish
         templates/local.zsh
-    )
-    package_directories=(
-        tools/devflow
-        tools/devflow/src/devflow
     )
 
     for source in "${directory_sources[@]}"; do
@@ -897,10 +698,6 @@ preflight_links() {
     for source in "${file_sources[@]}"; do
         [[ -f "$REPO_ROOT/$source" ]] ||
             die "missing or invalid tracked configuration file: $REPO_ROOT/$source"
-    done
-    for source in "${package_directories[@]}"; do
-        [[ -d "$REPO_ROOT/$source" ]] ||
-            die "missing or invalid tracked package directory: $REPO_ROOT/$source"
     done
 
     required_directories=(
@@ -912,8 +709,6 @@ preflight_links() {
     if (( SKIP_MISE_RUNTIMES == 0 )); then
         required_directories+=(
             "$HOME/.config/mise"
-            "$DEVFLOW_BIN_DIR"
-            "$DEVFLOW_TOOL_DIR"
         )
     fi
 
@@ -925,9 +720,7 @@ preflight_links() {
         fi
     done
 
-    if (( SKIP_MISE_RUNTIMES == 0 )); then
-        preflight_devflow_state
-    fi
+    preflight_workflow_links
 }
 
 link_configs() {
@@ -952,6 +745,10 @@ link_configs() {
     link nvim        .config/nvim
     link tmux        .config/tmux
     link zsh/.zshrc  .zshrc
+    preflight_workflow_links
+    link docs/agents/development-workflow.md "$CODEX_DIRECTORY/AGENTS.md"
+    link docs/agents/development-workflow.md "$PI_DIRECTORY/AGENTS.md"
+    link docs/agents/development-workflow.md "$HOME/.claude/rules/development-workflow.md"
 
     mkdir -p "$LOCAL_DIR"
     for template in local.fish local.zsh; do
@@ -993,7 +790,6 @@ if (( SKIP_MISE_RUNTIMES == 1 )); then
     echo "Mise runtime installation and validation skipped by request."
 else
     install_mise_runtimes
-    install_devflow
 fi
 link_configs
 print_next_steps

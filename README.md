@@ -14,15 +14,15 @@ The setup is designed around one uniform code interface: Herdr is the daily work
 | `hunk/config.toml`  | `~/.config/hunk/config.toml`  | Review preferences; mutable runtime state remains local.  |
 | `lazygit/`          | `~/.config/lazygit/`         | Git Transaction Surface with Hunk as its Diffing Solution. |
 | `mise/conf.d/00-dotfiles.toml` | `~/.config/mise/conf.d/00-dotfiles.toml` | Global runtime defaults; user config can override them. |
+| `docs/agents/development-workflow.md` | Harness-global instruction files | Shared workflow, automatically loaded by Codex, Pi, and Claude Code; paths below. |
 | `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack`.           |
 | `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer with 1-indexed windows and panes.    |
-| `tools/`            | `~/.local/bin/` per tool       | Source workspace for small, independently named agent tools. |
 | `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
 
 Usage guides: [Neovim](nvim/README.md), [Herdr](herdr/README.md),
 [tmux](tmux/README.md), [LazyGit](lazygit/README.md), [Fish](fish/README.md),
-[Zsh](zsh/README.md), [Ghostty](ghostty/README.md), and
-[agent tools](tools/README.md). Coding-agent constraints live in
+[Zsh](zsh/README.md), [Ghostty](ghostty/README.md), and the
+[agent development workflow](docs/agents/development-workflow.md). Coding-agent constraints live in
 [AGENTS.md](AGENTS.md) and the relevant tool's guidance.
 
 ## Quick start
@@ -31,7 +31,7 @@ Usage guides: [Neovim](nvim/README.md), [Herdr](herdr/README.md),
 | --- | --- |
 | macOS | Primary platform; local editor integration and installer fixture tests pass. |
 | Linux | Installer support and simulated bootstrap tests; the complete setup has not been validated on a Linux host. |
-| Native Windows | Unsupported by this setup: the installer targets Unix and devflow uses Unix file locking. |
+| Native Windows | Unsupported by this setup: the installer targets Unix. |
 
 Neovim itself supports macOS, Linux, and Windows; its [platform support](https://neovim.io/doc/user/support.html)
 does not imply that this entire dotfiles setup supports each platform.
@@ -63,27 +63,27 @@ setup explicitly in degraded mode:
 
 - It installs missing platform prerequisites, Homebrew, the tracked
   [`Brewfile`](Brewfile), and the runtimes in
-  [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml), then installs
-  the repository's [`dotfiles-devflow`](tools/devflow/) package as an editable
-  `uv` tool.
+  [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml).
 - On macOS, a missing Xcode Command Line Tools install may require completing
   Apple's system dialog and rerunning the script. On Linux, native bootstrap
   packages are supported through `apt-get`, `dnf`, `yum`, and `pacman`.
 - Run it as a normal user with sudo access. Homebrew and this dotfiles setup
   intentionally refuse a root-owned installation.
-- Existing files/dirs at link targets are renamed to `<path>.bak.<unix-timestamp>`, never deleted.
+- Existing files/dirs at ordinary configuration link targets are renamed to
+  `<path>.bak.<unix-timestamp>`, never deleted. Existing unmanaged global
+  instruction files require explicit migration before installation.
 - Re-running it with the current manifests performs checks and no package or
   link mutations. Brew is invoked with `--no-upgrade`, so the installer does
   not request broad upgrades; Homebrew may still upgrade a dependency when a
   newly installed formula requires it.
 - `--skip-mise-runtimes` skips runtime installation and validation and does
-  not create or update the tracked Mise fragment link or Workflow Engine. It
-  never removes an existing fragment or owned Workflow Engine. Mise and `uv`
-  themselves remain Homebrew-managed applications.
-- The generic installer never changes harness-global files under `~/.codex`
-  or `~/.claude`; those adapters are an explicit opt-in described below.
-- `./uninstall.sh` removes only symlinks and the receipted Workflow Engine
-  owned by this repository. It does not uninstall dependencies or runtimes.
+  not create or update the tracked Mise fragment link. It never removes an
+  existing fragment. Shared agent instructions are still linked; Mise and `uv`
+  remain Homebrew-managed applications.
+- It links the shared workflow into each supported harness's global instruction
+  location, including when that harness is not installed yet.
+- `./uninstall.sh` removes only symlinks owned by this repository. It does not
+  uninstall dependencies or runtimes.
   `./uninstall.sh --restore` also restores the newest unambiguous backup where
   that can be done without replacing user state.
 
@@ -99,38 +99,37 @@ tmux new-session -A -s dev
 
 These are top-level alternatives. Plain `herdr` starts or reattaches the daily workspace; tmux remains independently available when a tmux-specific workflow is required.
 
-## Workflow Engine installation
+## Shared agent instructions
 
-The full install exposes `devflow` from `~/.local/bin`. The
-`dotfiles-devflow` distribution
-lives in the private `~/.local/share/dotfiles/uv-tools/` tool directory and
-uses the exact Python selected by the tracked Mise manifest. An ownership
-receipt binds that environment to this repository source and interpreter, so
-an unchanged second install does not invoke `uv` again. The installer refuses
-to overwrite an unreceipted executable, private environment, or ambiguous
-receipt. A pending receipt is written before `uv` changes tool state: rerunning
-may retry when no tool artifacts exist or finalize an entirely matching tool
-environment without reinstalling, while partial or foreign state still stops
-for explicit recovery. Ownership checks parse uv's TOML receipt semantically
-with the receipted Python interpreter: harmless formatting, ordering, and
-comments are accepted, while any extra, missing, duplicate, malformed, or
-mismatched inventory is preserved and rejected. Install and uninstall invoke
-`uv --no-config` with inherited uv, Python-environment, Conda, and pip settings
-removed; network proxy and TLS/CA settings remain available.
-The owned public inventory contains only the `devflow` entry point; partial or
-foreign tool state is left intact.
+`install.sh` links the complete
+[agent development workflow](docs/agents/development-workflow.md) into these
+global instruction locations:
 
-Harness-global guidance is separate from installing the shared Workflow
-Engine. Opt in explicitly for each harness used on a machine:
+| Harness | Default managed path | Configured location |
+| --- | --- | --- |
+| Codex | `~/.codex/AGENTS.md` | `$CODEX_HOME/AGENTS.md` when `CODEX_HOME` is set |
+| Pi | `~/.pi/agent/AGENTS.md` | `$PI_CODING_AGENT_DIR/AGENTS.md` when `PI_CODING_AGENT_DIR` is set |
+| Claude Code | `~/.claude/rules/development-workflow.md` | Fixed global rules location |
 
-```bash
-devflow harness install codex
-devflow harness install claude
-```
+The harnesses load these instructions automatically. All links share one
+source, so editing the workflow updates the installed instructions. No workflow
+skill, Herdr plugin, or separate workflow executable is required. Harness
+binaries remain optional and are installed separately.
 
-These commands manage only their marked guidance blocks. The generic dotfiles
-installer does not create or edit `~/.codex/AGENTS.md` or
-`~/.claude/CLAUDE.md`.
+Existing unmanaged instruction files and legacy devflow guidance blocks stop
+installation with an actionable migration message. Preserve unrelated personal
+instructions when preparing those paths; the installer does not silently move
+active guidance out of the harness's search path. Claude's existing
+`~/.claude/CLAUDE.md` remains user-owned.
+Codex's `AGENTS.override.md` also needs reconciliation because it shadows the
+managed `AGENTS.md`; symlinked harness root directories require explicit
+reconciliation before installation.
+
+For an older devflow installation, follow the
+[agent removal guide](docs/agents/remove-legacy-devflow.md) to remove the owned
+tool environment, legacy hooks, and guidance before completing migration. Keep historical
+`.git/devflow/` records and WIP/review refs. They are separate from the retired
+application; historical records alone do not establish current review approval.
 
 The [agent development workflow](docs/agents/development-workflow.md) owns the
 complete WIP, review, approval, and landing procedure. It uses Herdr, Neovim,
@@ -167,7 +166,7 @@ layer:
 | `gh` | GitHub issue workflows described under `docs/agents/` |
 | `ripgrep` | `rg`; Neovim Telescope grep |
 | `tree-sitter-cli` | `tree-sitter` 0.26.1 or newer; parser management |
-| `uv` | Installs the Python 3.14+ Workflow Engine with Mise's pinned interpreter in an isolated persistent tool environment |
+| `uv` | Python project and dependency management CLI; Mise continues to own Python runtimes |
 | `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
 
 On macOS, the configured UI also uses the `ghostty` and
@@ -195,16 +194,14 @@ overrides cannot mask missing pinned runtimes. A user's normal
 interactive shells.
 
 Java compatibility is independent of vendor; Corretto is the deliberate
-provisioning choice in the manifest. Devflow accepts Python 3.14 and newer;
-the pinned 3.14.7 baseline and isolated 3.15 release-candidate validation are
-recorded in [ADR 0009](docs/adr/0009-use-modern-typed-python-for-workflow-automation.md).
+provisioning choice in the manifest.
 
 `--skip-mise-runtimes` is an explicit degraded setup for hosts that cannot run
 the pinned versions. Other dependencies and configurations are installed, but
-runtime-dependent language tooling and the Workflow Engine may remain
-unavailable. On a fresh setup, the tracked defaults fragment is not linked and
-the Workflow Engine is not installed; an existing managed or user-owned
-fragment and an existing owned Workflow Engine are left untouched.
+runtime-dependent language tooling may remain unavailable. On a fresh setup,
+the tracked defaults fragment is not linked; an existing managed or user-owned
+fragment is left untouched. Shared agent instructions do not require a runtime
+and are linked in this mode too.
 
 ### Platform and development-only dependencies
 
@@ -262,13 +259,13 @@ The shared shell rc files set `EDITOR`, `VISUAL`, and `GIT_EDITOR` to `nvim`; pe
 ```
 
 The test runs the real installer and uninstaller against isolated macOS and
-Linux fixtures with fake Homebrew, Mise, `uv`, `apt-get`, DNF, YUM, and Pacman
+Linux fixtures with fake Homebrew, Mise, `apt-get`, DNF, YUM, and Pacman
 commands.
 It requires a working Neovim executable to exercise the shared compatibility
 helper against simulated versions in an isolated process.
 It verifies fresh provisioning, manifest ownership, preflight failures,
-Workflow Engine ownership, semantic receipt validation, hostile environment
-isolation, backup/link behavior, explicit runtime-skip setup, safe restoration,
+shared instruction ownership and migration conflicts, backup/link behavior,
+explicit runtime-skip setup, safe restoration,
 and a mutation-free second run without touching the network, sudo, package
 managers, or the caller's home directory.
 
