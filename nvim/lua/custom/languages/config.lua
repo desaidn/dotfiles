@@ -1,6 +1,7 @@
 -- One ordered list owns both inventory collection and adapter activation.
 local adapter_names = {
   'bash',
+  'c_cpp',
   'css',
   'fish',
   'html',

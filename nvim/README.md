@@ -12,7 +12,7 @@ A lean Neovim configuration based on kickstart.nvim. Part of [dotfiles](../READM
 - Git signs, blame, and local hunks through gitsigns; full review through Hunk; Git transactions through LazyGit.
 - Treesitter highlighting, parsing, and context through nvim-treesitter and nvim-treesitter-context.
 - Formatting through Conform; ESLint through nvim-lint; Python diagnostics/actions through Ruff LSP.
-- Debugging through nvim-dap: js-debug for JavaScript/TypeScript, nvim-jdtls with Java debug/test bundles, debugpy for Python, and rustaceanvim with CodeLLDB for Rust.
+- Debugging through nvim-dap: js-debug for JavaScript/TypeScript, nvim-jdtls with Java debug/test bundles, debugpy for Python, and CodeLLDB for C/C++ and Rust (through rustaceanvim).
 - Editing helpers through mini.nvim (statusline, surround, text objects), which-key, autopairs, Undotree, and todo-comments.
 
 ## Installation
@@ -58,6 +58,130 @@ are trusted: JavaScript/TypeScript startup executes the project's root-local
 compiler to select a semantic route, and project lint configuration can execute
 code. Review untrusted checkouts before opening them in Neovim. Debug launches
 remain explicit user actions and bind the adapter to loopback.
+
+### C and C++
+
+Open a `.c`, `.cpp`, or header file to start clangd automatically. It provides
+completion, diagnostics, definitions, references, rename, and hover information.
+Use `grd`, `grr`, `grn`, and `K`, plus `:LspClangdSwitchSourceHeader` to move
+between an implementation and its header. C/C++ Treesitter parsers provide
+highlighting. Opening a file never starts a build or debug session.
+
+**Give clangd the project's build settings.** Most substantial projects need
+`compile_commands.json`: a generated list of compiler commands, including the
+header paths and options for each source file. Follow the project's own setup
+instructions first. For a typical CMake project, run these from its root:
+
+```sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+clangd searches parent directories and their `build/` subdirectory for the
+database. If your build directory has another name, point to it with the
+project's `.clangd` file:
+
+```yaml
+CompileFlags:
+  CompilationDatabase: build/debug
+```
+
+The project chooses the compiler, C/C++ standard, dependencies, and test targets.
+Refresh its build settings when these change, and build targets that generate
+headers before expecting navigation into those headers. For other build systems,
+use their compilation-database export instructions; simple projects can use
+`compile_flags.txt`. clangd guesses when neither exists, which is often
+insufficient for large repositories. `.clangd` and `.clang-tidy` control analysis;
+there is no second C/C++ lint runner.
+
+**Format with `<leader>f`.** Conform runs clang-format using the source file's
+nearest `.clang-format` or `_clang-format`. C/C++ formatting on save stays off.
+Mason supplies the default executable. When a project requires a particular
+version, install that version through the project's workflow, then select it for
+the buffer with an absolute executable path:
+
+```vim
+:let b:clang_format = '/absolute/path/to/project/formatter/bin/clang-format'
+```
+
+This also applies to selection formatting. An unavailable explicit executable
+reports an error instead of silently using another version. A style file does
+not select a formatter version. For repeated use, set this buffer variable from
+your own `FileType` autocommand with a project-path condition; the shared adapter
+contains no project-specific paths or version guesses.
+
+**Debug with the existing controls.** Build an executable with debug information,
+open its source, set a breakpoint with `<leader>b`, then press `F5` and choose
+**Launch executable** or **Attach to process**. Attach is subject to operating
+system permissions. Project launch settings replace these generic choices; put
+non-trivial arguments, environment, or input handling in `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug app",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/app",
+      "cwd": "${workspaceFolder}",
+      "args": ["--example", "two words"],
+      "env": { "APP_MODE": "development" }
+    }
+  ]
+}
+```
+
+Both CodeLLDB's VS Code name `lldb` and nvim-dap's `codelldb` are accepted here.
+These are CodeLLDB settings, not the separate `lldb-dap` adapter's schema.
+For redirected standard input, CodeLLDB also accepts
+`"stdio": ["${workspaceFolder}/input.txt", null, null]`. VS Code extension
+commands and `preLaunchTask` are not run by this setup; build in the terminal.
+The source buffer selects the project, so another tab's working directory does
+not redirect the launch. A nearer launch file wins within a Git checkout;
+otherwise compiler metadata or the checkout root is used.
+
+Build/test tools remain terminal commands. Use the project's documented
+AddressSanitizer/UndefinedBehaviorSanitizer or coverage build options when needed;
+these are separate build configurations, not editor switches. For a small project,
+`-g -O0` is a useful debug baseline, while sanitizer builds commonly add
+`-fsanitize=address,undefined -fno-omit-frame-pointer` at compilation and linking.
+Support depends on the compiler and target.
+
+For troubleshooting, use `:checkhealth vim.lsp`, `:ConformInfo`, and `:Mason`.
+Run `clangd --check=path/to/source.cpp` using the Mason executable
+(`:lua print(vim.fn.exepath('clangd'))`) to inspect which compilation command was
+selected. Missing headers usually mean missing/stale build settings or generated
+files. Native macOS is exercised locally; Linux bootstrap is fixture-tested.
+Mason's current clangd package does not cover Linux ARM64, so that platform needs
+a separately verified clangd installation before claiming the same support.
+
+#### DuckDB example
+
+From the DuckDB checkout, prepare navigation once using its existing target:
+
+```sh
+CMAKE_GENERATOR='Unix Makefiles' make clangd \
+  EXTRA_CMAKE_VARIABLES='-DDISABLE_UNITY=ON'
+```
+
+Its `.clangd` already points to `.cache/clangd/compile_commands.json`. This
+configures the project without compiling DuckDB. Disabling its unity build keeps
+individual source-file commands available; later builds may replace the database,
+so keep them non-unity or repeat this command. Opening a file then starts code
+navigation without another setup command.
+
+DuckDB currently requires clang-format 11.0.1. Run `make format_venv` to provision
+its formatter, then set `b:clang_format` to the absolute path of
+`.cache/format-venv/bin/clang-format` in that checkout before formatting a buffer.
+The pinned 11.0.1 executable currently hangs on this machine even outside Neovim;
+DuckDB formatting is therefore not locally verified. The shared Mason formatter
+passes, but should not be substituted silently for DuckDB's required version.
+Use DuckDB's own build/test instructions to produce a debug executable; the
+navigation-only command above does not build one.
 
 ## Clipboard
 
@@ -164,6 +288,13 @@ Python test actions are available through `:DapPythonTestClass` and
 `:DapPythonTestMethod`. Rust exposes additional actions through
 `:RustLsp runnables`, `:RustLsp testables`, `:RustLsp debuggables`,
 `:RustLsp expandMacro`, and `:RustLsp hover actions`.
+
+If macOS stalls while starting or attaching to a native process, try Apple LLDB
+from a visible terminal and check for a Developer Tools authorization prompt.
+Local C/C++ acceptance reached CodeLLDB initialization and breakpoint setup, but
+both CodeLLDB and Apple LLDB stalled at macOS process access; breakpoint hits,
+variables, and stepping are not yet verified on this host. See the
+[runtime findings](../docs/c-cpp-support-research.md#implementation-status).
 
 ### Terminal navigation
 

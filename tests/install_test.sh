@@ -134,7 +134,7 @@ SCRIPT
 #!/usr/bin/env bash
 install_native_commands() {
     local command_name
-    for command_name in cc make ps file git tar gzip unzip diff; do
+    for command_name in cc c++ make ps file git tar gzip unzip diff; do
         cp "$DOTFILES_TEST_GENERIC_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
         chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
     done
@@ -188,8 +188,27 @@ SCRIPT
 
     cat >"$FIXTURE_GENERIC_TEMPLATE" <<'SCRIPT'
 #!/usr/bin/env bash
+case "${0##*/}" in
+    cc|c++)
+        compiler="${0##*/}"
+        language=c
+        [[ "$compiler" == "cc" ]] || language=c++
+        [[ "$*" == "-x $language -o /dev/null -" ]] || exit 2
+        source="$(cat)"
+        [[ "$source" == *'#include <'* ]] || exit 2
+        printf '%s compile and link\n' "$compiler" >>"$DOTFILES_TEST_LOG"
+        [[ ! -e "$DOTFILES_TEST_STATE/broken-$compiler" ]] || exit 1
+        ;;
+esac
 exit 0
 SCRIPT
+
+    if [[ "$FIXTURE_OS" == "Darwin" ]]; then
+        for command_name in cc c++; do
+            cp "$FIXTURE_GENERIC_TEMPLATE" "$FIXTURE_FAKE_BIN/$command_name"
+            chmod +x "$FIXTURE_FAKE_BIN/$command_name"
+        done
+    fi
 
     cat >"$FIXTURE_MISE_TEMPLATE" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -433,7 +452,7 @@ SCRIPT
 #!/usr/bin/env bash
 install_formula_commands() {
     local command_name
-    for command_name in git fish zsh nvim herdr tmux lazygit atuin gh rg tree-sitter hunk wl-copy wl-paste xclip; do
+    for command_name in git fish zsh nvim herdr tmux lazygit atuin gh rg tree-sitter cmake ctest ninja hunk wl-copy wl-paste xclip; do
         cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
         chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
     done
@@ -769,13 +788,13 @@ assert_linux_native_install_once() {
             assert_log_count 1 "dnf group install -y development-tools" "$FIXTURE_LOG"
             assert_log_count 1 "dnf group install -y Development Tools" "$FIXTURE_LOG"
             assert_log_count 1 \
-                "dnf install -y procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
+                "dnf install -y gcc-c++ procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
                 "$FIXTURE_LOG"
             ;;
         yum)
             assert_log_count 1 "yum groupinstall -y Development Tools" "$FIXTURE_LOG"
             assert_log_count 1 \
-                "yum install -y procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
+                "yum install -y gcc-c++ procps-ng curl file git tar gzip unzip diffutils ca-certificates" \
                 "$FIXTURE_LOG"
             ;;
         pacman)
@@ -832,6 +851,52 @@ test_unsupported_linux_package_manager() {
     assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
     assert_not_exists "$FIXTURE_HOME/.config"
     pass "unsupported Linux package managers fail before mutations"
+}
+
+test_missing_cpp_compiler_installs_native_tools() {
+    local command_name
+    new_fixture missing-cpp-compiler Linux apt-get
+    for command_name in cc make ps file git tar gzip unzip diff; do
+        cp "$FIXTURE_GENERIC_TEMPLATE" "$FIXTURE_FAKE_BIN/$command_name"
+        chmod +x "$FIXTURE_FAKE_BIN/$command_name"
+    done
+
+    run_installer
+
+    assert_linux_native_install_once apt-get
+    assert_log_count 1 'cc compile and link' "$FIXTURE_LOG"
+    assert_log_count 1 'c++ compile and link' "$FIXTURE_LOG"
+    assert_common_links
+    pass "missing C++ compiler installs native development tools even when C is available"
+}
+
+test_broken_compilers_fail_before_provisioning() {
+    local os_name compiler message
+    for os_name in Darwin Linux; do
+        for compiler in cc c++; do
+            new_fixture "broken-$os_name-$compiler" "$os_name"
+            : >"$FIXTURE_STATE/broken-$compiler"
+            printf 'original zsh config\n' >"$FIXTURE_HOME/.zshrc"
+
+            run_installer failure
+
+            if [[ "$compiler" == "cc" ]]; then
+                message='the C compiler cannot compile and link a program'
+            else
+                message='the C++ compiler cannot compile and link the standard library'
+            fi
+            grep -Fq "$message" "$FIXTURE_OUTPUT" ||
+                fail "broken $compiler failure on $os_name was not actionable"
+            assert_log_count 1 "$compiler compile and link" "$FIXTURE_LOG"
+            assert_log_count 0 'brew bootstrap' "$FIXTURE_LOG"
+            assert_log_count 0 'brew bundle install' "$FIXTURE_LOG"
+            assert_not_exists "$FIXTURE_HOME/.config"
+            assert_not_exists "$FIXTURE_HOME/.local"
+            grep -Fxq 'original zsh config' "$FIXTURE_HOME/.zshrc" ||
+                fail "compiler validation changed zsh config"
+        done
+    done
+    pass "C and C++ compile/link failures stop macOS and Linux provisioning before configuration changes"
 }
 
 test_linux_handoff_is_validated_before_linking() {
@@ -1680,6 +1745,8 @@ test_dependency_manifests_match_the_install_contract() {
         'brew "gh"'
         'brew "ripgrep"'
         'brew "tree-sitter-cli"'
+        'brew "cmake"'
+        'brew "ninja"'
         'brew "uv"'
         'brew "xclip" if OS.linux?'
         'brew "wl-clipboard" if OS.linux?'
@@ -1729,6 +1796,8 @@ test_linux_manager_fresh_and_second_run dnf
 test_linux_manager_fresh_and_second_run yum
 test_linux_manager_fresh_and_second_run pacman
 test_unsupported_linux_package_manager
+test_missing_cpp_compiler_installs_native_tools
+test_broken_compilers_fail_before_provisioning
 test_linux_handoff_is_validated_before_linking
 test_compatible_jdk_vendor_is_accepted
 test_incompatible_java_versions_are_rejected_before_linking

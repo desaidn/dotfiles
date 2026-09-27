@@ -11,6 +11,8 @@ brew "atuin"
 brew "gh"
 brew "ripgrep"
 brew "tree-sitter-cli"
+brew "cmake"
+brew "ninja"
 brew "uv"
 brew "xclip" if OS.linux?
 brew "wl-clipboard" if OS.linux?

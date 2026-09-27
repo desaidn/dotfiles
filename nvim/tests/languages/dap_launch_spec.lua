@@ -42,12 +42,22 @@ assert(vim.fn.writefile({}, fixture .. '/web-app/.vscode/launch.json') == 0, 'fa
 local project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/rust-app', ':p'))
 local java_project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/java-app', ':p'))
 local javascript_project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/web-app', ':p'))
+local c_project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/c-app', ':p'))
+local cpp_project_root = vim.fs.normalize(vim.fn.fnamemodify(fixture .. '/cpp-app', ':p'))
+for _, root in ipairs { c_project_root, cpp_project_root } do
+  assert(vim.fn.mkdir(root .. '/.vscode', 'p') == 1)
+  assert(vim.fn.writefile({}, root .. '/.vscode/launch.json') == 0)
+end
 local rust_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[rust_buffer].filetype = 'rust'
 local java_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[java_buffer].filetype = 'java'
 local javascript_buffer = vim.api.nvim_create_buf(true, false)
 vim.bo[javascript_buffer].filetype = 'javascript'
+local c_buffer = vim.api.nvim_create_buf(true, false)
+vim.bo[c_buffer].filetype = 'c'
+local cpp_buffer = vim.api.nvim_create_buf(true, false)
+vim.bo[cpp_buffer].filetype = 'cpp'
 local function ignore_package_additions(_, _) end
 local function ignore_packadd(_) end
 local function get_fake_clients(_)
@@ -62,6 +72,17 @@ package.loaded.dapui = { setup = function() end }
 package.loaded['dap.ext.vscode'] = {
   getconfigs = function(path)
     launch_path = path
+    if path == c_project_root .. '/.vscode/launch.json' or path == cpp_project_root .. '/.vscode/launch.json' then
+      local prompted = setmetatable({ name = 'Prompted', type = 'lldb' }, {
+        __call = function() return { type = 'lldb', program = '${workspaceFolder}/build/test', args = { '${relativeFile}' } } end,
+      })
+      return {
+        { name = 'Project', type = 'lldb', program = '${workspaceFolder}/build/app', args = { '${file}' }, env = { ROOT = '${workspaceFolder}' } },
+        { name = 'Native', type = 'codelldb', cwd = '${workspaceFolder}/data' },
+        prompted,
+        { name = 'Python', type = 'python' },
+      }
+    end
     if path == java_project_root .. '/.vscode/launch.json' then
       return {
         { name = java_launch_name, type = 'java', cwd = '${workspaceFolder}' },
@@ -101,6 +122,8 @@ package.loaded['custom.languages.context'] = {
     if bufnr == rust_buffer then return { root = project_root, path = project_root .. '/src/main.rs' } end
     if bufnr == java_buffer then return { root = java_project_root, path = java_project_root .. '/src/Main.java' } end
     if bufnr == javascript_buffer then return { root = javascript_project_root, path = javascript_project_root .. '/src/index.js' } end
+    if bufnr == c_buffer then return { root = c_project_root, path = c_project_root .. '/src/main.c' } end
+    if bufnr == cpp_buffer then return { root = cpp_project_root, path = cpp_project_root .. '/src/main.cpp' } end
     return nil
   end,
 }
@@ -177,6 +200,29 @@ check('filters and expands Node and browser launch configurations from the JavaS
   assert(configs[1].name == 'Updated Node', vim.inspect(configs))
 end)
 
+check('shares C/C++ project context with launch defaults and preserves explicit roots', function()
+  -- An ancestor clangd root can come from a style file outside the build boundary.
+  client_root = vim.fs.normalize(vim.fn.fnamemodify(fixture, ':p'))
+  assert(dap.project(c_buffer).root == c_project_root)
+  assert(dap.project(cpp_buffer).root == cpp_project_root)
+  assert(dap.project() == nil and dap.project(-1) == nil)
+  for _, entry in ipairs { { c_buffer, c_project_root, 'main.c' }, { cpp_buffer, cpp_project_root, 'main.cpp' } } do
+    local configs = fake_dap.providers.configs['dap.launch.json'](entry[1])
+    assert(launch_path == entry[2] .. '/.vscode/launch.json', launch_path)
+    assert(#configs == 3, vim.inspect(configs))
+    assert(configs[1].type == 'codelldb' and configs[2].type == 'codelldb', vim.inspect(configs))
+    assert(configs[1].program == entry[2] .. '/build/app')
+    assert(configs[1].cwd == entry[2] and configs[1].env.ROOT == entry[2])
+    assert(configs[1].args[1] == entry[2] .. '/src/' .. entry[3])
+    assert(configs[2].cwd == entry[2] .. '/data')
+    local expanded = configs[3]()
+    assert(expanded.type == 'codelldb' and expanded.cwd == entry[2], vim.inspect(expanded))
+    assert(expanded.program == entry[2] .. '/build/test' and expanded.args[1] == 'src/' .. entry[3])
+  end
+  assert(vim.fn.getcwd() == cwd_before, 'C/C++ launch selection must not change Neovim cwd')
+  client_root = nil
+end)
+
 vim.pack.add = original_pack_add
 vim.cmd.packadd = original_cmd_packadd
 package.loaded.dap = original_dap
@@ -187,6 +233,8 @@ vim.lsp.get_clients = original_get_clients
 vim.api.nvim_buf_delete(rust_buffer, { force = true })
 vim.api.nvim_buf_delete(java_buffer, { force = true })
 vim.api.nvim_buf_delete(javascript_buffer, { force = true })
+vim.api.nvim_buf_delete(c_buffer, { force = true })
+vim.api.nvim_buf_delete(cpp_buffer, { force = true })
 vim.fn.delete(fixture, 'rf')
 
 if #failures > 0 then error(string.format('%d DAP launch check(s) failed: %s', #failures, table.concat(failures, ', '))) end

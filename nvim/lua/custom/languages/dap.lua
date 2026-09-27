@@ -75,20 +75,22 @@ local function dap_project(bufnr, dap_config)
   local project = context.for_buffer(bufnr, dap_config.root_profile)
   if not project then return nil end
 
-  local lsp_root = project_root_from_client(bufnr, dap_config.lsp_client)
+  local lsp_root = dap_config.prefer_lsp_root ~= false and project_root_from_client(bufnr, dap_config.lsp_client) or nil
   if lsp_root and vim.fs.relpath(lsp_root, project.path) then project.root = lsp_root end
   return project
 end
 
+function M.project(bufnr)
+  if type(bufnr) ~= 'number' or not vim.api.nvim_buf_is_valid(bufnr) then return nil end
+
+  local dap_config = languages.dap_by_ft[vim.bo[bufnr].filetype]
+  if dap_config then return dap_project(bufnr, dap_config) end
+end
+
 local function project_launch_configs(bufnr)
-  if type(bufnr) ~= 'number' or not vim.api.nvim_buf_is_valid(bufnr) then return {} end
-
-  local filetype = vim.bo[bufnr].filetype
-  local dap_config = languages.dap_by_ft[filetype]
-  if not dap_config then return {} end
-
-  local project = dap_project(bufnr, dap_config)
+  local project = M.project(bufnr)
   if not project then return {} end
+  local dap_config = languages.dap_by_ft[vim.bo[bufnr].filetype]
   local launch_json = vim.fs.joinpath(project.root, '.vscode', 'launch.json')
   if not vim.uv.fs_stat(launch_json) then return {} end
 

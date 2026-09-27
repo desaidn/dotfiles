@@ -41,7 +41,7 @@ constraints, and required validation.
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neovim_spec.lua` - Headless checks for Neovim version boundaries and consistent startup/health behavior
 - `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
-- `tests/languages/` - Headless language-tooling regression harnesses for configuration, project context, JDTLS, linting, DAP, JavaScript/TypeScript, Python, and Rust behavior
+- `tests/languages/` - Headless language-tooling regression harnesses for configuration, project context, JDTLS, linting, DAP, JavaScript/TypeScript, Python, Rust, and C/C++ behavior
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
 
@@ -103,6 +103,24 @@ Three config layers apply, from lowest to highest priority:
 3. **Named configurations in `lua/custom/languages/adapters/`** — server-specific settings, callbacks, and declared DAP root/type routing collected by `config.lua` and applied through `vim.lsp.config()` and the DAP provider
 
 Each language adapter owns its native configuration and language-specific behavior. Importing an adapter must not load plugins, register commands/autocommands, or start servers. `config.lua` collects one explicit ordered adapter list, shared tooling initializes, then the same adapters' optional `setup()` functions activate integration. Keep debugger setup lazy. JavaScript owns ESLint scheduling and project policy; Python owns Ruff capability overlap.
+
+C/C++ owns clangd, the C/C++ parsers, Conform's `clang-format` mapping, and lazy
+CodeLLDB registration. Preserve clangd's upstream callbacks and source/header
+commands; disable its formatting through the shared capability helper on
+attachment. Keep Conform's native filename/range behavior when selecting an
+explicit `b:clang_format` executable, and keep C/C++ save formatting disabled.
+Projects own compilation databases, flags, formatter versions, and builds; never
+add DuckDB paths, global include flags, or automatic build commands here.
+
+C/C++ and Rust share CodeLLDB. Preserve a previously registered adapter and use
+the loopback server form expected by rustaceanvim. Launch defaults and project
+launch files use the same buffer-derived context; C/C++'s explicit launch root
+takes priority over an ancestor clangd root. Run `c_cpp_spec.lua`,
+`dap_launch_spec.lua`, `dap_spec.lua`, `languages_spec.lua`, and `rust_spec.lua`
+after changing this integration. `c_cpp_spec.lua` uses installed Conform,
+nvim-lspconfig, nvim-dap, and rustaceanvim; provide writable Neovim state/cache
+directories when running it in a sandbox. Verify live compiler, clangd,
+formatter, and debug behavior separately when changing their runtime contract.
 
 Adapters explicitly declare their full Mason and parser requirements, including names shared with other adapters. The collector deduplicates only these lists and rejects duplicate LSP or filetype mappings within a category, naming both owners. Its fields retain the native shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, nvim-lint, and nvim-dap. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes. See [ADR 0014](../docs/adr/0014-co-locate-language-settings-and-behavior.md) for the ownership decision.
 

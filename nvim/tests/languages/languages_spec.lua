@@ -79,8 +79,10 @@ check('collects repeated tools and parsers once in first-declaration order', fun
   local ok, collected = pcall(dofile, nvim_root .. '/lua/custom/languages/config.lua')
   package.loaded[bash_name], package.loaded[css_name] = bash, css
   assert(ok, collected)
-  assert(vim.deep_equal(vim.list_slice(collected.mason_tools, 1, 3), { 'shared-tool', 'first-tool', 'second-tool' }))
-  assert(vim.deep_equal(vim.list_slice(collected.treesitter_parsers, 1, 3), { 'shared-parser', 'first-parser', 'second-parser' }))
+  for field, suffix in pairs { mason_tools = 'tool', treesitter_parsers = 'parser' } do
+    local selected = vim.tbl_filter(function(value) return value:match('%-' .. suffix .. '$') end, collected[field])
+    assert(vim.deep_equal(selected, { 'shared-' .. suffix, 'first-' .. suffix, 'second-' .. suffix }), vim.inspect(selected))
+  end
 end)
 
 check('rejects overlapping map ownership even when definitions agree', function()
@@ -104,7 +106,7 @@ end)
 
 check('activates the collected adapters after every shared surface is ready', function()
   local trace, saved_setups, saved_modules, saved_preloads = {}, {}, {}, {}
-  for _, name in ipairs { 'java', 'javascript', 'python', 'rust' } do
+  for _, name in ipairs { 'c_cpp', 'java', 'javascript', 'python', 'rust' } do
     local adapter = require('custom.languages.adapters.' .. name)
     saved_setups[name] = adapter.setup
     adapter.setup = function() trace[#trace + 1] = name end
@@ -128,7 +130,24 @@ check('activates the collected adapters after every shared surface is ready', fu
     package.loaded[module], package.preload[module] = saved_modules[module], saved_preloads[module]
   end
   assert(ok, err)
-  assert(vim.deep_equal(trace, { 'lsp', 'treesitter', 'format', 'dap', 'java', 'javascript', 'python', 'rust' }), vim.inspect(trace))
+  assert(vim.deep_equal(trace, { 'lsp', 'treesitter', 'format', 'dap', 'c_cpp', 'java', 'javascript', 'python', 'rust' }), vim.inspect(trace))
+end)
+
+check('declares C and C++ without expanding support to other clangd languages', function()
+  assert(vim.deep_equal(languages.lsp_servers.clangd.filetypes, { 'c', 'cpp', 'c.doxygen', 'cpp.doxygen' }))
+  assert(languages.lsp_servers.clangd.on_attach == nil and languages.lsp_servers.clangd.on_init == nil, 'upstream clangd callbacks must survive')
+  assert(languages.lsp_servers.clangd.cmd == nil, 'clangd must retain upstream flags and project settings')
+  for _, tool in ipairs { 'clangd', 'clang-format', 'codelldb' } do
+    assert(contains(languages.mason_tools, tool), 'missing C/C++ tool: ' .. tool)
+  end
+  for _, filetype in ipairs { 'c', 'cpp' } do
+    assert(contains(languages.treesitter_parsers, filetype), 'missing C/C++ parser: ' .. filetype)
+    assert(vim.deep_equal(languages.formatters_by_ft[filetype], { 'clang-format' }))
+    assert(languages.format_on_save_disabled_filetypes[filetype], 'C/C++ formatting must stay manual')
+    assert(languages.linters_by_ft[filetype] == nil, 'clangd must own C/C++ diagnostics')
+    assert(languages.dap_by_ft[filetype].lsp_client == 'clangd')
+    assert(vim.deep_equal(languages.dap_by_ft[filetype].launch_types, { 'codelldb', 'lldb' }))
+  end
 end)
 
 check('declares Fish parsing and language-server support', function()

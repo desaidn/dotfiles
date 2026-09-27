@@ -141,9 +141,9 @@ agents; human Git and LazyGit operations remain unrestricted.
 `install.sh` provisions these dependencies according to one ownership rule per
 layer:
 
-- The platform bootstraps Homebrew and the compiler/download/archive tools
-  that Homebrew and Neovim need. On macOS that means Xcode Command Line Tools;
-  on Linux it means the distribution's development-tools packages.
+- The platform bootstraps Homebrew and the C/C++ compilers, SDKs, download, and
+  archive tools that Homebrew and Neovim need. On macOS that means Xcode Command
+  Line Tools; on Linux it means the distribution's development-tools packages.
 - Homebrew owns applications and standalone CLIs.
 - Mise owns versioned language runtimes.
 - Neovim owns plugins, Treesitter parsers, and the LSP/formatter/linter/debugger
@@ -166,6 +166,8 @@ layer:
 | `gh` | GitHub issue workflows described under `docs/agents/` |
 | `ripgrep` | `rg`; Neovim Telescope grep |
 | `tree-sitter-cli` | `tree-sitter` 0.26.1 or newer; parser management |
+| `cmake` | C/C++ project configuration, compilation databases, and CTest |
+| `ninja` | Build runner for CMake projects that select the Ninja generator |
 | `uv` | Python project and dependency management CLI; Mise continues to own Python runtimes |
 | `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
 
@@ -206,8 +208,11 @@ and are linked in this mode too.
 ### Platform and development-only dependencies
 
 Neovim also needs `curl`, `tar`, `gzip`, `unzip`, `diff`, and a C compiler to
-populate plugins, parsers, and Undotree's diff view. macOS supplies its
-clipboard provider; the Linux Brewfile installs Wayland and X11 providers.
+populate plugins, parsers, and Undotree's diff view. C/C++ development uses the
+platform's C and C++ compilers and standard libraries; the installer checks both
+by compiling and linking a small program before changing configuration links.
+clangd, clang-format, and CodeLLDB remain Mason-owned editor tools. macOS supplies
+its clipboard provider; the Linux Brewfile installs Wayland and X11 providers.
 Remote sessions without a display fall back to OSC 52 copy inside Neovim.
 `make` arrives with the native development tools and enables optional plugin
 enhancements. Expect is needed only for the real-PTY Hunk regression test.

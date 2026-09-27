@@ -193,9 +193,22 @@ collect_native_missing() {
     local command_name
     NATIVE_MISSING=()
 
-    for command_name in cc make ps curl file git tar gzip unzip diff; do
+    for command_name in cc c++ make ps curl file git tar gzip unzip diff; do
         command -v "$command_name" >/dev/null 2>&1 || NATIVE_MISSING+=("$command_name")
     done
+}
+
+validate_native_compilers() {
+    if ! printf '#include <stdio.h>\nint main(void) { return puts("dotfiles"); }\n' |
+        cc -x c -o /dev/null -
+    then
+        die "the C compiler cannot compile and link a program; repair the platform development tools and SDK, then rerun"
+    fi
+    if ! printf '#include <iostream>\nint main() { std::cout << "dotfiles"; }\n' |
+        c++ -x c++ -o /dev/null -
+    then
+        die "the C++ compiler cannot compile and link the standard library; repair the platform development tools and SDK, then rerun"
+    fi
 }
 
 detect_linux_package_manager() {
@@ -228,12 +241,12 @@ install_linux_native_packages() {
                 sudo dnf group install -y "Development Tools"
             fi
             sudo dnf install -y \
-                procps-ng curl file git tar gzip unzip diffutils ca-certificates
+                gcc-c++ procps-ng curl file git tar gzip unzip diffutils ca-certificates
             ;;
         yum)
             sudo yum groupinstall -y "Development Tools"
             sudo yum install -y \
-                procps-ng curl file git tar gzip unzip diffutils ca-certificates
+                gcc-c++ procps-ng curl file git tar gzip unzip diffutils ca-certificates
             ;;
         pacman)
             sudo pacman -S --needed --noconfirm \
@@ -259,6 +272,7 @@ ensure_native_prerequisites() {
         if (( ${#NATIVE_MISSING[@]} > 0 )); then
             die "Xcode Command Line Tools are incomplete; missing: ${NATIVE_MISSING[*]}"
         fi
+        validate_native_compilers
         return 0
     fi
 
@@ -273,6 +287,7 @@ ensure_native_prerequisites() {
     if (( ${#NATIVE_MISSING[@]} > 0 )); then
         die "system prerequisite installation completed but these capabilities are still missing: ${NATIVE_MISSING[*]}"
     fi
+    validate_native_compilers
 }
 
 brew_works() {
@@ -466,7 +481,7 @@ validate_brew_dependencies() {
 
     for command_name in \
         git fish zsh nvim herdr tmux lazygit hunk mise atuin gh rg \
-        tree-sitter uv
+        tree-sitter cmake ctest ninja uv
     do
         command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
     done

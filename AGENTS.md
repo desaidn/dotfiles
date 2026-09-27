@@ -13,8 +13,8 @@ Editing a file under this repo and editing its linked counterpart under
 
 Keep provisioning ownership explicit:
 
-- **Platform bootstrap** owns Homebrew plus the compiler, download, and archive
-  utilities required to install Homebrew and populate Neovim.
+- **Platform bootstrap** owns Homebrew plus C/C++ compilers, SDKs, and the download
+  and archive utilities required to install Homebrew and populate Neovim.
 - **Homebrew** owns applications and standalone CLIs. Preserve the package
   inventory and version requirements in [README.md](README.md#dependency-ownership).
 - **Mise** owns language runtimes. Keep the tracked manifest's exact pins and
@@ -54,7 +54,7 @@ All configurations follow these principles:
 - Prefer small self-made or locally-owned performant development tools when native capabilities are not enough and the workflow should stay inspectable
 - Agent harnesses are adapters, not workflow owners; Codex, Claude Code, and future tools should use the same Neovim, Git, and review surfaces
 - Prefer upstream defaults unless a deviation directly supports the uniform code interface; avoid custom maintenance burden for taste-only changes
-- Development-focused workflows for TypeScript (Bun, Node.js, Browser), Kotlin/Java, Python, and Rust
+- Development-focused workflows for TypeScript (Bun, Node.js, Browser), Kotlin/Java, Python, Rust, and C/C++
 - Prefer standard, idiomatic shortcuts and conventions over custom bindings to ensure compatibility across systems (e.g., use Ctrl+W for delete-word rather than custom Cmd+Backspace)
 - Platform-agnostic rc files: no hardcoded `/opt/homebrew/...` paths in `fish/config.fish` or `zsh/.zshrc`. Per-machine state lives in `~/.local/share/dotfiles/local.{fish,zsh}`.
 
@@ -179,6 +179,8 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
   parent paths before installing dependencies or changing link targets.
 - Perform all dependency installation and validation before changing link
   targets, so a partial bootstrap can be resumed safely.
+- Validate both native C and C++ compilation and standard-library linking before
+  provisioning Homebrew; executable presence alone does not establish a working SDK.
 - Use the official Homebrew installer only when Brew cannot be discovered;
   use `brew bundle check --no-upgrade` before `install --no-upgrade`. Do not
   promise that Homebrew will never update a dependency needed by a new formula.
