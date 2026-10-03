@@ -82,7 +82,7 @@ require('neo-tree').setup {
       handler = function()
         vim.wo.number = true
         vim.wo.relativenumber = true
-        vim.wo.winhighlight = vim.wo.winhighlight .. ',LineNr:NeoTreeLineNr,CursorLineNr:NeoTreeLineNr'
+        vim.wo.cursorlineopt = vim.go.cursorlineopt
       end,
     },
   },
