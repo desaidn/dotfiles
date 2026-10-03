@@ -28,6 +28,7 @@ local function fake_vim(options)
     current_tab = 1,
     autocmds = {},
     buffers = {},
+    buffer_options = {},
     tabs = { [1] = { valid = true } },
     windows = { [1] = { valid = true, host = true, tab = 1 } },
     current_win = 1,
@@ -88,6 +89,15 @@ local function fake_vim(options)
     end
   end
 
+  local function close_tab(tab)
+    assert(fixture.tabs[tab] and fixture.tabs[tab].valid, 'cannot close an invalid tab')
+    fixture.tabs[tab].valid = false
+    for _, window in pairs(fixture.windows) do
+      if window.tab == tab then window.valid = false end
+    end
+    if fixture.current_tab == tab then focus_first_valid_tab() end
+  end
+
   local fake = {
     env = {
       TMUX = '/tmp/tmux-test/default,1,0',
@@ -102,6 +112,7 @@ local function fake_vim(options)
       diffthis = function() end,
       startinsert = function() end,
       tabnew = function() create_tab(false) end,
+      tabclose = function(command) close_tab(tonumber(command.args[1])) end,
     },
     fs = {
       normalize = function(path) return path end,
@@ -110,6 +121,10 @@ local function fake_vim(options)
       fs_realpath = function(path) return (options.realpaths or {})[path] or path end,
     },
     pack = { add = function() end },
+    system = function(command)
+      assert(command[1] == 'git' and command[4] == 'rev-parse', 'unexpected process in terminal-tool fixture')
+      return { wait = function() return { code = 0, stdout = command[3] .. '\n' } end }
+    end,
     deepcopy = deepcopy,
     schedule = function(callback)
       if options.queue_schedules then
@@ -141,7 +156,11 @@ local function fake_vim(options)
       end,
     },
     fn = {
-      getcwd = function() return fixture.windows[fixture.current_win].cwd or fixture.cwd end,
+      getcwd = function(win, tab)
+        win = win or fixture.current_win
+        if tab then assert(fixture.windows[win].tab == tab, 'getcwd received the wrong tab scope') end
+        return fixture.windows[win].cwd or fixture.cwd
+      end,
       maparg = function(lhs, mode, abbreviation, dictionary)
         assert(abbreviation == false and dictionary == true, 'the fake only supports dictionary mapping lookup')
         local mapping = fixture.mappings[mapping_key(mode, lhs, nil)]
@@ -212,6 +231,8 @@ local function fake_vim(options)
         return tabs
       end,
       nvim_tabpage_is_valid = function(tab) return fixture.tabs[tab] ~= nil and fixture.tabs[tab].valid end,
+      nvim_tabpage_get_number = function(tab) return tab end,
+      nvim_win_get_number = function(win) return win end,
       nvim_tabpage_list_wins = function(tab)
         local windows = {}
         for win = 1, fixture.next_win - 1 do
@@ -229,14 +250,6 @@ local function fake_vim(options)
           end
         end
         error 'tab has no valid window'
-      end,
-      nvim_tabpage_close = function(tab, _)
-        assert(fixture.tabs[tab] and fixture.tabs[tab].valid, 'cannot close an invalid tab')
-        fixture.tabs[tab].valid = false
-        for _, window in pairs(fixture.windows) do
-          if window.tab == tab then window.valid = false end
-        end
-        if fixture.current_tab == tab then focus_first_valid_tab() end
       end,
       nvim_set_current_win = function(win)
         assert(fixture.windows[win] and fixture.windows[win].valid, 'cannot focus an invalid window')
@@ -290,6 +303,8 @@ local function fake_vim(options)
       nvim_win_set_buf = function(win, buf)
         assert(fixture.windows[win] and fixture.windows[win].valid, 'cannot set a buffer in an invalid window')
         assert(fixture.buffers[buf], 'cannot show an invalid buffer')
+        local previous = fixture.windows[win].buf
+        if previous and fixture.buffer_options[previous] and fixture.buffer_options[previous].bufhidden == 'wipe' then fixture.buffers[previous] = false end
         fixture.windows[win].buf = buf
       end,
       nvim_win_hide = function(win)
@@ -297,7 +312,10 @@ local function fake_vim(options)
         if fixture.current_win == win then fixture.current_win = 1 end
       end,
       nvim_win_set_config = function(win, config) fixture.windows[win].config = deepcopy(config) end,
-      nvim_set_option_value = function() end,
+      nvim_set_option_value = function(name, value, option)
+        fixture.buffer_options[option.buf] = fixture.buffer_options[option.buf] or {}
+        fixture.buffer_options[option.buf][name] = value
+      end,
       nvim_create_augroup = function() return 1 end,
       nvim_create_autocmd = function(event, autocmd_options)
         for _, name in ipairs(type(event) == 'table' and event or { event }) do
@@ -324,6 +342,10 @@ local function fake_vim(options)
       end,
     },
   }
+
+  for name in pairs(fake.api) do
+    assert(type(real_vim.api[name]) == 'function', 'fixture invented a Neovim API: ' .. name)
+  end
 
   function fixture.fire(event)
     if event == 'UIEnter' then fake.v.vim_did_enter = 1 end
@@ -653,7 +675,7 @@ check('closing a Tool Tab natively preserves its buffer and job for the next inv
   fixture.invoke('n', '<leader>gg')
   local first = assert(fixture.surface(), 'expected the first Tool Tab')
   local first_tab = fixture.current_tab
-  vim.api.nvim_tabpage_close(first_tab, false)
+  vim.cmd.tabclose { args = { tostring(first_tab) } }
 
   assert(fixture.buffers[first.buf] and fixture.jobs[1].running, 'native tab closure ended the tool session')
   fixture.invoke('n', '<leader>gg')
@@ -718,10 +740,10 @@ check('a singleton restarts when effective cwd aliases change', function()
   assert(not fixture.jobs[1].running, 'singleton alias restart left its old process running')
 end)
 
-check('a per-cwd declaration keeps one live Tool Tab per Host Window directory', function()
-  local fixture = setup { instances = 'cwd' }
+check('a per-checkout declaration keeps one live Tool Tab per Git checkout', function()
+  local fixture = setup { instances = 'repo' }
   fixture.invoke('n', '<leader>gg')
-  local first = assert(fixture.surface(), 'expected the first per-cwd Tool Tab')
+  local first = assert(fixture.surface(), 'expected the first per-checkout Tool Tab')
   local first_tab = fixture.current_tab
   fixture.invoke('n', '<leader>gg')
 
@@ -731,23 +753,23 @@ check('a per-cwd declaration keeps one live Tool Tab per Host Window directory',
   fixture.invoke('n', '<leader>gg')
   local second_tab = fixture.current_tab
 
-  assert(second_tab ~= first_tab, 'the second cwd replaced the first Tool Tab')
-  assert(#fixture.job_attempts == 2, 'the second cwd did not start its own terminal job')
+  assert(second_tab ~= first_tab, 'the second checkout replaced the first Tool Tab')
+  assert(#fixture.job_attempts == 2, 'the second checkout did not start its own terminal job')
   assert(fixture.job_attempts[1].options.cwd == '/repo/one', 'the first instance started in the wrong cwd')
   assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'the second instance started in the wrong cwd')
-  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'starting the second cwd stopped a live instance')
+  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'starting the second checkout stopped a live instance')
 
   fixture.invoke('n', '<leader>gg')
   vim.api.nvim_set_current_win(1)
   fixture.invoke('n', '<leader>gg')
 
-  assert(fixture.current_tab == first_tab, 'returning to the first cwd did not select its Tool Tab')
-  assert(fixture.windows[fixture.current_win].buf == first.buf, 'returning to the first cwd selected the wrong terminal buffer')
-  assert(#fixture.job_attempts == 2, 'returning to the first cwd restarted its terminal job')
+  assert(fixture.current_tab == first_tab, 'returning to the first checkout did not select its Tool Tab')
+  assert(fixture.windows[fixture.current_win].buf == first.buf, 'returning to the first checkout selected the wrong terminal buffer')
+  assert(#fixture.job_attempts == 2, 'returning to the first checkout restarted its terminal job')
 end)
 
-check('per-cwd instances collapse filesystem aliases to one canonical directory', function()
-  local fixture = setup({ instances = 'cwd' }, { realpaths = { ['/repo/link'] = '/repo/one' } })
+check('per-checkout instances collapse filesystem aliases to one canonical checkout', function()
+  local fixture = setup({ instances = 'repo' }, { realpaths = { ['/repo/link'] = '/repo/one' } })
   fixture.invoke('n', '<leader>gg')
   local first_tab = fixture.current_tab
   fixture.invoke('n', '<leader>gg')
@@ -760,8 +782,8 @@ check('per-cwd instances collapse filesystem aliases to one canonical directory'
   assert(#fixture.job_attempts == 1 and fixture.jobs[1].running, 'a filesystem alias restarted the canonical instance')
 end)
 
-check('closing one per-cwd Tool Tab preserves both live jobs and can recreate only that tab', function()
-  local fixture = setup { instances = 'cwd' }
+check('closing one per-checkout Tool Tab preserves both live jobs and can recreate only that tab', function()
+  local fixture = setup { instances = 'repo' }
   fixture.invoke('n', '<leader>gg')
   local first_tab = fixture.current_tab
   local first_buf = fixture.windows[fixture.current_win].buf
@@ -775,14 +797,14 @@ check('closing one per-cwd Tool Tab preserves both live jobs and can recreate on
   local second_buf = fixture.windows[fixture.current_win].buf
   fixture.invoke('n', '<leader>gg')
 
-  vim.api.nvim_tabpage_close(first_tab, false)
+  vim.cmd.tabclose { args = { tostring(first_tab) } }
   vim.api.nvim_set_current_win(1)
   fixture.invoke('n', '<leader>gg')
 
   assert(fixture.current_tab ~= first_tab, 'the natively closed Tool Tab was not recreated')
-  assert(fixture.windows[fixture.current_win].buf == first_buf, 'recreating one cwd replaced its terminal buffer')
-  assert(fixture.tabs[second_tab].valid, 'recreating one cwd closed the other Tool Tab')
-  assert(fixture.buffers[second_buf], 'the other cwd lost its buffer')
+  assert(fixture.windows[fixture.current_win].buf == first_buf, 'recreating one checkout replaced its terminal buffer')
+  assert(fixture.tabs[second_tab].valid, 'recreating one checkout closed the other Tool Tab')
+  assert(fixture.buffers[second_buf], 'the other checkout lost its buffer')
   assert(#fixture.job_attempts == 2 and fixture.jobs[1].running and fixture.jobs[2].running, 'recreating one tab restarted or stopped a job')
 end)
 
@@ -1218,10 +1240,10 @@ end)
 
 check('instance policy rejects unsupported cardinality', function()
   local ok, err = pcall(function() setup { instances = 'repository-picker' } end)
-  assert(not ok and tostring(err):match "instances must be 'singleton' or 'cwd'", 'expected an atomic instance-policy error')
+  assert(not ok and tostring(err):match "instances must be 'singleton' or 'repo'", 'expected an atomic instance-policy error')
 end)
 
-check('production Hunk keeps a live session for each Host Window directory', function()
+check('production Hunk keeps a live session for each selected checkout', function()
   local fake, fixture = fake_vim()
   _G.vim = fake
   local terminal_tool = dofile(terminal_tool_path)
@@ -1369,8 +1391,8 @@ check('editor handoff is source-agnostic and acknowledges only configured tools'
   assert(not terminal_tool.complete_editor_handoff {}, 'unknown handoff data should be ignored')
 end)
 
-check('per-cwd editor handoff identifies and acknowledges the exact originating job', function()
-  local fixture, terminal_tool = setup { instances = 'cwd' }
+check('per-checkout editor handoff identifies and acknowledges the exact originating job', function()
+  local fixture, terminal_tool = setup { instances = 'repo' }
   fixture.invoke('n', '<leader>gg')
   use_handoff_env(fixture, 1)
   local first_data = terminal_tool.editor_handoff_data()
@@ -1383,13 +1405,13 @@ check('per-cwd editor handoff identifies and acknowledges the exact originating 
   use_handoff_env(fixture, 2)
   local second_data = terminal_tool.editor_handoff_data()
 
-  assert(terminal_tool.complete_editor_handoff(first_data), 'the first cwd handoff was not recognized while the second was active')
-  assert(fixture.current_win == latest_host, 'the first cwd handoff ignored the global latest Host Window')
-  assert(terminal_tool.complete_editor_handoff(second_data), 'the second cwd handoff was not recognized')
+  assert(terminal_tool.complete_editor_handoff(first_data), 'the first checkout handoff was not recognized while the second was active')
+  assert(fixture.current_win == latest_host, 'the first checkout handoff ignored the global latest Host Window')
+  assert(terminal_tool.complete_editor_handoff(second_data), 'the second checkout handoff was not recognized')
   fixture.run_deferred()
 
   assert(#fixture.sends == 2, 'expected one acknowledgement for each originating instance')
-  assert(fixture.sends[1].job == 1 and fixture.sends[2].job == 2, 'handoff acknowledgement crossed per-cwd jobs')
+  assert(fixture.sends[1].job == 1 and fixture.sends[2].job == 2, 'handoff acknowledgement crossed per-checkout jobs')
 end)
 
 check('return-only editor handoff does not send terminal input', function()
@@ -1431,8 +1453,8 @@ check('a failed singleton restart keeps its Tool Tab registered and retryable', 
   assert(#fixture.job_attempts == 2, 'retry did not start exactly one replacement job')
 end)
 
-check('a failed per-cwd startup preserves another live instance and is independently retryable', function()
-  local fixture = setup({ instances = 'cwd' }, { job_results = { 1, -1 } })
+check('a failed per-checkout startup preserves another live instance and is independently retryable', function()
+  local fixture = setup({ instances = 'repo' }, { job_results = { 1, -1 } })
   fixture.invoke('n', '<leader>gg')
   local first_tab = fixture.current_tab
   fixture.invoke('n', '<leader>gg')
@@ -1440,12 +1462,12 @@ check('a failed per-cwd startup preserves another live instance and is independe
   fixture.switch_tab()
   local second_host = fixture.current_win
   fixture.windows[second_host].cwd = '/repo/two'
-  assert(not fixture.invoke('n', '<leader>gg'), 'expected the second cwd startup to fail')
+  assert(not fixture.invoke('n', '<leader>gg'), 'expected the second checkout startup to fail')
   assert(fixture.current_win == second_host, 'failed second startup did not restore its invoking Host Window')
   assert(fixture.tabs[first_tab].valid and fixture.jobs[1].running, 'failed second startup damaged the first instance')
 
-  assert(fixture.invoke('n', '<leader>gg'), 'the failed cwd was not independently retryable')
-  assert(#fixture.job_attempts == 3 and fixture.jobs[2].running, 'retry did not start only the failed cwd')
+  assert(fixture.invoke('n', '<leader>gg'), 'the failed checkout was not independently retryable')
+  assert(#fixture.job_attempts == 3 and fixture.jobs[2].running, 'retry did not start only the failed checkout')
   assert(fixture.tabs[first_tab].valid and fixture.jobs[1].running, 'retry damaged the first instance')
 end)
 
@@ -1504,24 +1526,24 @@ check('editor exit stops and briefly waits for every terminal tool job', functio
   assert(wait.timeout > 0 and wait.timeout <= 1000, 'editor exit used an unbounded shutdown wait')
 end)
 
-check('editor exit stops every live per-cwd instance', function()
-  local fixture = setup { instances = 'cwd' }
+check('editor exit stops every live per-checkout instance', function()
+  local fixture = setup { instances = 'repo' }
   fixture.invoke('n', '<leader>gg')
   fixture.invoke('n', '<leader>gg')
   fixture.switch_tab()
   fixture.windows[fixture.current_win].cwd = '/repo/two'
   fixture.invoke('n', '<leader>gg')
-  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'expected both cwd instances to be running')
+  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'expected both checkout instances to be running')
 
   fixture.fire 'VimLeavePre'
 
-  assert(not fixture.jobs[1].running and not fixture.jobs[2].running, 'editor exit left a cwd instance running')
-  local wait = assert(fixture.waits[1], 'editor exit did not wait for the cwd instances')
-  assert(#fixture.waits == 1 and #wait.jobs == 2, 'editor exit did not wait once for every cwd instance')
+  assert(not fixture.jobs[1].running and not fixture.jobs[2].running, 'editor exit left a checkout instance running')
+  local wait = assert(fixture.waits[1], 'editor exit did not wait for the checkout instances')
+  assert(#fixture.waits == 1 and #wait.jobs == 2, 'editor exit did not wait once for every checkout instance')
 end)
 
-check('one per-cwd exit removes only that instance and invalidates its opaque handoff token', function()
-  local fixture, terminal_tool = setup { instances = 'cwd' }
+check('one per-checkout exit removes only that instance and invalidates its opaque handoff token', function()
+  local fixture, terminal_tool = setup { instances = 'repo' }
   fixture.invoke('n', '<leader>gg')
   local first_tab = fixture.current_tab
   use_handoff_env(fixture, 1)
@@ -1535,14 +1557,14 @@ check('one per-cwd exit removes only that instance and invalidates its opaque ha
   local second_tab = fixture.current_tab
   fixture.exit_job(1)
 
-  assert(not fixture.tabs[first_tab].valid, 'exited cwd left its Tool Tab open')
-  assert(fixture.tabs[second_tab].valid and fixture.jobs[2].running, 'exited cwd damaged the other instance')
+  assert(not fixture.tabs[first_tab].valid, 'exited checkout left its Tool Tab open')
+  assert(fixture.tabs[second_tab].valid and fixture.jobs[2].running, 'exited checkout damaged the other instance')
   fixture.invoke('n', '<leader>gg')
   vim.api.nvim_set_current_win(1)
   fixture.invoke('n', '<leader>gg')
 
   local replacement_token = fixture.job_attempts[3].options.env.DOTFILES_EDITOR_HANDOFF_INSTANCE
-  assert(replacement_token ~= exited_token, 'a replacement cwd reused the exited instance token')
+  assert(replacement_token ~= exited_token, 'a replacement checkout reused the exited instance token')
   assert(not terminal_tool.complete_editor_handoff(exited_data), 'an exited instance handoff redirected its replacement')
   assert(fixture.tabs[second_tab].valid and fixture.jobs[2].running, 'stale handoff damaged the other live instance')
 end)
@@ -1551,7 +1573,7 @@ check('a missing Host Window recovers to a new ordinary tab', function()
   local fixture = setup()
   fixture.invoke('n', '<leader>gg')
   local tool_tab = fixture.current_tab
-  vim.api.nvim_tabpage_close(1, false)
+  vim.cmd.tabclose { args = { '1' } }
 
   fixture.invoke('n', '<leader>gg')
   assert(fixture.current_tab ~= tool_tab, 'the Tool Tab became its own Host Window')

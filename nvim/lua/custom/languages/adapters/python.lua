@@ -6,6 +6,10 @@ local did_setup = false
 local root_profile = {
   markers = { 'pyrightconfig.json', 'pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile', '.git' },
 }
+local test_root_profile = {
+  -- Equal priority makes the nearest test or project marker determine test cwd.
+  markers = { { 'pyrightconfig.json', 'pyproject.toml', 'setup.py', 'setup.cfg', 'pytest.ini', 'manage.py', 'requirements.txt', 'Pipfile', '.git' } },
+}
 
 local function is_windows() return vim.fn.has 'win32' == 1 end
 
@@ -59,10 +63,60 @@ local function ensure_debugpy()
   -- nvim-dap evaluates configuration functions before nvim-dap-python
   -- enriches them, so this wins over unrelated active environments.
   for _, config in ipairs(require('dap').configurations.python or {}) do
-    if config.request == 'launch' and not config.pythonPath then config.pythonPath = project_python end
+    if config.request == 'launch' and not config.pythonPath and not config.python then config.pythonPath = project_python end
   end
   dap_python.resolve_python = project_python
   did_setup = true
+end
+
+local function project_test_runner(root)
+  if vim.uv.fs_stat(root .. '/pytest.ini') then return 'pytest' end
+  if vim.uv.fs_stat(root .. '/manage.py') then return 'django' end
+  local pyproject = root .. '/pyproject.toml'
+  if vim.fn.filereadable(pyproject) == 1 then
+    for _, line in ipairs(vim.fn.readfile(pyproject)) do
+      if line:find '%[tool.pytest' then return 'pytest' end
+    end
+  end
+  return 'unittest'
+end
+
+local function debug_test(action)
+  require('custom.languages.dap').ensure()
+  ensure_debugpy()
+  local environment_project = context.for_buffer(nil, root_profile)
+  local project = context.for_buffer(nil, test_root_profile)
+  if not project then
+    local path = vim.api.nvim_buf_get_name(0)
+    if path == '' or vim.bo.buftype ~= '' then return end
+    project = { root = vim.fs.dirname(path), path = path }
+  end
+  local dap_python = require 'dap-python'
+  -- A nested test config changes the runner's cwd, not the project environment.
+  local python = project_python(environment_project or project)
+  -- The plugin builds unittest/Django module names relative to process cwd.
+  -- Freeze launch values before returning to the editor's directory.
+  require 'custom.lib.with_cwd'(project.root, function()
+    local runner = dap_python.test_runner or project_test_runner(project.root)
+    if type(runner) == 'function' then runner = runner() end
+    dap_python[action] {
+      test_runner = runner,
+      config = function(config)
+        config.cwd, config.pythonPath = project.root, python
+        if runner == 'unittest' or runner == 'django' then
+          -- expand('%:.') can retain an absolute symlink spelling after chdir.
+          local relative = assert(vim.fs.relpath(project.root, project.path))
+          local target = vim.fn.fnamemodify(relative, ':r'):gsub('[/\\]', '.')
+          local original = vim.fn.expand('%:.:r'):gsub('[/\\]', '.')
+          local suffix = config.name == '' and '' or '.' .. config.name
+          for index, argument in ipairs(config.args) do
+            if argument == original .. suffix then config.args[index] = target .. suffix end
+          end
+        end
+        return config
+      end,
+    }
+  end)
 end
 
 -- BasedPyright provides semantic hover while Ruff diagnostics/actions remain.
@@ -93,9 +147,9 @@ local M = {
     python = {
       lsp_client = 'basedpyright',
       root_profile = root_profile,
-      launch_types = { 'python' },
+      launch_types = { 'python', 'debugpy' },
       prepare_launch = function(config, project)
-        config.pythonPath = config.pythonPath or project_python(project)
+        if not config.pythonPath and not config.python then config.pythonPath = project_python(project) end
         return config
       end,
     },
@@ -106,15 +160,9 @@ function M.setup()
   local gh = require('custom.lib.pack').gh
   vim.pack.add({ gh 'mfussenegger/nvim-dap-python' }, { load = function() end })
 
-  vim.api.nvim_create_user_command('DapPythonTestClass', function()
-    ensure_debugpy()
-    require('dap-python').test_class { config = { pythonPath = project_python } }
-  end, { desc = 'Debug Python test class' })
+  vim.api.nvim_create_user_command('DapPythonTestClass', function() debug_test 'test_class' end, { desc = 'Debug Python test class' })
 
-  vim.api.nvim_create_user_command('DapPythonTestMethod', function()
-    ensure_debugpy()
-    require('dap-python').test_method { config = { pythonPath = project_python } }
-  end, { desc = 'Debug Python test method' })
+  vim.api.nvim_create_user_command('DapPythonTestMethod', function() debug_test 'test_method' end, { desc = 'Debug Python test method' })
 
   vim.api.nvim_create_autocmd('FileType', {
     group = vim.api.nvim_create_augroup('python-dap-setup', { clear = true }),

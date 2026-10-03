@@ -131,7 +131,7 @@ same complete document is installed as global guidance for all three harnesses.
 - **Editor ↔ Git**: Neovim integrates with both gitsigns and lazygit
 - **Shell ↔ Editor**: Fish and zsh own the global editor contract (`EDITOR`, `VISUAL`, and `GIT_EDITOR` all point to `nvim`)
 - **Terminal tool ↔ Editor**: flatten.nvim handles editor handoff from nested `nvim` calls back into the host Neovim; the shared terminal-tool module owns the opaque source marker and post-handoff policy while preserving the shell-owned `EDITOR` contract
-- **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent Tool Tab per selected tool instance, singleton by default and keyed by normalized Host Window working directory for Hunk, with flatten.nvim for Editor Handoff and host tmux prefix and pane navigation kept upstream when using the fallback
+- **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent Tool Tab per selected tool instance, singleton by default and keyed by canonical Git checkout root for Hunk, with flatten.nvim for Editor Handoff and host tmux prefix and pane navigation kept upstream when using the fallback
 - **Shell ↔ Workspace manager**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; invoke Herdr for the daily workspace or tmux directly for fallback/compatibility
 - **Runtime Management**: Mise owns language runtimes; Mason owns editor tooling
 - **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty)

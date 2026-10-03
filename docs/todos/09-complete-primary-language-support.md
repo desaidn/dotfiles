@@ -41,12 +41,12 @@ performance baselines were never recorded. Phase 1's project context and
 root-aware launch provider landed, while language health output, richer
 breakpoint controls, and strict project-launch fallback behavior did not.
 
-The audit also found repository-contract regressions that should be
-closed with the plan: nvim-dap-ui's former ASCII control icons were lost, the
-equal-priority ESLint root-marker rationale was dropped, the Neovim dependency
-inventory omits `rust-src`, and the current language tree has Stylua
-drift. The plan's current-state table itself is stale and should not be treated
-as an implementation record until reconciled.
+The September stability pass corrected ESLint project/scope ownership and Python
+test-command routing, and added real plugin regressions. The root dependency
+inventory includes `rust-src`, and the Neovim tree passes Stylua. Remaining
+historical assertions, including DAP control icons, should be checked against
+current behavior before changing configuration. The source plan's current-state
+table remains historical context rather than an implementation record.
 
 Related active items remain separate. The [runtime test harness](01-neovim-runtime-test-harness.md)
 owns extraction of the general fake-Neovim seam. The [unified language actions](06-unify-neovim-language-actions.md)

@@ -32,6 +32,7 @@ local dap_python
 local setup_calls = 0
 local commands = {}
 local test_actions = {}
+local explicit_pythons = { '/configured/python', { '/configured/python', '-I' }, function() return { '/configured/python', '-I' } end }
 local pack_root = vim.fn.tempname()
 local original_packpath = vim.o.packpath
 local project_root = pack_root .. '/project'
@@ -45,9 +46,13 @@ local function capture_user_command(name, callback, _) commands[name] = callback
 vim.pack.add = capture_packages
 vim.api.nvim_create_user_command = capture_user_command
 package.loaded['custom.languages.dap'] = {
+  ensure = function() end,
   register_buffer_setup = function(bufnr, setup) buffer_setups[bufnr] = setup end,
 }
 package.loaded.dap = { configurations = { python = { { request = 'launch' }, { request = 'attach' } } } }
+for _, python in ipairs(explicit_pythons) do
+  table.insert(package.loaded.dap.configurations.python, { request = 'launch', python = python })
+end
 package.preload['dap-python'] = function()
   dap_python = {
     setup = function(debugger_path, options)
@@ -55,8 +60,14 @@ package.preload['dap-python'] = function()
       dap_python.options = options
       setup_calls = setup_calls + 1
     end,
-    test_class = function(options) test_actions[#test_actions + 1] = { name = 'class', options = options } end,
-    test_method = function(options) test_actions[#test_actions + 1] = { name = 'method', options = options } end,
+    test_class = function(options)
+      options.config = options.config { args = { '-v', '' }, name = 'TestThing' }
+      test_actions[#test_actions + 1] = { name = 'class', options = options }
+    end,
+    test_method = function(options)
+      options.config = options.config { args = { '-v', '' }, name = 'TestThing.test_one' }
+      test_actions[#test_actions + 1] = { name = 'method', options = options }
+    end,
   }
   return dap_python
 end
@@ -94,7 +105,7 @@ check('registers Python DAP only for Python buffers and initializes Mason debugp
   assert(ok, err)
   assert(captured and captured[1] == 'https://github.com/mfussenegger/nvim-dap-python', 'missing nvim-dap-python package')
   assert(adapter.dap_by_ft.python.lsp_client == 'basedpyright')
-  assert(vim.deep_equal(adapter.dap_by_ft.python.launch_types, { 'python' }))
+  assert(vim.deep_equal(adapter.dap_by_ft.python.launch_types, { 'python', 'debugpy' }))
 
   local python = vim.api.nvim_create_buf(false, true)
   local rust = vim.api.nvim_create_buf(false, true)
@@ -136,8 +147,18 @@ check('exposes Python test debugging through commands, not keymaps', function()
   commands.DapPythonTestClass()
   commands.DapPythonTestMethod()
   assert(vim.deep_equal(vim.tbl_map(function(action) return action.name end, test_actions), { 'class', 'method' }), vim.inspect(test_actions))
-  assert(test_actions[1].options.config.pythonPath() == '/mise/python3')
-  assert(test_actions[2].options.config.pythonPath() == '/mise/python3')
+  assert(test_actions[1].options.config.pythonPath == '/mise/python3')
+  assert(test_actions[2].options.config.pythonPath == '/mise/python3')
+  assert(test_actions[1].options.config.cwd == fallback_root)
+end)
+
+check('preserves explicit modern Python launch values during default setup and project preparation', function()
+  for index, python in ipairs(explicit_pythons) do
+    local default = package.loaded.dap.configurations.python[index + 2]
+    assert(default.python == python and default.pythonPath == nil, vim.inspect(default))
+    local launch = adapter.dap_by_ft.python.prepare_launch({ python = python }, { root = project_root })
+    assert(launch.python == python and launch.pythonPath == nil, vim.inspect(launch))
+  end
 end)
 
 check('uses Windows virtualenv and Mason adapter paths when applicable', function()

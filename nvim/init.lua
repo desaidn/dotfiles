@@ -113,12 +113,15 @@ do
 
   -- A remote session has no display, so Neovim finds no clipboard tool and the
   -- 'clipboard' set above disables its own OSC 52 autodetection. Send copies to
-  -- the host terminal explicitly. tmux already provides its own clipboard.
+  -- the host terminal explicitly. Select tmux explicitly in remote sessions so
+  -- native macOS detection cannot choose the remote machine's pasteboard.
   --  See `:help clipboard-osc52`.
   --  Copy only: OSC 52 reads block until the terminal answers, and most never
   --  do. Paste replays the last copy, which also preserves the regtype that
   --  `getregtype()` would report unusably for blockwise yanks.
-  if vim.env.SSH_TTY ~= nil and vim.env.DISPLAY == nil and vim.env.WAYLAND_DISPLAY == nil and vim.env.TMUX == nil then
+  if vim.env.SSH_TTY ~= nil and vim.env.DISPLAY == nil and vim.env.WAYLAND_DISPLAY == nil and vim.env.TMUX ~= nil then
+    vim.g.clipboard = 'tmux'
+  elseif vim.env.SSH_TTY ~= nil and vim.env.DISPLAY == nil and vim.env.WAYLAND_DISPLAY == nil then
     local osc52 = require 'vim.ui.clipboard.osc52'
     local cache = { ['+'] = { { '' }, 'v' }, ['*'] = { { '' }, 'v' } }
     local function copy(reg)

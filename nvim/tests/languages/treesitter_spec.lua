@@ -1,5 +1,5 @@
 local failures = {}
-local script_path = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')
+local script_path = vim.fs.abspath(debug.getinfo(1, 'S').source:sub(2))
 local nvim_root = vim.fs.normalize(vim.fs.dirname(script_path) .. '/../..')
 
 package.path = table.concat({ nvim_root .. '/lua/?.lua', nvim_root .. '/lua/?/init.lua', package.path }, ';')
@@ -13,6 +13,8 @@ local buffers = {}
 local completions = {}
 local starts = {}
 local installed = false
+local parser_inventory = { 'lua', 'markdown_inline' }
+local installed_inventory
 local indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
 
 local function check(name, body)
@@ -45,20 +47,23 @@ local function complete_install()
   completions[1]()
 end
 
-local function ignore_package_additions(_, _) end
+local function install_package(_, _) vim.api.nvim_exec_autocmds('PackChanged', { data = { kind = 'install', spec = { name = 'nvim-treesitter' } } }) end
 local function capture_start(buf, language)
   starts[#starts + 1] = { buf = buf, language = language }
   original_start(buf, language)
 end
-vim.pack.add = ignore_package_additions
+vim.pack.add = install_package
 vim.treesitter.start = capture_start
-package.loaded['custom.languages.config'] = { treesitter_parsers = { 'lua' } }
+package.loaded['custom.languages.config'] = { treesitter_parsers = parser_inventory }
 package.loaded['treesitter-context'] = { setup = function() end }
 package.loaded['nvim-treesitter'] = {
-  setup = function() end,
   get_available = function() return { 'lua' } end,
   get_installed = function() return installed and { 'lua' } or {} end,
   install = function(language)
+    if type(language) == 'table' then
+      installed_inventory = vim.deepcopy(language)
+      return {}
+    end
     assert(language == 'lua', 'unexpected parser installation')
     return {
       await = function(_, callback) completions[#completions + 1] = callback end,
@@ -73,6 +78,11 @@ local setup_ok, setup_error = xpcall(function()
   -- Exercise real parser attachment and query lookup without installing a plugin or parser.
   vim.treesitter.query.set('lua', 'indents', '(chunk) @indent.begin')
   dofile(nvim_root .. '/lua/custom/languages/treesitter.lua')
+
+  check(
+    'installs the full parser inventory when package installation precedes its handler',
+    function() assert(vim.deep_equal(installed_inventory, parser_inventory), 'fresh startup missed the full parser inventory, including injection parsers') end
+  )
 
   check('ignores an installation completion after its buffer is wiped', function()
     local buf = create_buffer 'lua'

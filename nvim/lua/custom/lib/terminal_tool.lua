@@ -17,6 +17,7 @@ local tools = {}
 local tool_keys = {}
 local tool_commands = {}
 local host_win = nil
+local opening_tool_tab = false
 
 local function editor_env()
   local editor = vim.env.EDITOR
@@ -119,10 +120,12 @@ end
 local function host_cwd()
   local win = find_host_window()
   if not win then return nil end
-  local ok, cwd = pcall(vim.api.nvim_win_call, win, vim.fn.getcwd)
+  local ok, cwd = pcall(vim.fn.getcwd, vim.api.nvim_win_get_number(win), vim.api.nvim_tabpage_get_number(vim.api.nvim_win_get_tabpage(win)))
   if not ok then return nil end
   return cwd
 end
+
+local function close_tab(tab) vim.cmd.tabclose { args = { tostring(vim.api.nvim_tabpage_get_number(tab)) } } end
 
 local function delete_buffer(buf)
   if not buf or not vim.api.nvim_buf_is_valid(buf) then return true end
@@ -145,7 +148,7 @@ local function close_tool_tab(_, instance)
 
   local tab = instance.tab
   if vim.api.nvim_get_current_tabpage() == tab and not focus_host_window() then return false end
-  local ok = pcall(vim.api.nvim_tabpage_close, tab, false)
+  local ok = pcall(close_tab, tab)
   if not ok and valid_tab(tab) then return false end
   instance.tab = nil
   instance.win = nil
@@ -166,7 +169,7 @@ local function clear_generation(tool, instance, generation, buf, retried)
 
   local tab_closed = close_tool_tab(tool, instance)
   local buffer_deleted = delete_buffer(buf)
-  if not tab_closed or not buffer_deleted then
+  if not buffer_deleted then
     if not retried then
       vim.schedule(function() clear_generation(tool, instance, generation, buf, true) end)
     else
@@ -174,6 +177,8 @@ local function clear_generation(tool, instance, generation, buf, retried)
     end
     return false
   end
+
+  if not tab_closed then notify(tool, 'kept its finished Tool Tab open to preserve its other buffers', vim.log.levels.WARN) end
 
   instance.buf = nil
   instance.job = nil
@@ -188,6 +193,7 @@ local function open_tool_tab(tool, instance)
   local previous_win = vim.api.nvim_get_current_win()
   local created_tab = false
 
+  opening_tool_tab = true
   local ok, err = pcall(function()
     if instance.tab then
       vim.api.nvim_set_current_tabpage(instance.tab)
@@ -200,10 +206,11 @@ local function open_tool_tab(tool, instance)
     end
     vim.api.nvim_win_set_buf(instance.win, instance.buf)
   end)
+  opening_tool_tab = false
 
   if ok then return true end
 
-  if created_tab and valid_tab(instance.tab) then pcall(vim.api.nvim_tabpage_close, instance.tab, false) end
+  if created_tab and valid_tab(instance.tab) then pcall(close_tab, instance.tab) end
   instance.tab = nil
   instance.win = nil
   restore_window(previous_win)
@@ -221,6 +228,21 @@ end
 
 local function stop_generation(tool, instance, preserve_tab)
   local buf = instance.buf
+  if preserve_tab and valid_window(instance.win) then
+    -- Deleting a displayed terminal buffer closes its windows. Keep the Tool
+    -- Tab alive while replacing its process, then wipe this temporary buffer.
+    local placeholder
+    local ok = pcall(function()
+      placeholder = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = placeholder })
+      vim.api.nvim_win_set_buf(instance.win, placeholder)
+    end)
+    if not ok then
+      delete_buffer(placeholder)
+      notify(tool, 'could not prepare its Tool Tab for a replacement process', vim.log.levels.ERROR)
+      return false
+    end
+  end
   if instance.job then pcall(vim.fn.jobstop, instance.job) end
 
   if not preserve_tab and not close_tool_tab(tool, instance) then return false end
@@ -248,6 +270,13 @@ local function stop_all_jobs()
 end
 
 local lifecycle_group = vim.api.nvim_create_augroup('custom-terminal-tool-lifecycle', { clear = true })
+vim.api.nvim_create_autocmd('WinEnter', {
+  group = lifecycle_group,
+  callback = function()
+    if not opening_tool_tab and not current_tab_is_tool() then host_win = vim.api.nvim_get_current_win() end
+  end,
+  desc = 'Remember the latest non-tool Host Window',
+})
 local ui_entered = vim.v.vim_did_enter == 1
 vim.api.nvim_create_autocmd('UIEnter', {
   group = lifecycle_group,
@@ -369,7 +398,11 @@ local function new_instance(tool, key)
 end
 
 local function instance_key(tool, cwd)
-  if tool.spec.instances == 'cwd' then return canonical_cwd(cwd) end
+  if tool.spec.instances == 'repo' then
+    local result = vim.system({ 'git', '-C', cwd, 'rev-parse', '--show-toplevel' }, { text = true }):wait()
+    if result.code ~= 0 then return nil end
+    return canonical_cwd((result.stdout or ''):gsub('\n$', ''))
+  end
   return SINGLETON_INSTANCE_KEY
 end
 
@@ -383,13 +416,17 @@ local function toggle(tool, variant)
   if current_instance and current_instance.variant == variant then return focus_host_window() end
   if not current_tab_is_tool() then host_win = current_win end
 
-  local cwd = host_cwd()
+  local cwd = current_instance and current_instance.cwd or host_cwd()
   if not cwd then
     notify(tool, 'could not determine the Host Window working directory', vim.log.levels.ERROR, variant)
     return false
   end
 
-  local key = instance_key(tool, cwd)
+  local ok, key = pcall(instance_key, tool, cwd)
+  if not ok or key == nil or key == '' then
+    notify(tool, 'could not determine the Host Window Git checkout', vim.log.levels.ERROR, variant)
+    return false
+  end
   local instance = tool.instances[key] or new_instance(tool, key)
   forget_stale_tab(instance)
 
@@ -407,7 +444,7 @@ local function toggle(tool, variant)
     return true
   end
 
-  local launch_cwd = tool.spec.instances == 'cwd' and key or cwd
+  local launch_cwd = tool.spec.instances ~= 'singleton' and key or cwd
   return start_tool(tool, instance, variant, launch_cwd, current_win)
 end
 
@@ -525,7 +562,7 @@ local function normalize_config(config)
   assert(handoff == 'return' or handoff == 'return-and-acknowledge', "terminal tool handoff must be 'return' or 'return-and-acknowledge'")
 
   local instances = config.instances or 'singleton'
-  assert(instances == 'singleton' or instances == 'cwd', "terminal tool instances must be 'singleton' or 'cwd'")
+  assert(instances == 'singleton' or instances == 'repo', "terminal tool instances must be 'singleton' or 'repo'")
 
   local env = config.env or {}
   assert(type(env) == 'table', 'terminal tool env must be a table')
@@ -567,7 +604,7 @@ end
 ---@field variants? custom.TerminalToolVariant[] input variants sharing one Tool Tab
 ---@field env? table<string, string>
 ---@field handoff? 'return'|'return-and-acknowledge'
----@field instances? 'singleton'|'cwd'
+---@field instances? 'singleton'|'repo'
 
 ---@param config custom.TerminalToolConfig
 function M.create(config)

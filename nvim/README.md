@@ -48,10 +48,23 @@ bundled, workspace-fallback, or mismatched TypeScript. Missing, unparseable,
 unowned, and Deno workspaces receive neither client.
 
 Python DAP uses Mason's debugpy adapter
-while debug targets use their project environments; JavaScript/TypeScript DAP
+while debug targets use their project environments. Both `python` and `debugpy`
+project launch types are supported. Python test commands initialize the debugger
+on first use and select the runner, test target, and directory from the source
+project; changing the editor's directory is unnecessary. The nearest test or
+project marker sets the test directory, so nested `pytest.ini` or `manage.py`
+files can change it without changing the project interpreter or `launch.json`
+lookup. Explicit `python` or `pythonPath` launch
+settings take precedence. JavaScript/TypeScript DAP
 uses Mason's js-debug adapter while projects own non-trivial launch
 configuration. Restart Neovim after changing a project's installed TypeScript
 version so its semantic route is recalculated.
+
+Node lockfile roots include `npm-shrinkwrap.json`. ESLint runs from the source
+buffer's nearest package/config directory (or its own directory when neither
+exists), with the project's installed ESLint. An absent project installation
+is skipped instead of using eslint_d's bundled version. A newly installed
+eslint_d becomes available on the next lint event without restarting Neovim.
 
 This personal editor configuration assumes repositories opened for development
 are trusted: JavaScript/TypeScript startup executes the project's root-local
@@ -186,7 +199,8 @@ navigation-only command above does not build one.
 ## Clipboard
 
 Use `pbcopy`/`pbpaste` on macOS or a working Wayland/X11 clipboard provider on
-Linux. A remote session with no display and no tmux falls back to OSC 52 so the
+Linux. A remote session inside tmux explicitly uses its clipboard provider,
+including on macOS. A remote session with no display and no tmux falls back to OSC 52 so the
 host terminal receives copies. OSC 52 clipboard reads are disabled because
 they block waiting on the terminal, so pastes replay Neovim's own yanks.
 `:checkhealth vim.provider` reports the active provider.
@@ -243,11 +257,14 @@ and review-base selection. `:HunkReview` and `<leader>gd` share one toggle for
 `<leader>gD` continues to select staged changes in either context.
 
 Each terminal tool uses a persistent Tool Tab. LazyGit restarts in its existing
-tab when the working directory changes; Hunk keeps an instance per working
-directory so reviews in different repositories remain live. Working-tree and
+tab when the working directory changes; Hunk keeps an instance per canonical
+Git checkout root. Subdirectories and aliases share that instance; different
+repositories and worktrees remain live independently. Working-tree and
 staged review share the same Hunk tab and process: choosing the other input
 retargets that review, and invoking its active toggle returns to the Host
-Window. Jobs stop when Neovim exits.
+Window. Choosing another input while viewing a Hunk tab retargets that tab's
+checkout. Jobs stop when Neovim exits. Ordinary unsaved splits are preserved
+if they prevent a finished tool's tab from closing safely.
 
 ### File Explorer
 

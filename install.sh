@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 BREWFILE="$REPO_ROOT/Brewfile"
 MISE_BOOTSTRAP_CONFIG_DIR="$REPO_ROOT/mise"
 MISE_MANIFEST="$MISE_BOOTSTRAP_CONFIG_DIR/conf.d/00-dotfiles.toml"
@@ -84,6 +84,19 @@ CODEX_DIRECTORY="$(normalize_agent_directory "${CODEX_HOME-$HOME/.codex}")"
 PI_DIRECTORY="$(normalize_agent_directory "${PI_CODING_AGENT_DIR-$HOME/.pi/agent}")"
 WORKFLOW_HOME="$(normalize_agent_directory "$HOME")"
 
+# Resolve existing directory ancestors, including HOME aliases, without needing
+# the final path to exist. Call with the parent when a symlink itself is replaced.
+physical_path() {
+    local directory="$1" suffix=""
+    while [[ ! -d "$directory" ]]; do
+        suffix="/${directory##*/}$suffix"
+        directory="$(dirname "$directory")"
+    done
+    directory="$(cd -P -- "$directory" && pwd -P)"
+    directory="${directory%/}$suffix"
+    printf '%s' "${directory:-/}"
+}
+
 # HOME's own ancestry was validated above. Preserve redirects below it and
 # at custom locations; do not follow them to another profile's instructions.
 redirected_agent_parent() {
@@ -121,7 +134,7 @@ validate_agent_directory() {
 }
 
 preflight_workflow_links() {
-    local directory target line redirected protected
+    local directory target line redirected protected physical_directory physical_target
     local managed_targets=(
         .config/fish .config/ghostty .config/herdr/config.toml
         .config/hunk/config.toml .config/lazygit .config/mise/conf.d/00-dotfiles.toml
@@ -133,16 +146,19 @@ preflight_workflow_links() {
     validate_agent_directory "$PI_DIRECTORY" PI_CODING_AGENT_DIR
     # Never place a harness root inside a link that installation will create.
     for directory in "$CODEX_DIRECTORY" "$PI_DIRECTORY"; do
+        physical_directory="$(physical_path "$directory")"
         for target in "${managed_targets[@]}"; do
-            case "$directory/" in
-                "$WORKFLOW_HOME/$target/"*)
+            physical_target="$(physical_path "$(dirname "$HOME/$target")")/${target##*/}"
+            case "$physical_directory/" in
+                "$physical_target/"*)
                     die "agent configuration directory overlaps a managed link: $directory ($WORKFLOW_HOME/$target)"
                     ;;
             esac
         done
         for protected in "$CODEX_DIRECTORY/AGENTS.md" "$PI_DIRECTORY/AGENTS.md"; do
-            case "$directory/" in
-                "$protected/"*) die "agent configuration directories overlap an instruction file: $directory" ;;
+            physical_target="$(physical_path "$(dirname "$protected")")/${protected##*/}"
+            case "$physical_directory/" in
+                "$physical_target/"*) die "agent configuration directories overlap an instruction file: $directory" ;;
             esac
         done
     done
@@ -391,7 +407,7 @@ has_jetbrains_mono_file() {
     IFS=:
     for candidate in $font_dirs; do
         for font in "$candidate"/JetBrainsMono*; do
-            if [[ -e "$font" || -L "$font" ]]; then
+            if [[ -f "$font" ]]; then
                 IFS="$old_ifs"
                 return 0
             fi
@@ -543,13 +559,15 @@ validate_brew_dependencies() {
 
 install_mise_runtimes() (
     local active_version command_name command_path expected_version
-    local environment
+    local environment config_sources
     local manifest_key mise_command_path output tool_name version
     local mismatched missing version_mismatches
 
     section "Installing Mise runtimes"
     cd -- "$REPO_ROOT"
     export MISE_CONFIG_DIR="$MISE_BOOTSTRAP_CONFIG_DIR"
+    export MISE_SYSTEM_CONFIG_DIR="$MISE_BOOTSTRAP_CONFIG_DIR"
+    export MISE_CEILING_PATHS="$REPO_ROOT"
     unset \
         MISE_CONFIG_FILE \
         MISE_GLOBAL_CONFIG_FILE \
@@ -557,10 +575,28 @@ install_mise_runtimes() (
         MISE_IGNORED_CONFIG_PATHS \
         MISE_NO_CONFIG \
         MISE_DISABLE_TOOLS \
+        MISE_ENV \
+        MISE_ENV_FILE \
         MISE_NODE_VERSION \
         MISE_PYTHON_VERSION \
         MISE_RUST_VERSION \
         MISE_JAVA_VERSION
+
+    # Bound both global/system and project discovery, then verify the effective
+    # source set before Mise can install tools or evaluate a foreign environment.
+    config_sources="$(mise config ls --json)" || die "Mise configuration discovery failed"
+    if ! DOTFILES_MISE_SOURCES="$config_sources" DOTFILES_MISE_MANIFEST="$MISE_MANIFEST" \
+        NVIM_LOG_FILE=/dev/null nvim --clean --headless -i NONE -c 'lua
+            local ok, sources = pcall(vim.json.decode, vim.env.DOTFILES_MISE_SOURCES)
+            if not ok or type(sources) ~= "table" or #sources ~= 1 or type(sources[1]) ~= "table"
+                or sources[1].path ~= vim.env.DOTFILES_MISE_MANIFEST then
+                io.stderr:write("Mise must load only the tracked runtime manifest\n")
+                vim.cmd("cquit 1")
+            end
+        ' -c qa
+    then
+        die "unexpected Mise configuration; inspect mise config ls before retrying"
+    fi
 
     if mise install --dry-run-code >/dev/null 2>&1; then
         echo "Mise runtimes are already installed."
@@ -680,6 +716,22 @@ link_nested() {
     link "$source_rel" "$target_rel"
 }
 
+preflight_link_location() {
+    local source="$REPO_ROOT/$1" target="$2" container="${3:-}" location entry
+    [[ "$target" == /* ]] || target="$HOME/$target"
+    symlink_points_to "$target" "$source" && return 0
+    for entry in "$target" ${container:+"$HOME/$container"}; do
+        # Replacing a symlink does not move its referent. Resolve its parent,
+        # not the entry itself, when comparing the paths that will be moved.
+        entry="$(physical_path "$(dirname "$entry")")/${entry##*/}"
+        for location in "$REPO_ROOT" "$(physical_path "$source")"; do
+            case "$location/" in
+                "$entry/"*) die "checkout or configuration source overlaps an installation target: $entry; move the checkout outside managed paths" ;;
+            esac
+        done
+    done
+}
+
 preflight_links() {
     local source required_directory
     local directory_sources file_sources required_directories
@@ -715,6 +767,16 @@ preflight_links() {
             die "missing or invalid tracked configuration file: $REPO_ROOT/$source"
     done
 
+    for source in "${directory_sources[@]}"; do
+        preflight_link_location "$source" ".config/$source"
+    done
+    preflight_link_location herdr/config.toml .config/herdr/config.toml .config/herdr
+    preflight_link_location hunk/config.toml .config/hunk/config.toml .config/hunk
+    if (( SKIP_MISE_RUNTIMES == 0 )); then
+        preflight_link_location mise/conf.d/00-dotfiles.toml .config/mise/conf.d/00-dotfiles.toml .config/mise/conf.d
+    fi
+    preflight_link_location zsh/.zshrc .zshrc
+
     required_directories=(
         "$HOME/.config"
         "$HOME/.local"
@@ -737,6 +799,20 @@ preflight_links() {
 
     preflight_workflow_links
 }
+
+initialize_local_template() (
+    local template="$1" target="$LOCAL_DIR/$1" staging
+    [[ ! -e "$target" && ! -L "$target" ]] || return 0
+    staging="$(mktemp -d "$LOCAL_DIR/.template.XXXXXX")"
+    # Only this invocation's private staging file is removed. User destinations
+    # are never overwritten, including a file created concurrently with copying.
+    trap '[[ ! -f "$staging/$template" ]] || unlink "$staging/$template"; rmdir "$staging"' EXIT
+    trap 'exit 1' HUP INT TERM
+    cp "$REPO_ROOT/templates/$template" "$staging/$template"
+    if ! ln "$staging/$template" "$LOCAL_DIR/" 2>/dev/null; then
+        [[ -e "$target" || -L "$target" ]] || die "could not initialize local template: $target"
+    fi
+)
 
 link_configs() {
     section "Linking configuration"
@@ -767,9 +843,7 @@ link_configs() {
 
     mkdir -p "$LOCAL_DIR"
     for template in local.fish local.zsh; do
-        if [[ ! -e "$LOCAL_DIR/$template" && ! -L "$LOCAL_DIR/$template" ]]; then
-            cp "$REPO_ROOT/templates/$template" "$LOCAL_DIR/"
-        fi
+        initialize_local_template "$template"
     done
 }
 

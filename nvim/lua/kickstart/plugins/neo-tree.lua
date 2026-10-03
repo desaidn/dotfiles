@@ -76,7 +76,6 @@ require('neo-tree').setup {
       },
     },
   },
-  -- Return focus to neo-tree after opening a file (keeps the explorer visible)
   event_handlers = {
     {
       event = 'neo_tree_buffer_enter',
@@ -84,16 +83,6 @@ require('neo-tree').setup {
         vim.wo.number = true
         vim.wo.relativenumber = true
         vim.wo.winhighlight = vim.wo.winhighlight .. ',LineNr:NeoTreeLineNr,CursorLineNr:NeoTreeLineNr'
-      end,
-    },
-    {
-      event = 'file_opened',
-      handler = function()
-        vim.schedule(function()
-          local neo_tree_wins = vim.tbl_filter(function(win) return vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'neo-tree' end, vim.api.nvim_list_wins())
-
-          if #neo_tree_wins > 0 then vim.api.nvim_set_current_win(neo_tree_wins[1]) end
-        end)
       end,
     },
   },

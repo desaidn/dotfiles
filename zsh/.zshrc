@@ -1,3 +1,11 @@
+export XDG_CONFIG_HOME="$HOME/.config"
+if (( ! ${path[(Ie)$HOME/.local/bin]} )); then
+    path=("$HOME/.local/bin" "${path[@]}")
+fi
+export EDITOR=nvim
+export VISUAL=nvim
+export GIT_EDITOR=nvim
+
 setopt PROMPT_SUBST
 
 git_prompt() {
@@ -15,16 +23,10 @@ PROMPT='%F{white}[%D %*] [%~]%f $(git_prompt)
 
 alias nvim-reset='rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim'
 
-export XDG_CONFIG_HOME="$HOME/.config"
-export PATH="$HOME/.local/bin:$PATH"
-export EDITOR=nvim
-export VISUAL=nvim
-export GIT_EDITOR=nvim
-
 if [ -f "$HOME/.local/share/dotfiles/local.zsh" ]; then
     source "$HOME/.local/share/dotfiles/local.zsh"
 fi
 
-if [[ -o interactive && -z "${ZSH_EXECUTION_STRING:-}" ]] && command -v fish >/dev/null; then
+if [[ -o interactive && ! -v ZSH_EXECUTION_STRING ]] && command -v fish >/dev/null; then
     exec fish
 fi

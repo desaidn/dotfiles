@@ -4,21 +4,22 @@
 begin
     for dotfiles_brew in (command -s brew) /opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew
         if test -x $dotfiles_brew
+            set -l inherited_path $PATH
             $dotfiles_brew shellenv fish | source
+            if contains -- "$HOMEBREW_PREFIX/bin" $inherited_path
+                set -gx PATH $inherited_path
+                fish_add_path --path --append "$HOMEBREW_PREFIX/sbin"
+            end
             break
         end
     end
 end
 
-# Put atuin on PATH if installed via the official installer
-test -f $HOME/.atuin/bin/env.fish; and source $HOME/.atuin/bin/env.fish
-
-# Optional tool PATHs (no-op if the tool isn't installed)
-test -d $HOME/.bun/bin;      and fish_add_path -g $HOME/.bun/bin
-test -f $HOME/.ghcup/env;    and set -gx PATH $HOME/.ghcup/bin $PATH
-test -d $HOME/.lmstudio/bin; and fish_add_path -ga $HOME/.lmstudio/bin
-test -d $HOME/.claude/local; and fish_add_path -ga $HOME/.claude/local
-test -d "$HOME/Library/Application Support/JetBrains/Toolbox/scripts"; and fish_add_path -ga "$HOME/Library/Application Support/JetBrains/Toolbox/scripts"
+# Optional tools are fallbacks; never displace an inherited runtime.
+fish_add_path --path --append \
+    $HOME/.atuin/bin $HOME/.bun/bin $HOME/.ghcup/bin $HOME/.cabal/bin \
+    $HOME/.lmstudio/bin $HOME/.claude/local \
+    "$HOME/Library/Application Support/JetBrains/Toolbox/scripts"
 
 if status is-interactive
     if command -v mise >/dev/null

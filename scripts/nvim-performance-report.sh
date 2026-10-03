@@ -134,11 +134,15 @@ parse_started_ms() {
   ' "$1"
 }
 
-run_startup_sample() {
+run_startup_sample() (
   local mode="$1"
   local log_file="$2"
   local err_file="$3"
   local status
+
+  # Measure this profile independently of a parent editor or startup override.
+  unset VIMINIT EXINIT NVIM NVIM_LISTEN_ADDRESS
+  export NVIM_APPNAME=nvim
 
   set +e
   if [ "$mode" = "clean" ]; then
@@ -155,7 +159,7 @@ run_startup_sample() {
       XDG_RUNTIME_DIR="$NVIM_RUNTIME_DIR" \
       TMPDIR="$NVIM_TMPDIR" \
       NVIM_LOG_FILE="$TMP_DIR/nvim-$mode.log" \
-      "$NVIM_BIN" --headless --startuptime "$log_file" +qa >"$err_file" 2>&1
+      "$NVIM_BIN" -u "$REPO_ROOT/nvim/init.lua" --headless --startuptime "$log_file" +qa >"$err_file" 2>&1
   fi
   status=$?
   set -e
@@ -170,10 +174,18 @@ run_startup_sample() {
     return 0
   fi
 
+  if [ "$mode" = "config" ] && ! PERF_INIT_SCRIPT="$REPO_ROOT/nvim/init.lua" awk '
+    sub(/^[0-9.[:space:]]*: sourcing /, "") && $0 == ENVIRON["PERF_INIT_SCRIPT"] { found = 1 }
+    END { exit !found }
+  ' "$log_file"; then
+    printf 'failed:repo-init-not-loaded'
+    return 0
+  fi
+
   if ! parse_started_ms "$log_file"; then
     printf 'no-start-line'
   fi
-}
+)
 
 delta_ms() {
   local clean_ms="$1"
@@ -333,7 +345,7 @@ fi
   printf '%s\n' "- System: \`$uname_value\`"
   printf '%s\n' "- Iterations: \`$ITERATIONS\`"
   printf '%s\n\n' "- Raw logs: \`$TMP_DIR\`"
-  printf 'Neovim is run with scratch cache, state, runtime, and temp directories under the raw log directory. User plugin data is still used, so the configured setup is measured without polluting normal state files.\n\n'
+  printf 'Neovim uses the nvim profile with scratch cache, state, runtime, and temp directories under the raw log directory. Configured samples explicitly load the repository init.lua and verify its startup-log entry. User plugin data is shared; normal startup may install missing plugins or tools. This measures headless startup, not interactive UI readiness or completion of asynchronous work.\n\n'
 
   printf '## Summary\n\n'
   printf '%s\n\n' "$(startup_note "$config_avg")"
@@ -368,8 +380,10 @@ fi
 
   printf '## Commands\n\n'
   printf '```sh\n'
+  printf 'unset VIMINIT EXINIT NVIM NVIM_LISTEN_ADDRESS\n'
+  printf 'export NVIM_APPNAME=nvim\n'
   printf 'XDG_CACHE_HOME=<scratch>/cache XDG_STATE_HOME=<scratch>/state XDG_RUNTIME_DIR=<scratch>/run TMPDIR=<scratch>/tmp %s --clean --headless --startuptime <log> +qa\n' "$NVIM_BIN"
-  printf 'XDG_CONFIG_HOME=%s XDG_CACHE_HOME=<scratch>/cache XDG_STATE_HOME=<scratch>/state XDG_RUNTIME_DIR=<scratch>/run TMPDIR=<scratch>/tmp %s --headless --startuptime <log> +qa\n' "$REPO_ROOT" "$NVIM_BIN"
+  printf 'XDG_CONFIG_HOME=%s XDG_CACHE_HOME=<scratch>/cache XDG_STATE_HOME=<scratch>/state XDG_RUNTIME_DIR=<scratch>/run TMPDIR=<scratch>/tmp %s -u %s/nvim/init.lua --headless --startuptime <log> +qa\n' "$REPO_ROOT" "$NVIM_BIN" "$REPO_ROOT"
   if [ "$SKIP_SHELL" -eq 0 ]; then
     printf '/usr/bin/time -p fish -ic exit\n'
     printf '/usr/bin/time -p zsh -ic exit\n'

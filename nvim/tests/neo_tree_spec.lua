@@ -154,6 +154,19 @@ local setup_ok, setup_error = xpcall(function()
       return rendered:find('copied-over-scp.txt', 1, true) ~= nil
     end)
   end)
+
+  check('opening a file keeps the originating tab and focuses the file', function()
+    vim.cmd.tabnew()
+    local tab = vim.api.nvim_get_current_tabpage()
+    command.execute { action = 'focus', source = 'filesystem', dir = fixture }
+    local second = manager.get_state 'filesystem'
+    wait_for('second explorer did not load', function() return second.tree and second.tree:get_node(selected_file) ~= nil end)
+    assert(renderer.focus_node(second, selected_file))
+    require('neo-tree.sources.filesystem.commands').open(second)
+    vim.wait(100)
+    assert(vim.api.nvim_get_current_tabpage() == tab, 'opening a file jumped to another tab')
+    assert(vim.api.nvim_buf_get_name(0) == selected_file, 'opening a file should retain upstream editor focus')
+  end)
 end, debug.traceback)
 
 cleanup()

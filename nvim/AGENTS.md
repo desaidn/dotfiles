@@ -93,6 +93,8 @@ Run the matching checks when their surface changes:
 - `nvim --clean --headless -l nvim/tests/languages/treesitter_spec.lua` for parser attachment after asynchronous installation and buffer lifetime changes.
 - `nvim --clean --headless -l nvim/tests/neo_tree_spec.lua` for selected-node path copying and refresh after a missed filesystem change.
 - `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` for terminal-tool lifecycle, handoff, and host input routing.
+- `nvim --clean --headless -l nvim/tests/terminal_tool_native_spec.lua` for native directory/tab behavior, checkout identity, process exit, and preservation of modified ordinary splits.
+- `nvim/tests/languages/lint_spec.lua`, `python_runtime_spec.lua`, and `tests/neo_tree_spec.lua` exercise installed plugins; run them after the normal editor dependencies are available. They stub provisioning and external actions, not the Neovim APIs under test.
 - `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` for real Hunk rendering, switching, isolated exit, resize, and host tmux prefix routing. It requires Expect, tmux, Git, Hunk, and Neovim on `PATH`.
 
 ### LSP and Language Support
@@ -139,6 +141,12 @@ Mason owns the compatibility transport, js-debug, and `eslint_d`; projects own
 TypeScript, ESLint, runtime semantics, and non-trivial Node/browser
 `.vscode/launch.json` files.
 
+Lint dispatch uses the source buffer's nearest package/config directory and
+disables eslint_d's bundled fallback. The small `custom.lib.with_cwd` helper
+contains synchronous, cwd-dependent plugin evaluation without changing Neovim's
+global/tab/window directory scopes. Its callback must not yield or switch windows
+or directories; freeze asynchronous launch values inside the callback.
+
 This personal configuration explicitly assumes opened development repositories
 are trusted. JavaScript/TypeScript startup executes the root-local compiler to
 select a semantic route, and lint configuration may execute project code. Keep
@@ -171,7 +179,7 @@ require('custom.lib.terminal_tool').create {
   command = { 'example' },
   key = '<leader>gx',
   desc = 'Example',
-  instances = 'cwd', -- Optional; declarations are singleton by default.
+  instances = 'repo', -- Optional; declarations are singleton by default.
 }
 ```
 
@@ -198,8 +206,8 @@ is atomic so a rejected declaration preserves existing mappings and commands.
 - Variants share one Tool Tab, one process slot, one `env`, and one handoff identity within each instance. Selecting a variant other than the running one restarts that instance's job in place; only the running variant's own key hides the Tool Tab. Prefer variants over a second tool id when one CLI's inputs are alternative views of the same review, since duplicate processes within a repository make session selectors ambiguous.
 - A `variants` list must be a gapless list of two or more entries with distinct keys and distinct commands; use a top-level `command` for a single input. These are load-time assertions because a silently dropped entry would leave a documented key doing nothing.
 - Keep declarations singleton by default. A singleton restarts inside its existing Tool Tab when the Host Window's effective working directory changes; this remains LazyGit's policy.
-- Use `instances = 'cwd'` only when a tool should retain concurrent instances selected by canonical Host Window working directory. Hunk uses this policy so reviews in different repositories or worktrees remain live together.
-- Keep every Tool Tab instance independent. Switching tools or contexts must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window. Native `:tabclose` hides only that instance's live terminal buffer; the next invocation recreates its Tool Tab, while process exit removes only that instance.
+- Use `instances = 'repo'` for Hunk: resolve the canonical Git checkout root and launch there, so subdirectories and aliases share one review while separate worktrees remain independent. Keep only the singleton and checkout policies needed by the configured tools.
+- Keep every Tool Tab instance independent. Switching tools or contexts must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window. Selecting another variant within a Tool Tab targets that displayed instance. Native `:tabclose` hides only that instance's live terminal buffer; the next invocation recreates its Tool Tab, while process exit removes only that instance. If a modified ordinary split prevents safe tab closure, preserve it and release the finished tool's ownership so relaunch remains possible.
 - Let the shared module install the normal-mode mapping; declarations do not receive or inspect mutable buffer, window, tab, or job state. Terminal input stays untouched, so use `<Esc><Esc>` before a normal-mode tool key.
 - Let the shared module register an optional variant `ex_command`; do not duplicate a mapping's launch behavior in plugin-specific command callbacks. If an external workflow invokes that shared callback during Neovim startup, the module coalesces requests and waits until after `UIEnter` before starting the terminal job so automatic terminal-capability detection matches an interactive mapping.
 - Use ordinary full-tab windows inside and outside tmux. This keeps sizing native and, when using the tmux fallback, keeps the host tmux client upstream so its prefix, session picker, and pane navigation remain available while the tool is running.
@@ -213,7 +221,7 @@ is atomic so a rejected declaration preserves existing mappings and commands.
 
 Keep gitsigns actions hunk-local and use LazyGit for Git transactions and object
 selection. Hunk owns full stacked working-tree and staged review. Hunk's two
-review inputs share a Tool Tab and process per working directory to keep
+review inputs share a Tool Tab and process per Git checkout to keep
 `--watch` live and the `--repo .` selector on `hunk session` subcommands unambiguous. See the
 [Git guide](README.md#git) for mappings and Editor Handoff behavior.
 

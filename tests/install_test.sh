@@ -73,7 +73,7 @@ assert_log_prefix_count() {
 
 write_fake_commands() {
     local command_name command_path
-    for command_name in bash cat chmod cp date dirname env ln readlink mkdir mv; do
+    for command_name in bash cat chmod cp date dirname env ln readlink mkdir mktemp mv rmdir unlink; do
         command_path="$(command -v "$command_name")"
         ln -s "$command_path" "$FIXTURE_FAKE_BIN/$command_name"
     done
@@ -220,12 +220,20 @@ if [[ "${MISE_CONFIG_DIR:-}" != "$DOTFILES_TEST_REPO_ROOT/mise" ]]; then
     printf 'mise received unexpected config directory: %s\n' "${MISE_CONFIG_DIR:-unset}" >&2
     exit 4
 fi
+if [[ "${MISE_CEILING_PATHS:-}" != "$DOTFILES_TEST_REPO_ROOT" ||
+    "${MISE_SYSTEM_CONFIG_DIR:-}" != "$DOTFILES_TEST_REPO_ROOT/mise" ]]
+then
+    printf 'mise discovery is not bounded to the bootstrap manifest\n' >&2
+    exit 4
+fi
 if [[ -n "${MISE_CONFIG_FILE:-}" ||
     -n "${MISE_GLOBAL_CONFIG_FILE:-}" ||
     -n "${MISE_GLOBAL_CONFIG_ROOT:-}" ||
     -n "${MISE_IGNORED_CONFIG_PATHS:-}" ||
     -n "${MISE_NO_CONFIG:-}" ||
     -n "${MISE_DISABLE_TOOLS:-}" ||
+    -n "${MISE_ENV:-}" ||
+    -n "${MISE_ENV_FILE:-}" ||
     -n "${MISE_NODE_VERSION:-}" ||
     -n "${MISE_PYTHON_VERSION:-}" ||
     -n "${MISE_RUST_VERSION:-}" ||
@@ -246,6 +254,14 @@ write_runtime_commands() {
 
 case "${1:-}" in
     config)
+        if [[ "${2:-}" == ls && "${3:-}" == --json ]]; then
+            if [[ -f "$DOTFILES_TEST_STATE/mise-sources.json" ]]; then
+                cat "$DOTFILES_TEST_STATE/mise-sources.json"
+            else
+                printf '[{"path":"%s/mise/conf.d/00-dotfiles.toml"}]\n' "$DOTFILES_TEST_REPO_ROOT"
+            fi
+            exit 0
+        fi
         if [[ "${2:-}" != "get" || "${3:-}" != "-f" ||
             "${4:-}" != "$DOTFILES_TEST_REPO_ROOT/mise/conf.d/00-dotfiles.toml" ]]
         then
@@ -1056,6 +1072,10 @@ test_mise_environment_cannot_override_bootstrap_manifest() {
         export MISE_IGNORED_CONFIG_PATHS="$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
         export MISE_NO_CONFIG=1
         export MISE_DISABLE_TOOLS=java
+        export MISE_CEILING_PATHS=/
+        export MISE_SYSTEM_CONFIG_DIR="$FIXTURE_ROOT/foreign-system"
+        export MISE_ENV=foreign
+        export MISE_ENV_FILE=foreign.env
         export MISE_NODE_VERSION=18
         export MISE_PYTHON_VERSION=3.10
         export MISE_RUST_VERSION=1.93.0
@@ -1088,6 +1108,18 @@ test_parent_mise_activation_does_not_override_bootstrap_environment() {
     assert_log_count 1 "mise env" "$FIXTURE_LOG"
     assert_log_count 0 "mise activate" "$FIXTURE_LOG"
     pass "parent Mise activation cannot override bootstrap runtime selection"
+}
+
+test_unexpected_mise_sources_are_rejected_before_installing() {
+    new_fixture mise-foreign-source Darwin
+    printf '[{"path":"%s/mise/conf.d/00-dotfiles.toml"},{"path":"/foreign/mise.toml"}]\n' \
+        "$REPO_ROOT" >"$FIXTURE_STATE/mise-sources.json"
+    run_installer failure
+    grep -Fq 'Mise must load only the tracked runtime manifest' "$FIXTURE_OUTPUT" ||
+        fail "foreign Mise source did not produce a useful diagnostic"
+    assert_log_count 0 'mise install' "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "unexpected Mise sources are rejected before installing runtimes or linking"
 }
 
 test_non_mise_runtime_command_is_rejected_before_linking() {
@@ -1483,6 +1515,101 @@ test_link_preflight_prevents_partial_configuration() {
     pass "link preflight fails before changing home configuration"
 }
 
+test_checkout_overlap_is_rejected_before_provisioning() {
+    local placement source_name fixture_repo
+    for placement in .config .config/fish/dotfiles; do
+        new_fixture "checkout-overlap-${placement//\//-}" Darwin
+        fixture_repo="$FIXTURE_HOME/$placement"
+        mkdir -p "$fixture_repo"
+        cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
+        for source_name in fish ghostty herdr hunk lazygit mise nvim tmux docs templates zsh; do
+            cp -R "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
+        done
+        FIXTURE_INSTALL_REPO_ROOT="$(cd -P "$fixture_repo" && pwd -P)"
+        run_installer failure
+        grep -Fq 'overlaps an installation target' "$FIXTURE_OUTPUT" ||
+            fail "source/destination overlap did not produce a useful diagnostic"
+        [[ -d "$fixture_repo/fish" && ! -L "$fixture_repo/fish" ]] ||
+            fail "overlap preflight changed its source"
+        assert_log_count 0 'brew bootstrap' "$FIXTURE_LOG"
+        assert_not_exists "$FIXTURE_HOME/.zshrc"
+    done
+
+    new_fixture workflow-home-alias-overlap Darwin
+    ln -s "$FIXTURE_HOME" "$FIXTURE_ROOT/home-alias"
+    FIXTURE_CODEX_DIRECTORY="$FIXTURE_HOME/.config/nvim/agent"
+    run_installer failure "$FIXTURE_ROOT/home-alias"
+    grep -Fq 'agent configuration directory overlaps a managed link' "$FIXTURE_OUTPUT" ||
+        fail "physical HOME alias bypassed overlap preflight"
+    assert_log_count 0 'brew bootstrap' "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "checkout and HOME-alias overlaps fail before provisioning or link changes"
+}
+
+test_local_templates_are_published_complete_without_overwriting() {
+    local target template
+    new_fixture template-copy-failure Darwin
+    # Interrupt only a template copy, after writing a partial staging file.
+    unlink "$FIXTURE_FAKE_BIN/cp"
+    cat >"$FIXTURE_FAKE_BIN/cp" <<'SCRIPT'
+#!/usr/bin/env bash
+if [[ "$1" == */templates/local.fish ]]; then
+    printf 'partial template\n' >"$2"
+    exit 1
+fi
+exec /bin/cp "$@"
+SCRIPT
+    chmod +x "$FIXTURE_FAKE_BIN/cp"
+    run_installer failure --skip-mise-runtimes
+    assert_not_exists "$FIXTURE_HOME/.local/share/dotfiles/local.fish"
+    assert_not_exists "$FIXTURE_HOME/.local/share/dotfiles/local.zsh"
+    for target in "$FIXTURE_HOME/.local/share/dotfiles"/.template.*; do
+        assert_not_exists "$target"
+    done
+    unlink "$FIXTURE_FAKE_BIN/cp"
+    ln -s /bin/cp "$FIXTURE_FAKE_BIN/cp"
+    run_installer success --skip-mise-runtimes
+    for template in local.fish local.zsh; do
+        cmp "$REPO_ROOT/templates/$template" "$FIXTURE_HOME/.local/share/dotfiles/$template" ||
+            fail "retry did not publish the complete template"
+    done
+
+    new_fixture template-concurrent-user-file Darwin
+    unlink "$FIXTURE_FAKE_BIN/cp"
+    cat >"$FIXTURE_FAKE_BIN/cp" <<'SCRIPT'
+#!/usr/bin/env bash
+/bin/cp "$@" || exit
+if [[ "$1" == */templates/local.fish ]]; then
+    printf 'concurrent user content\n' >"$HOME/.local/share/dotfiles/local.fish"
+fi
+SCRIPT
+    chmod +x "$FIXTURE_FAKE_BIN/cp"
+    run_installer success --skip-mise-runtimes
+    grep -Fxq 'concurrent user content' "$FIXTURE_HOME/.local/share/dotfiles/local.fish" ||
+        fail "publishing the template overwrote a concurrent user file"
+    run_installer success --skip-mise-runtimes
+    grep -Fxq 'concurrent user content' "$FIXTURE_HOME/.local/share/dotfiles/local.fish" ||
+        fail "second run changed a user template"
+    pass "local template publication is complete, retryable, and preserves user files"
+}
+
+test_broken_font_links_do_not_count_as_installed() {
+    new_fixture missing-font-link Darwin
+    ln -s "$FIXTURE_ROOT/missing-font.ttf" "$FIXTURE_FONT_DIR/JetBrainsMono-Broken.ttf"
+    run_installer
+    assert_log_count 1 'brew cask install font-jetbrains-mono' "$FIXTURE_LOG"
+    assert_symlink "$FIXTURE_FONT_DIR/JetBrainsMono-Broken.ttf" "$FIXTURE_ROOT/missing-font.ttf"
+
+    new_fixture missing-recorded-font Darwin
+    : >"$FIXTURE_STATE/cask-font-jetbrains-mono"
+    ln -s "$FIXTURE_ROOT/missing-font.ttf" "$FIXTURE_FONT_DIR/JetBrainsMono-Broken.ttf"
+    run_installer failure
+    grep -Fq 'its font files are missing; repair the cask' "$FIXTURE_OUTPUT" ||
+        fail "broken recorded font was not rejected with a repair diagnostic"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "broken font links trigger installation or an explicit cask repair"
+}
+
 test_workflow_links_preserve_personal_guidance() {
     new_fixture workflow-personal-guidance Darwin
     mkdir -p "$FIXTURE_HOME/.claude/skills/personal" "$FIXTURE_HOME/.agents/skills/personal"
@@ -1785,12 +1912,15 @@ test_workflow_restore_uses_only_latest_unambiguous_backups
 test_user_mise_config_does_not_override_bootstrap_manifest
 test_mise_environment_cannot_override_bootstrap_manifest
 test_parent_mise_activation_does_not_override_bootstrap_environment
+test_unexpected_mise_sources_are_rejected_before_installing
 test_non_mise_runtime_command_is_rejected_before_linking
 test_mise_runtime_version_mismatch_is_rejected_before_linking
 test_install_cli_is_safe
 test_skip_mise_runtimes_completes_yum_setup
 test_skip_mise_runtimes_retains_existing_manifest
 test_macos_fresh_and_second_run
+test_broken_font_links_do_not_count_as_installed
+test_local_templates_are_published_complete_without_overwriting
 test_linux_manager_fresh_and_second_run apt-get
 test_linux_manager_fresh_and_second_run dnf
 test_linux_manager_fresh_and_second_run yum
@@ -1813,5 +1943,6 @@ test_uninstall_restores_latest_backups
 test_uninstall_blocks_unsafe_or_ambiguous_restores
 test_equivalent_relative_links_are_idempotent
 test_link_preflight_prevents_partial_configuration
+test_checkout_overlap_is_rejected_before_provisioning
 test_dependency_manifests_match_the_install_contract
 printf 'All install integration tests passed.\n'

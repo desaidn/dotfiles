@@ -11,10 +11,6 @@ vim.pack.add {
 
 local treesitter = require 'nvim-treesitter'
 
--- Older nvim-treesitter configurations exposed setup(); current mainline
--- mostly uses the native vim.treesitter APIs directly.
-pcall(treesitter.setup, {})
-
 ---@param buf integer
 ---@param language string
 local function treesitter_try_attach(buf, language)
@@ -80,3 +76,7 @@ vim.api.nvim_create_autocmd('PackChanged', {
     if task and task.wait then task:wait(60000) end
   end,
 })
+
+-- Fresh package installation fires PackChanged before this module can register
+-- its handler. Ensure injection parsers too; installed parsers are skipped.
+treesitter.install(languages.treesitter_parsers)

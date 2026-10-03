@@ -90,6 +90,21 @@ local ok, err = xpcall(function()
     assert(root_for(source) == expected_project_root, 'browser package must use the same workspace root')
   end)
 
+  check('recognizes standalone and nested npm-shrinkwrap projects', function()
+    for _, root in ipairs { fixture .. '/published-cli', project_root .. '/packages/independent-cli' } do
+      local path = root .. '/src/index.ts'
+      local local_compiler = root .. '/node_modules/.bin/tsc'
+      create_file(root .. '/npm-shrinkwrap.json')
+      create_file(path)
+      create_file(local_compiler, { '#!/bin/sh', 'echo "Version 7.0.2"' })
+      assert(vim.uv.fs_chmod(local_compiler, 493))
+      local expected_root = assert(vim.uv.fs_realpath(root))
+      assert(root_for(path) == expected_root, 'shrinkwrap must select its own project compiler')
+      local profile = languages.dap_by_ft.typescript.root_profile
+      assert(profile.resolve(vim.fs.joinpath(expected_root, 'src/index.ts')) == expected_root, 'DAP must share shrinkwrap project ownership')
+    end
+  end)
+
   check('routes a pre-TypeScript-7 workspace to one project-owned compatibility client', function()
     local legacy_config = assert(languages.lsp_servers.ts_ls, 'missing pre-TypeScript-7 compatibility client')
     local legacy_root = fixture .. '/typescript-five'

@@ -1,6 +1,6 @@
 # dotfiles
 
-Personal config monorepo. Clone anywhere, run `./install.sh`, and your system is wired up via symlinks into `~/.config/` and `~/`.
+Personal config monorepo. Clone into a directory such as `~/dotfiles`, run `./install.sh`, and your system is wired up via symlinks into `~/.config/` and `~/`. Keep the checkout outside the configuration paths the installer replaces; overlapping paths are rejected before provisioning.
 
 The setup is designed around one uniform code interface: Herdr is the daily workspace manager, Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. Tmux remains available as a deliberate fallback and compatibility multiplexer. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
 
@@ -190,8 +190,8 @@ The installer uses the tracked global defaults fragment
 Node.js, Python, and Rust versions plus Amazon Corretto JDK 21 at
 `corretto-21.0.12.8.1`, so a successful second run does not silently resolve a
 newer runtime. Runtime updates are deliberate manifest edits. Bootstrap
-evaluates the tracked fragment in an isolated Mise config directory so user
-overrides cannot mask missing pinned runtimes. A user's normal
+evaluates only the tracked fragment, with global, system, and ancestor discovery
+bounded and the effective source list checked before installation. A user's normal
 `~/.config/mise/config.toml` remains untouched and has higher precedence in
 interactive shells.
 
@@ -248,12 +248,19 @@ The `fish` and `zsh` rc files source an optional per-machine file if it exists:
 - `~/.local/share/dotfiles/local.fish`
 - `~/.local/share/dotfiles/local.zsh`
 
-On first run, `install.sh` copies templates for files that do not already
-exist. They contain `mise activate`, `mise completion`, `atuin init`, and
-Homebrew activation for all three standard prefixes, plus gated PATH additions
-for per-machine tools (`bun`, `ghcup`, `lmstudio`, `claude/local`)—every line
-is a no-op on a machine that lacks the tool. Edit freely; these files live
-outside the repo.
+On first run, `install.sh` publishes complete templates atomically for files
+that do not already exist. Interrupted creation cannot expose a partial file,
+and existing user content is preserved. They contain `mise activate`, `mise completion`, `atuin init`, and
+Homebrew activation for all three standard prefixes, plus optional fallback
+paths for per-machine tools (`bun`, `ghcup`, `lmstudio`, `claude/local`).
+The templates preserve an inherited runtime's PATH priority; Zsh-only completion
+and history setup is skipped when handing off to Fish. Edit freely; these files
+live outside the repo.
+
+Template changes apply to new files only. For an existing installation, compare
+your `local.fish` and `local.zsh` with the tracked templates and merge the relevant
+changes while retaining machine-specific settings. Re-running the installer
+intentionally preserves these user-owned files.
 
 The shared shell rc files set `EDITOR`, `VISUAL`, and `GIT_EDITOR` to `nvim`; per-machine files should only override that when a machine genuinely needs a different editor contract.
 
@@ -273,6 +280,11 @@ shared instruction ownership and migration conflicts, backup/link behavior,
 explicit runtime-skip setup, safe restoration,
 and a mutation-free second run without touching the network, sudo, package
 managers, or the caller's home directory.
+
+`python3 tests/shell_test.py` exercises real Fish, Zsh, Homebrew shellenv, and
+available Ghostty integration scripts with isolated HOME directories.
+`bash tests/nvim_performance_test.sh` checks benchmark configuration selection
+using a tiny fixture init and real Neovim.
 
 ## Rollback
 

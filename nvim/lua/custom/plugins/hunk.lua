@@ -1,5 +1,5 @@
 --- Hunk stacked review launcher.
---- Both inputs share one Tool Tab and one process per working directory, so
+--- Both inputs share one Tool Tab and one process per Git checkout, so
 --- exactly one Hunk session matches each repository. This keeps the `--repo .`
 --- selector in `hunk session comment add` usable for agent review notes while
 --- allowing concurrent reviews in different repositories or worktrees.
@@ -38,5 +38,5 @@ require('custom.lib.terminal_tool').create {
       desc = 'Hunk diff (staged)',
     },
   },
-  instances = 'cwd',
+  instances = 'repo',
 }

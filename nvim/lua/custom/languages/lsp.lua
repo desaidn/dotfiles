@@ -26,6 +26,18 @@ require('fidget').setup {
 }
 
 -- Runs when an LSP attaches to a buffer (e.g., opening `main.rs` triggers `rust_analyzer`)
+local highlight_augroup = vim.api.nvim_create_augroup('kickstart-lsp-highlight', { clear = true })
+vim.api.nvim_create_autocmd('LspDetach', {
+  group = vim.api.nvim_create_augroup('kickstart-lsp-detach', { clear = true }),
+  callback = function(event)
+    for _, client in ipairs(vim.lsp.get_clients { bufnr = event.buf }) do
+      if client.id ~= event.data.client_id and client:supports_method('textDocument/documentHighlight', event.buf) then return end
+    end
+    vim.api.nvim_clear_autocmds { group = highlight_augroup, buf = event.buf }
+    vim.api.nvim_buf_call(event.buf, vim.lsp.buf.clear_references)
+  end,
+})
+
 vim.api.nvim_create_autocmd('LspAttach', {
   group = vim.api.nvim_create_augroup('kickstart-lsp-attach', { clear = true }),
   callback = function(event)
@@ -47,7 +59,7 @@ vim.api.nvim_create_autocmd('LspAttach', {
     -- When you move your cursor, the highlights will be cleared (the second autocommand).
     local client = vim.lsp.get_client_by_id(event.data.client_id)
     if client and client:supports_method('textDocument/documentHighlight', event.buf) then
-      local highlight_augroup = vim.api.nvim_create_augroup('kickstart-lsp-highlight', { clear = false })
+      vim.api.nvim_clear_autocmds { group = highlight_augroup, buf = event.buf }
       vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
         buf = event.buf,
         group = highlight_augroup,
@@ -58,14 +70,6 @@ vim.api.nvim_create_autocmd('LspAttach', {
         buf = event.buf,
         group = highlight_augroup,
         callback = vim.lsp.buf.clear_references,
-      })
-
-      vim.api.nvim_create_autocmd('LspDetach', {
-        group = vim.api.nvim_create_augroup('kickstart-lsp-detach', { clear = true }),
-        callback = function(event2)
-          vim.lsp.buf.clear_references()
-          vim.api.nvim_clear_autocmds { group = 'kickstart-lsp-highlight', buf = event2.buf }
-        end,
       })
     end
 

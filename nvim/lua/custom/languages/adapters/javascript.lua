@@ -7,7 +7,7 @@ local filetypes = { 'javascript', 'javascriptreact', 'typescript', 'typescriptre
 
 local typescript_projects = {}
 local javascript_root_markers = {
-  { 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb', 'bun.lock' },
+  { 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb', 'bun.lock' },
   { '.git' },
 }
 local javascript_launch_types = { 'node', 'chrome', 'msedge', 'pwa-node', 'pwa-chrome', 'pwa-msedge' }
@@ -196,6 +196,7 @@ end
 
 local eslint_config_markers = {
   {
+    'package.json',
     '.eslintrc',
     '.eslintrc.js',
     '.eslintrc.cjs',
@@ -211,7 +212,7 @@ local eslint_config_markers = {
   },
 }
 
-local function eslint_root(source) return vim.fs.root(source, eslint_config_markers) end
+local function eslint_root(source) return vim.fs.root(source, eslint_config_markers) or vim.fs.dirname(source) end
 
 local M = {
   lsp_servers = {
@@ -262,33 +263,37 @@ function M.setup()
 
   local lint = require 'lint'
 
-  -- Only enable declared linters when their executables are available.
-  lint.linters_by_ft = {}
-  for filetype, declared_linters in pairs(M.linters_by_ft) do
-    local available_linters = {}
-    for _, linter in ipairs(declared_linters) do
-      if vim.fn.executable(linter) == 1 then available_linters[#available_linters + 1] = linter end
-    end
-    if #available_linters > 0 then lint.linters_by_ft[filetype] = available_linters end
-  end
+  lint.linters_by_ft = M.linters_by_ft
+  local with_cwd = require 'custom.lib.with_cwd'
 
   -- For more linter options and default linters, see:
   --  https://github.com/mfussenegger/nvim-lint#available-linters
 
-  -- Skip read-only buffers (e.g. LSP hover popups) to avoid superfluous noise
-  local function try_lint_if_modifiable()
-    if not vim.bo.modifiable then return end
+  local function try_lint(bufnr)
+    if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then return end
+    local options = vim.bo[bufnr]
+    if not options.modifiable or options.buftype ~= '' or not M.linters_by_ft[options.filetype] then return end
+    local source = vim.api.nvim_buf_get_name(bufnr)
+    local executable = vim.fn.exepath 'eslint_d'
+    if source == '' or executable == '' then return end
 
-    local bufnr = vim.api.nvim_get_current_buf()
-    local cwd
-    for _, linter in ipairs(lint.linters_by_ft[vim.bo[bufnr].filetype] or {}) do
-      if linter == 'eslint_d' then
-        cwd = eslint_root(bufnr)
-        break
-      end
-    end
-
-    lint.try_lint(nil, { cwd = cwd })
+    local cwd = eslint_root(source)
+    if vim.fn.isdirectory(cwd) ~= 1 then return end
+    vim.api.nvim_buf_call(bufnr, function()
+      -- nvim-lint's cwd override uses :cd internally; preselect the process cwd
+      -- so argument evaluation cannot clear the user's :lcd/:tcd scopes.
+      with_cwd(cwd, function()
+        lint.try_lint(nil, {
+          cwd = vim.fn.getcwd(),
+          wrap_linter = function(linter)
+            linter.cmd = executable
+            -- nvim-lint replaces, rather than extends, the process environment.
+            linter.env = vim.tbl_extend('force', vim.fn.environ(), linter.env or {}, { ESLINT_D_MISS = 'ignore' })
+            return linter
+          end,
+        })
+      end)
+    end)
   end
 
   -- Run linters on key buffer events
@@ -296,17 +301,28 @@ function M.setup()
 
   vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWritePost', 'InsertLeave', 'CursorHold', 'CursorHoldI' }, {
     group = lint_augroup,
-    callback = try_lint_if_modifiable,
+    callback = function(event) try_lint(event.buf) end,
   })
 
   -- Debounce lint calls during real-time editing to avoid excessive runs
-  local debounce_timer = assert(vim.uv.new_timer())
+  local pending = {}
   vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
     group = lint_augroup,
-    callback = function()
-      debounce_timer:stop()
-      debounce_timer:start(100, 0, function() vim.schedule(try_lint_if_modifiable) end)
+    callback = function(event)
+      if not M.linters_by_ft[vim.bo[event.buf].filetype] then return end
+      local token = {}
+      pending[event.buf] = token
+      vim.defer_fn(function()
+        if pending[event.buf] ~= token then return end
+        pending[event.buf] = nil
+        try_lint(event.buf)
+      end, 100)
     end,
+  })
+
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    group = lint_augroup,
+    callback = function(event) pending[event.buf] = nil end,
   })
 
   vim.api.nvim_create_autocmd('FileType', {

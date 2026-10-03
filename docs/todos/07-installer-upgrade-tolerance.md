@@ -19,9 +19,10 @@ files. The standalone devflow package and its private Python environment have
 been retired, so migrating their runtime dependencies is no longer part of this
 work.
 
-Initial per-machine template files are copied directly to their final paths;
-interruption during a first copy could leave a partial file that later runs
-correctly preserve as user-owned.
+Initial per-machine templates are staged privately and published atomically
+without replacing existing user content. The installer tests cover interrupted
+copying and a user file appearing before publication. Source/destination overlap
+and unexpected Mise configuration sources are rejected before provisioning.
 
 Additive Brew and link behavior is evident in the implementation, but the test
 suite does not yet model an older successful installation followed by a changed
@@ -29,8 +30,7 @@ manifest and another unchanged run.
 
 ## Scope
 
-- Make first-time per-machine template initialization atomic without overwriting
-  an existing user file.
+- Preserve atomic first-time template initialization and its interruption tests.
 - Add upgrade-path fixtures that begin from an older successful installation,
   apply representative manifest or inventory changes, and then run the updated
   installer twice.
@@ -51,8 +51,6 @@ manifest and another unchanged run.
 
 ## Open decisions
 
-- How should interrupted first-time template initialization be staged and
-  completed without claiming an existing user file?
 - Which link-layout changes can be handled as ordinary additions, and which
   need a deliberately documented ownership migration?
 - Should the direct and nested link inventories remain explicit in each
