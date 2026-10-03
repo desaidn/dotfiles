@@ -18,6 +18,11 @@ pcall(treesitter.setup, {})
 ---@param buf integer
 ---@param language string
 local function treesitter_try_attach(buf, language)
+  -- Installation can finish after the requesting buffer is unloaded or repurposed.
+  if not vim.api.nvim_buf_is_loaded(buf) then return end
+  local filetype = vim.bo[buf].filetype
+  if (vim.treesitter.language.get_lang(filetype) or filetype) ~= language then return end
+
   -- Check if a parser exists and load it
   if not vim.treesitter.language.add(language) then return end
 
@@ -34,7 +39,7 @@ local function treesitter_try_attach(buf, language)
   local has_indent_query = vim.treesitter.query.get(language, 'indents') ~= nil
 
   -- Enable treesitter based indentation
-  if has_indent_query then vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()" end
+  if has_indent_query then vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()" end
 end
 
 local max_filesize = 100 * 1024 -- 100 KB

@@ -90,6 +90,7 @@ Run the matching checks when their surface changes:
 - `nvim --clean --headless -l nvim/tests/diagnostics.lua` scans every Neovim Lua file, including tests, with the installed Lua language server and this configuration's Neovim workspace settings. It checks every diagnostic severity and requires the Mason-managed `lua-language-server`.
 - `nvim --clean --headless -l nvim/tests/neovim_spec.lua` for the shared Neovim minimum, prerelease handling, and startup/health consumers.
 - `nvim --clean --headless -l nvim/tests/pack_spec.lua` for native package build hooks.
+- `nvim --clean --headless -l nvim/tests/languages/treesitter_spec.lua` for parser attachment after asynchronous installation and buffer lifetime changes.
 - `nvim --clean --headless -l nvim/tests/neo_tree_spec.lua` for selected-node path copying and refresh after a missed filesystem change.
 - `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` for terminal-tool lifecycle, handoff, and host input routing.
 - `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` for real Hunk rendering, switching, isolated exit, resize, and host tmux prefix routing. It requires Expect, tmux, Git, Hunk, and Neovim on `PATH`.
@@ -123,6 +124,10 @@ directories when running it in a sandbox. Verify live compiler, clangd,
 formatter, and debug behavior separately when changing their runtime contract.
 
 Adapters explicitly declare their full Mason and parser requirements, including names shared with other adapters. The collector deduplicates only these lists and rejects duplicate LSP or filetype mappings within a category, naming both owners. Its fields retain the native shapes consumed by Neovim, Mason Tool Installer, nvim-treesitter, Conform, nvim-lint, and nvim-dap. `treesitter_parsers` is authoritative: only listed parsers attach or install at runtime, and the same list is installed or updated after nvim-treesitter package changes. See [ADR 0014](../docs/adr/0014-co-locate-language-settings-and-behavior.md) for the ownership decision.
+
+Parser installation can outlive the buffer that requested it. Recheck that the
+buffer is valid, loaded, and still uses the requested language before attaching;
+apply buffer-local settings to that buffer explicitly.
 
 Java and Rust are intentional lifecycle exceptions: nvim-jdtls and rustaceanvim own their respective language-server startup, so neither server appears in generic `vim.lsp.enable` configuration. Java's adapter starts JDTLS per project and initializes its DAP integration before attachment.
 
