@@ -274,7 +274,8 @@ The test runs the real installer and uninstaller against isolated macOS and
 Linux fixtures with fake Homebrew, Mise, `apt-get`, DNF, YUM, and Pacman
 commands.
 It requires a working Neovim executable to exercise the shared compatibility
-helper against simulated versions in an isolated process.
+helper against simulated versions in an isolated process, plus the platform
+C compiler and SDK to build and exercise the real exclusive-rename helper.
 It verifies fresh provisioning, manifest ownership, preflight failures,
 shared instruction ownership and migration conflicts, backup/link behavior,
 explicit runtime-skip setup, safe restoration,
@@ -296,6 +297,15 @@ newest numeric backup:
 ./uninstall.sh             # remove repository-owned symlinks
 ./uninstall.sh --restore   # remove links and restore safe, unambiguous backups
 ```
+
+`--restore` first builds a temporary helper with the platform C compiler (`cc`)
+and SDK already required for installation. It uses the native exclusive-rename
+operation so a file, directory, or symlink appearing at a restore destination
+cannot be overwritten or receive the backup as a nested entry. If the helper
+cannot be built, restoration stops before changing managed links or backups.
+The helper is removed on exit; ordinary uninstall does not require compilation.
+The destination filesystem must support exclusive rename. Unsupported operations
+fail with the backup preserved; restoration never falls back to copy-and-remove.
 
 Restoration never replaces an occupied path. If both a nested directory backup
 and a file backup exist, or a directory backup cannot replace its directory

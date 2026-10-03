@@ -30,6 +30,32 @@ local function configuration_variables(project)
   }
 end
 
+local function resolve_thread(option)
+  assert(coroutine.status(option) == 'suspended', 'If option is a thread it must be suspended')
+  local parent, is_main = coroutine.running()
+  assert(parent and not is_main, 'DAP thread options must run in a coroutine')
+  local resumed = false
+  local resume_error
+  -- Match nvim-dap's eval_option protocol: pass the waiting coroutine after it
+  -- yields, then return to the main loop before handling a fast-event result.
+  vim.schedule(function()
+    local ok, err = coroutine.resume(option, parent)
+    if not ok then
+      if resumed then error(err) end
+      resume_error = err
+      coroutine.resume(parent)
+    end
+  end)
+  local resolved = coroutine.yield()
+  resumed = true
+  if resume_error then error(resume_error) end
+  if vim.in_fast_event() then
+    vim.schedule(function() coroutine.resume(parent) end)
+    coroutine.yield()
+  end
+  return resolved
+end
+
 local function replace_configuration_variables(value, variables)
   if type(value) == 'string' then
     for placeholder, replacement in pairs(variables) do
@@ -37,7 +63,17 @@ local function replace_configuration_variables(value, variables)
     end
     return value
   end
+  if type(value) == 'function' or type(value) == 'thread' then
+    -- Resolve deferred values before native interpolation can use another buffer.
+    return function(...)
+      local resolved = value
+      if type(resolved) == 'function' then resolved = resolved(...) end
+      if type(resolved) == 'thread' then resolved = resolve_thread(resolved) end
+      return replace_configuration_variables(resolved, variables)
+    end
+  end
   if type(value) ~= 'table' then return value end
+  if value == require('dap').ABORT then return value end
 
   local replaced = {}
   for key, child in pairs(value) do
@@ -49,7 +85,7 @@ end
 local function with_configuration_values(config, variables, root, prepare)
   -- nvim-dap represents launch configurations with `inputs` as callable tables.
   -- Preserve that deferred expansion while freezing this buffer's values.
-  local transformed = replace_configuration_variables(vim.deepcopy(config), variables)
+  local transformed = replace_configuration_variables(config, variables)
   transformed = prepare(transformed)
   transformed.cwd = transformed.cwd or root
   local metatable = getmetatable(config)
@@ -57,12 +93,16 @@ local function with_configuration_values(config, variables, root, prepare)
 
   local transformed_metatable = vim.deepcopy(metatable)
   transformed_metatable.__call = function(_, ...)
-    local expanded = replace_configuration_variables(vim.deepcopy(config(...)), variables)
+    local expanded = replace_configuration_variables(config(...), variables)
     expanded = prepare(expanded)
     expanded.cwd = expanded.cwd or root
     return expanded
   end
   return setmetatable(transformed, transformed_metatable)
+end
+
+function M.prepare_config(config, project, prepare)
+  return with_configuration_values(config, configuration_variables(project), project.root, function(value) return prepare(value, project) end)
 end
 
 local function project_root_from_client(bufnr, client_name)
@@ -104,12 +144,7 @@ local function project_launch_configs(bufnr)
   for _, config in ipairs(configs) do
     if vim.tbl_contains(dap_config.launch_types, config.type) then
       local prepare = dap_config.prepare_launch or function(value, _) return value end
-      filtered[#filtered + 1] = with_configuration_values(
-        config,
-        configuration_variables(project),
-        project.root,
-        function(value) return prepare(value, project) end
-      )
+      filtered[#filtered + 1] = M.prepare_config(config, project, prepare)
     end
   end
   return filtered

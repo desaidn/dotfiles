@@ -47,11 +47,16 @@ vim.pack.add = capture_packages
 vim.api.nvim_create_user_command = capture_user_command
 package.loaded['custom.languages.dap'] = {
   ensure = function() end,
+  project = function() return package.loaded['custom.languages.context'].for_buffer() end,
+  prepare_config = function(config, project, prepare) return prepare(vim.deepcopy(config), project) end,
   register_buffer_setup = function(bufnr, setup) buffer_setups[bufnr] = setup end,
 }
-package.loaded.dap = { configurations = { python = { { request = 'launch' }, { request = 'attach' } } } }
+package.loaded.dap = {
+  configurations = { python = { { type = 'python', request = 'launch' }, { type = 'python', request = 'attach' } } },
+  providers = { configs = { ['dap.global'] = function() return package.loaded.dap.configurations.python end } },
+}
 for _, python in ipairs(explicit_pythons) do
-  table.insert(package.loaded.dap.configurations.python, { request = 'launch', python = python })
+  table.insert(package.loaded.dap.configurations.python, { type = 'python', request = 'launch', python = python })
 end
 package.preload['dap-python'] = function()
   dap_python = {
@@ -120,7 +125,7 @@ check('registers Python DAP only for Python buffers and initializes Mason debugp
   assert(setup_calls == 1, 'debugpy must initialize once for Python debug actions')
   assert(dap_python.adapter == debugpy_root .. '/venv/bin/python', dap_python.adapter)
   assert(dap_python.resolve_python() == project_root .. '/.venv/bin/python')
-  assert(package.loaded.dap.configurations.python[1].pythonPath() == project_root .. '/.venv/bin/python')
+  assert(package.loaded.dap.providers.configs['dap.global'](python)[1].pythonPath == project_root .. '/.venv/bin/python')
   assert(adapter.dap_by_ft.python.prepare_launch({}, { root = project_root }).pythonPath == project_root .. '/.venv/bin/python')
 
   vim.env.VIRTUAL_ENV = unrelated_venv

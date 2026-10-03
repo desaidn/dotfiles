@@ -14,30 +14,30 @@ A single `tmux.conf` file provides:
 - Directory preservation when creating new windows and panes
 - Consistent working directory context across tmux operations
 
-## Common Operations
+## Validation
 
-### Starting the fallback
+Run this from the repository root in a POSIX-compatible shell. It executes the
+tracked configuration on a fresh, isolated server so unsupported options and
+command errors fail the check. Its temporary pane runs only `cat`; cleanup
+targets only that test server.
 
-```bash
-tmux new-session -A -s dev
+```sh
+(
+  set -eu
+  check_dir=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-tmux-check.XXXXXX")
+  check_socket="$check_dir/server.sock"
+  trap 'tmux -S "$check_socket" kill-server 2>/dev/null || :; rm -f "$check_socket"; rmdir "$check_dir"' EXIT
+  tmux -S "$check_socket" -f /dev/null new-session -d -s config-check 'exec cat'
+  tmux -S "$check_socket" source-file "$PWD/tmux/tmux.conf"
+)
 ```
 
-### Testing Configuration Changes
-
-```bash
-# Reload tmux configuration in existing session
-tmux source-file ~/.config/tmux/tmux.conf
-
-# Or restart tmux completely
-tmux kill-server
-```
-
-### Verifying Configuration
-
-```bash
-# Check tmux configuration syntax
-tmux -f ~/.config/tmux/tmux.conf new-session -d -s test \; kill-session -t test
-```
+The `-f` option reads configuration only when a server starts, so creating a
+session on an existing server does not validate the supplied file. Never use an
+unscoped `tmux kill-server` as a validation or reload step; it destroys every
+session on that server. See the [tmux manual](https://github.com/tmux/tmux/blob/master/tmux.1)
+for server and configuration behavior. Daily startup and intentional live reload
+commands belong in [README.md](README.md).
 
 ## Architecture
 

@@ -3,16 +3,38 @@
 
 local gh = require('custom.lib.pack').gh
 
+local function selected_path(state)
+  local node = state.tree:get_node()
+  -- Source nodes use absolute paths; unnamed buffers and virtual groups do not.
+  if
+    not node
+    or (node.type ~= 'file' and node.type ~= 'directory' and node.type ~= 'link')
+    or type(node.path) ~= 'string'
+    or node.path ~= vim.fs.abspath(node.path)
+  then
+    vim.notify('Selected Neo-tree node has no filesystem path', vim.log.levels.INFO)
+    return nil
+  end
+  return node.path
+end
+
 local function copy_absolute_path(state)
-  local path = vim.fs.abspath(assert(state.tree:get_node()).path)
+  local path = selected_path(state)
+  if not path then return end
   vim.fn.setreg('+', path)
   print('Copied absolute path: ' .. path)
 end
 
 local function copy_relative_path(state)
-  local path = assert(vim.fs.relpath(state.path, assert(state.tree:get_node()).path))
-  vim.fn.setreg('+', path)
-  print('Copied relative path: ' .. path)
+  local path = selected_path(state)
+  if not path then return end
+  local relative = vim.fs.relpath(state.path, path)
+  if not relative then
+    vim.notify('Selected path is outside the Neo-tree root', vim.log.levels.WARN)
+    return
+  end
+  vim.fn.setreg('+', relative)
+  print('Copied relative path: ' .. relative)
 end
 
 vim.pack.add {
@@ -28,6 +50,10 @@ require('neo-tree').setup {
   window = {
     position = 'right',
     width = function() return math.floor(vim.o.columns * 0.25) end,
+    mappings = {
+      ['<leader>pa'] = { copy_absolute_path, desc = 'Copy [P]ath [A]bsolute' },
+      ['<leader>pr'] = { copy_relative_path, desc = 'Copy [P]ath [R]elative' },
+    },
   },
   default_component_configs = {
     icon = {
@@ -69,12 +95,6 @@ require('neo-tree').setup {
       leave_dirs_open = true,
     },
     use_libuv_file_watcher = true,
-    window = {
-      mappings = {
-        ['<leader>pa'] = { copy_absolute_path, desc = 'Copy [P]ath [A]bsolute' },
-        ['<leader>pr'] = { copy_relative_path, desc = 'Copy [P]ath [R]elative' },
-      },
-    },
   },
   event_handlers = {
     {

@@ -84,8 +84,12 @@ local setup_ok, setup_error = xpcall(function()
   fixture = assert(vim.uv.fs_realpath(fixture), 'failed to resolve fixture directory')
   local selected_directory = fixture .. '/selected-directory'
   local selected_file = fixture .. '/selected-file.txt'
+  local nested_file = selected_directory .. '/nested-file.txt'
   assert(vim.fn.mkdir(selected_directory, 'p') == 1, 'failed to create selected directory')
   create_file(selected_file)
+  create_file(nested_file)
+  local git_init = vim.system({ 'git', 'init', '--quiet', fixture }, { text = true }):wait()
+  assert(git_init.code == 0, git_init.stderr)
 
   dofile(nvim_root .. '/lua/kickstart/plugins/neo-tree.lua')
 
@@ -109,8 +113,9 @@ local setup_ok, setup_error = xpcall(function()
     function() return state.tree ~= nil and state.tree:get_node(selected_directory) ~= nil and state.tree:get_node(selected_file) ~= nil end
   )
 
-  local function invoke_mapping(lhs, node_path, expected)
-    assert(renderer.focus_node(state, node_path), 'failed to select ' .. node_path)
+  local function invoke_mapping(lhs, node_path, expected, source_state)
+    source_state = source_state or state
+    assert(renderer.focus_node(source_state, node_path), 'failed to select ' .. node_path)
     local mapping = vim.fn.maparg(lhs, 'n', false, true)
     assert(mapping.buffer == 1 and mapping.callback ~= nil, lhs .. ' is not a buffer-local Neo-tree mapping')
     vim.fn.setreg('+', 'not-copied')
@@ -166,6 +171,100 @@ local setup_ok, setup_error = xpcall(function()
     vim.wait(100)
     assert(vim.api.nvim_get_current_tabpage() == tab, 'opening a file jumped to another tab')
     assert(vim.api.nvim_buf_get_name(0) == selected_file, 'opening a file should retain upstream editor focus')
+  end)
+
+  for _, source in ipairs { 'buffers', 'git_status' } do
+    check('copies selected file, directory, and root paths in ' .. source, function()
+      for _, path in ipairs { selected_file, nested_file } do
+        local buf = vim.fn.bufadd(path)
+        vim.fn.bufload(buf)
+        vim.bo[buf].buflisted = true
+      end
+      command.execute { action = 'focus', source = source, dir = fixture }
+      local source_state = manager.get_state(source)
+      wait_for(
+        source .. ' did not load the fixture',
+        function() return source_state.tree and source_state.tree:get_node(selected_file) and source_state.tree:get_node(selected_directory) end
+      )
+      invoke_mapping('<leader>pa', selected_file, selected_file, source_state)
+      invoke_mapping('<leader>pr', selected_file, 'selected-file.txt', source_state)
+      invoke_mapping('<leader>pa', selected_directory, selected_directory, source_state)
+      invoke_mapping('<leader>pr', selected_directory, 'selected-directory', source_state)
+      invoke_mapping('<leader>pr', fixture, '.', source_state)
+    end)
+  end
+
+  check('leaves the clipboard unchanged for unnamed buffers and terminal groups', function()
+    local unnamed = vim.api.nvim_create_buf(true, false)
+    local terminal = vim.api.nvim_create_buf(true, false)
+    local terminal_name = 'term://' .. fixture .. '//123:test-terminal'
+    vim.api.nvim_buf_set_name(terminal, terminal_name)
+    command.execute { action = 'focus', source = 'buffers', dir = fixture }
+    local source_state = manager.get_state 'buffers'
+    wait_for(
+      'buffers source did not load virtual nodes',
+      function() return source_state.tree and source_state.tree:get_node(tostring(unnamed)) and source_state.tree:get_node 'Terminals' end
+    )
+    for _, node in ipairs { tostring(unnamed), 'Terminals', terminal_name } do
+      invoke_mapping('<leader>pa', node, 'not-copied', source_state)
+      invoke_mapping('<leader>pr', node, 'not-copied', source_state)
+    end
+    vim.api.nvim_buf_delete(unnamed, { force = true })
+    vim.api.nvim_buf_delete(terminal, { force = true })
+  end)
+
+  check('preserves the clipboard while a directory refresh displays an outside-root file', function()
+    command.execute { action = 'focus', source = 'filesystem', dir = fixture }
+    local source_state = manager.get_state 'filesystem'
+    wait_for(
+      'filesystem did not return to the original root',
+      function() return source_state.path == fixture and source_state.tree and source_state.tree:get_node(selected_file) end
+    )
+    assert(renderer.focus_node(source_state, selected_file))
+    assert(source_state.bind_to_cwd and source_state.async_directory_scan == 'auto', 'expected native cwd binding and asynchronous refresh')
+
+    local original_tab_cwd = vim.fn.getcwd(-1, 0)
+    local original_opendir = vim.uv.fs_opendir
+    local hold_results = true
+    local pending = {}
+    -- Delay real directory results so the previous tree stays visible during refresh.
+    local function delayed_opendir(path, callback, entries)
+      if path ~= selected_directory or type(callback) ~= 'function' then return original_opendir(path, callback, entries) end
+      return original_opendir(path, function(err, directory)
+        local function deliver() callback(err, directory) end
+        if hold_results then
+          pending[#pending + 1] = deliver
+        else
+          deliver()
+        end
+      end, entries)
+    end
+    vim.uv.fs_opendir = delayed_opendir
+    local ok, err = pcall(function()
+      vim.cmd.tcd(selected_directory)
+      wait_for('directory refresh did not reach its delayed scan', function() return source_state.path == selected_directory and #pending > 0 end)
+      local node = source_state.tree:get_node(selected_file)
+      assert(node and node.path == selected_file, 'refresh did not retain the previously rendered file')
+      assert(vim.fs.relpath(source_state.path, node.path) == nil, 'selected file is not outside the new root')
+      invoke_mapping('<leader>pr', selected_file, 'not-copied', source_state)
+    end)
+
+    hold_results = false
+    vim.uv.fs_opendir = original_opendir
+    for _, callback in ipairs(pending) do
+      vim.schedule(callback)
+    end
+    local drained, drain_error = pcall(function()
+      if source_state.path ~= selected_directory then return end
+      wait_for(
+        'directory refresh did not finish after releasing its scan',
+        function() return source_state.tree and source_state.tree:get_node(nested_file) and not source_state.tree:get_node(selected_file) end
+      )
+    end)
+    local restored, restore_error = pcall(vim.cmd.tcd, original_tab_cwd)
+    assert(restored, restore_error)
+    assert(drained, drain_error)
+    assert(ok, err)
   end)
 end, debug.traceback)
 

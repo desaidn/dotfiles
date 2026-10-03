@@ -1,12 +1,28 @@
 # High-fidelity LSP and DAP for the primary language set
 
-Status: investigation and implementation recommendation
-Evidence checked: 2026-08-24
+Status: historical investigation and implementation recommendation, with later partial updates
+Original upstream evidence checked: 2026-08-24
 Scope: Rust, Kotlin, Java, Python, TypeScript/JavaScript for Node.js and browsers, Fish, and Bash/POSIX `sh` in this repository's Neovim 0.12.5 environment. Zsh is deliberately excluded from this implementation scope.
+
+Reading note added 2026-10-03: this report preserves the investigation and staged
+recommendations that informed subsequent implementation. Its inventory mixes
+original observations with later updates and is not a description of the current
+configuration. In particular, Python is no longer the only configured debugger:
+Java, Rust, JavaScript/TypeScript, and C/C++ now have integrations, and Fish/Bash
+language support has been added. Use the [Neovim guide](../nvim/README.md) for
+current behavior and [the active language-support brief](todos/09-complete-primary-language-support.md)
+for remaining acceptance work. This clarification does not claim that the
+historical integration matrix has been fully validated.
 
 ## Executive decision
 
-The present configuration has a sound shared base—native Neovim LSP, `nvim-dap`, Mason provisioning, project runtimes in Mise, and one formatting pipeline—but it does not yet provide high-fidelity, cross-project language and debug support. It enables generic LSPs for all five language families, while DAP is configured only for Python. Several generic LSP choices also leave important server-specific features inaccessible.
+At the initial investigation, the configuration had a sound shared base—native
+Neovim LSP, `nvim-dap`, Mason provisioning, project runtimes in Mise, and one
+formatting pipeline—but did not yet provide the intended cross-project language
+and debug support. Generic LSPs were enabled for all five language families,
+while DAP was configured only for Python. Several generic LSP choices also left
+important server-specific features inaccessible. The recommendations below
+describe the direction chosen from that starting point.
 
 The target should remain native-first:
 
@@ -40,6 +56,12 @@ For DAP, it should cover launch and attach where the adapter supports them; norm
 The result will still not be a single proprietary, polyglot semantic index. LSP clients can aggregate UI results from attached servers, but a refactor is performed by the server that owns the source file and workspace. Mixed Java/Kotlin and cross-runtime TypeScript behavior therefore need explicit fixture tests rather than assumptions.
 
 ## Current-state inventory
+
+This historical inventory retains its heading for existing links. It contains
+observations from different implementation stages; the "current" labels below
+refer to those observations, not today's checkout. The maintained inventory is
+the [language configuration](../nvim/lua/custom/languages/config.lua) and its
+explicitly selected adapters.
 
 ### Shared editor layer
 

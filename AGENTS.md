@@ -23,6 +23,12 @@ Keep provisioning ownership explicit:
   duplicate Mason-managed LSPs, formatters, linters, or debuggers in the
   machine package list.
 
+The user reviewed the dependency-reduction proposals in the
+[October 2026 audit](docs/defect-audit-2026-10-03.md#dependency-proposals-considered-and-retained)
+and chose to retain every existing dependency. Preserve those choices; the
+native-first philosophy does not independently authorize removing or replacing
+the retained tools.
+
 Keep compatibility minimums separate from exact provisioning pins. Raise a
 minimum only for a required capability or documented incompatibility; recommend
 latest stable releases without adding network checks or update warnings to
@@ -218,6 +224,11 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 - If nested file and directory backups compete, or a directory backup cannot
   replace a directory containing user-owned entries, preserve the active group
   and every backup and exit nonzero.
+- Restoration must use an atomic, exact-path, no-replace rename. Build its
+  temporary native helper with the already-required platform C compiler before
+  any `--restore` mutation; failure must preserve all managed links and backups.
+  Keep the helper embedded in `uninstall.sh` and remove it on exit. Ordinary
+  uninstall must remain independent of compilation.
 - Leave older backups, foreign links, installed packages and runtimes,
   per-machine activation files, and unrelated state under
   `~/.local/share/dotfiles/` untouched. A successful second run is a no-op.

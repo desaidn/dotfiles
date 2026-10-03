@@ -52,6 +52,30 @@ local function debugpy_python()
   return vim.fs.joinpath(root, 'venv', directory, executable)
 end
 
+local function environment_file(path, root)
+  path = vim.fs.normalize(path)
+  if path:sub(1, 1) == '/' or path:match '^%a:/' then return path end
+  return vim.fs.normalize(vim.fs.joinpath(root, path))
+end
+
+local function prepare_launch(config, project)
+  if not config.pythonPath and not config.python then config.pythonPath = project_python(project) end
+  local env_file = config.envFile or '.env'
+  if type(env_file) ~= 'string' or env_file:find('${', 1, true) then
+    -- Resolve native DAP inputs/environment variables before classifying a path
+    -- as relative; the project root was captured before configuration selection.
+    config.envFile = function()
+      local dap = require 'dap'
+      local expanded = dap.listeners.on_config['dap.expand_variable'] { envFile = env_file }
+      if expanded.envFile == dap.ABORT then return dap.ABORT end
+      return environment_file(expanded.envFile or '.env', project.root)
+    end
+  else
+    config.envFile = environment_file(env_file, project.root)
+  end
+  return config
+end
+
 local function ensure_debugpy()
   if did_setup then return end
 
@@ -60,10 +84,24 @@ local function ensure_debugpy()
 
   local dap_python = require 'dap-python'
   dap_python.setup(debugpy_python())
-  -- nvim-dap evaluates configuration functions before nvim-dap-python
-  -- enriches them, so this wins over unrelated active environments.
-  for _, config in ipairs(require('dap').configurations.python or {}) do
-    if config.request == 'launch' and not config.pythonPath and not config.python then config.pythonPath = project_python end
+  local dap = require 'dap'
+  local shared = require 'custom.languages.dap'
+  local global_configs = dap.providers.configs['dap.global']
+  dap.providers.configs['dap.global'] = function(bufnr)
+    local configs = global_configs(bufnr)
+    if vim.bo[bufnr].filetype ~= 'python' then return configs end
+    local project = shared.project(bufnr)
+    if not project then
+      local path = vim.api.nvim_buf_get_name(bufnr)
+      if path == '' or vim.bo[bufnr].buftype ~= '' then return configs end
+      project = { root = vim.fs.dirname(path), path = path }
+    end
+    -- Providers receive the source buffer before an asynchronous picker can
+    -- change it. Copy defaults so future runs still resolve their own project.
+    return vim.tbl_map(function(config)
+      if config.type ~= 'python' and config.type ~= 'debugpy' then return config end
+      return shared.prepare_config(config, project, prepare_launch)
+    end, configs)
   end
   dap_python.resolve_python = project_python
   did_setup = true
@@ -103,6 +141,7 @@ local function debug_test(action)
       test_runner = runner,
       config = function(config)
         config.cwd, config.pythonPath = project.root, python
+        config = prepare_launch(config, project)
         if runner == 'unittest' or runner == 'django' then
           -- expand('%:.') can retain an absolute symlink spelling after chdir.
           local relative = assert(vim.fs.relpath(project.root, project.path))
@@ -148,10 +187,7 @@ local M = {
       lsp_client = 'basedpyright',
       root_profile = root_profile,
       launch_types = { 'python', 'debugpy' },
-      prepare_launch = function(config, project)
-        if not config.pythonPath and not config.python then config.pythonPath = project_python(project) end
-        return config
-      end,
+      prepare_launch = prepare_launch,
     },
   },
 }

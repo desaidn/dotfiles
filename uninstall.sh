@@ -152,6 +152,61 @@ mark_restore_blocked() {
     RESTORE_STATUS=1
 }
 
+RESTORE_HELPER_DIRECTORY=""
+
+cleanup_restore_helper() {
+    if [[ -n "$RESTORE_HELPER_DIRECTORY" ]]; then
+        rm -f "$RESTORE_HELPER_DIRECTORY/rename-backup"
+        rmdir "$RESTORE_HELPER_DIRECTORY" 2>/dev/null || true
+    fi
+}
+trap cleanup_restore_helper EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+prepare_restore_helper() {
+    command -v cc >/dev/null 2>&1 || {
+        echo "  restore requires the platform C compiler (cc); backups and managed links are preserved" >&2
+        return 1
+    }
+    RESTORE_HELPER_DIRECTORY="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-restore.XXXXXX")" || return 1
+
+    # Portable mv can nest into a directory created after our existence check;
+    # macOS mv also lacks GNU's -T. Use an atomic, exact-path, no-replace rename.
+    # The platform compiler/SDK is already required by install.sh. Keep this
+    # helper temporary and self-contained; never fall back to copy-and-remove.
+    if ! cc -x c -o "$RESTORE_HELPER_DIRECTORY/rename-backup" - <<'C'
+#define _GNU_SOURCE
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
+
+int main(int argc, char **argv) {
+    if (argc != 3) return 2;
+#if defined(__APPLE__)
+    int result = renamex_np(argv[1], argv[2], RENAME_EXCL);
+#elif defined(__linux__)
+    int result = renameat2(AT_FDCWD, argv[1], AT_FDCWD, argv[2], RENAME_NOREPLACE);
+#else
+#error "Backup restoration requires macOS or Linux exclusive rename support"
+#endif
+    if (result != 0) {
+        fprintf(stderr, "exclusive backup rename failed: %s\n", strerror(errno));
+        return 1;
+    }
+    return 0;
+}
+C
+    then
+        rm -f "$RESTORE_HELPER_DIRECTORY/rename-backup"
+        echo "  could not build the exclusive-rename helper; backups and managed links are preserved" >&2
+        return 1
+    fi
+    [[ -x "$RESTORE_HELPER_DIRECTORY/rename-backup" ]]
+}
+
 move_backup() {
     local backup="$1" destination="$2"
 
@@ -159,8 +214,7 @@ move_backup() {
         return 1
     fi
     mkdir -p "$(dirname "$destination")" || return 1
-    mv -n "$backup" "$destination" || return 1
-    [[ ! -e "$backup" && ! -L "$backup" ]]
+    "$RESTORE_HELPER_DIRECTORY/rename-backup" "$backup" "$destination"
 }
 
 restore_direct() {
@@ -373,6 +427,7 @@ manage_workflow_link() {
 
 RESTORE_STATUS=0
 if (( RESTORE_BACKUPS == 1 )); then
+    prepare_restore_helper || die "unable to prepare backup restoration; no managed links or backups were changed"
     echo "Restoring the newest unambiguous backups:"
     restore_direct fish .config/fish
     restore_direct ghostty .config/ghostty

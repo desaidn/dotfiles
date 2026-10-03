@@ -53,7 +53,12 @@ for paths and migration behaviour. `uv` remains in the Brewfile as an independen
 Python development CLI; it does not own this workflow or the tracked Python
 runtime.
 
-Ghostty's tracked configuration also selects **JetBrains Mono**. Homebrew maps that presentation dependency to the macOS-only [`font-jetbrains-mono`](https://formulae.brew.sh/cask/font-jetbrains-mono) cask. `install.sh` accepts either its Brew receipt or a matching font file in the standard macOS font directories.
+Ghostty's tracked configuration also selects **JetBrains Mono**. Homebrew maps
+that presentation dependency to the macOS-only
+[`font-jetbrains-mono`](https://formulae.brew.sh/cask/font-jetbrains-mono) cask.
+`install.sh` requires a matching font file in the standard macOS font directories,
+including a manually installed font. A Brew receipt whose font files are missing
+does not satisfy validation; the installer stops with a repair instruction.
 
 One direct repository workflow is outside `install.sh`: [`docs/agents/issue-tracker.md`](agents/issue-tracker.md) requires the `gh` CLI for all issue operations. Homebrew's [`gh`](https://formulae.brew.sh/formula/gh) formula publishes macOS and Linux bottles.
 
@@ -94,23 +99,25 @@ selection; the capability check does not duplicate its distribution policy.
 
 ## Installation-set implication
 
-The full Homebrew-managed application set implied by the current configuration
-and its brew-first policy is:
-
-```text
-git fish zsh neovim herdr tmux lazygit hunk mise atuin gh ripgrep
-tree-sitter-cli uv
-```
+The [root dependency inventory](../README.md#homebrew-applications) and
+[Brewfile](../Brewfile) own the complete Homebrew-managed application set.
+That set includes CMake and Ninja for project builds; they are distinct from
+the native compiler and SDK needed to bootstrap Homebrew.
 
 Bootstrap/system Git and Zsh can make the first run possible before their
 formulae are installed. On Linux, the Brewfile additionally installs `xclip`
 and `wl-clipboard`. Haskell tooling is no longer enabled, so `ghcup` is not
 provisioned or required; existing system toolchains are left in place. Add the `ghostty` and
-`font-jetbrains-mono` casks only on macOS. Keep compiler/build tools outside
-the Homebrew set at the platform-bootstrap layer, and do not add `fd` solely
+`font-jetbrains-mono` casks only on macOS. Keep native compilers, SDKs, and
+bootstrap development tools at the platform-bootstrap layer, and do not add `fd` solely
 for an unused alternate finder path. Provision language runtimes through Mise
 before Mason's first full inventory install; treat clipboard provisioning as
 OS-specific and Expect as a development-test dependency.
+
+The [October 2026 audit](defect-audit-2026-10-03.md#dependency-proposals-considered-and-retained)
+considered further dependency reductions. The user directed that every existing
+dependency remain, including both Prettier runners, FFF and Telescope with its
+native sorter, nvim-autopairs, and both Linux clipboard providers.
 
 The Brewfile is applied with `brew bundle check --no-upgrade` followed, only
 when needed, by `brew bundle install --no-upgrade`. This avoids requesting a

@@ -40,7 +40,7 @@ constraints, and required validation.
 - `tests/flatten_swap_spec.lua` - Two-Neovim regression proving that a live swap collision cannot abort a production Flatten handoff after Neovim installs the requested buffer
 - `tests/pack_spec.lua` - Headless checks for native package build hooks, including nvim-treesitter parser/query installation and updates
 - `tests/neovim_spec.lua` - Headless checks for Neovim version boundaries and consistent startup/health behavior
-- `tests/neo_tree_spec.lua` - Headless regression harness for selected-node path copying and refreshing a visible filesystem tree after its watcher misses an external change
+- `tests/neo_tree_spec.lua` - Real-plugin regression harness for selected-node path copying across filesystem, buffers, and Git status, virtual-node handling, and refresh after a missed filesystem change
 - `tests/languages/` - Headless language-tooling regression harnesses for configuration, project context, JDTLS, linting, DAP, JavaScript/TypeScript, Python, Rust, and C/C++ behavior
 - `tests/terminal_tool_hunk_render.exp` and `tests/terminal_tool_hunk_render_init.lua` - Real-PTY regression harness loading the production Hunk declaration and proving two sessions render without graphics-protocol artifacts, survive switching and resize, isolate process exit, and stop test-owned processes during teardown
 - `nvim-pack-lock.json` - Native `vim.pack` plugin version lockfile
@@ -59,8 +59,9 @@ bundled friendly-snippets discovery stays disabled.
 Use the [documented keybindings](README.md#key-bindings). The editing and
 debugging interface is language-neutral: language plugins may expose
 backend-specific commands, but must not claim a separate keymap namespace or
-override shared LSP mappings. Keep DAP lazy on first use, with the Rust
-attachment initialization needed by rustaceanvim.
+override shared LSP mappings. Keep DAP lazy on first use except for Java's
+project FileType initialization before JDTLS starts and the Rust attachment
+initialization needed by rustaceanvim.
 
 ## Development Workflows
 
@@ -97,6 +98,11 @@ Run the matching checks when their surface changes:
 - `nvim/tests/languages/lint_spec.lua`, `python_runtime_spec.lua`, and `tests/neo_tree_spec.lua` exercise installed plugins; run them after the normal editor dependencies are available. They stub provisioning and external actions, not the Neovim APIs under test.
 - `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` for real Hunk rendering, switching, isolated exit, resize, and host tmux prefix routing. It requires Expect, tmux, Git, Hunk, and Neovim on `PATH`.
 
+Installed-plugin tests may write Neovim state or cache files. In a sandbox, set
+`XDG_STATE_HOME` and `XDG_CACHE_HOME` to writable temporary directories while
+retaining the installed `XDG_DATA_HOME` so the pinned plugins remain available.
+Do not run normal startup provisioning merely to execute a harness.
+
 ### LSP and Language Support
 
 Three config layers apply, from lowest to highest priority:
@@ -132,6 +138,15 @@ buffer is valid, loaded, and still uses the requested language before attaching;
 apply buffer-local settings to that buffer explicitly.
 
 Java and Rust are intentional lifecycle exceptions: nvim-jdtls and rustaceanvim own their respective language-server startup, so neither server appears in generic `vim.lsp.enable` configuration. Java's adapter starts JDTLS per project and initializes its DAP integration before attachment.
+
+Python generated defaults and project launch files must freeze the initiating
+buffer's project context before asynchronous configuration selection. Reuse the
+shared DAP preparation helper for source/workspace variables; Python owns its
+interpreter and environment-file policy. Resolve omitted/relative `envFile`
+against the source project (the selected test root for test actions), preserving
+explicit absolute paths and native deferred inputs. Keep the real-plugin Python
+regression: native variable expansion and dap-python enrichment are part of the
+contract, so stub-only tests do not establish correct environment-file behavior.
 
 Preserve the [TypeScript semantic-ownership contract](README.md#language-project-requirements):
 only the exact root-local compiler/language service may supply project

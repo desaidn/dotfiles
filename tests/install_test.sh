@@ -73,7 +73,7 @@ assert_log_prefix_count() {
 
 write_fake_commands() {
     local command_name command_path
-    for command_name in bash cat chmod cp date dirname env ln readlink mkdir mktemp mv rmdir unlink; do
+    for command_name in bash cat chmod cp date dirname env ln readlink mkdir mktemp mv rm rmdir unlink; do
         command_path="$(command -v "$command_name")"
         ln -s "$command_path" "$FIXTURE_FAKE_BIN/$command_name"
     done
@@ -193,6 +193,11 @@ case "${0##*/}" in
         compiler="${0##*/}"
         language=c
         [[ "$compiler" == "cc" ]] || language=c++
+        if [[ "$compiler" == cc && "${4:-}" == */dotfiles-restore.*/rename-backup ]]; then
+            [[ ! -e "$DOTFILES_TEST_STATE/broken-cc" ]] || exit 1
+            printf 'cc build restore helper\n' >>"$DOTFILES_TEST_LOG"
+            exec "$DOTFILES_TEST_REAL_CC" "$@"
+        fi
         [[ "$*" == "-x $language -o /dev/null -" ]] || exit 2
         source="$(cat)"
         [[ "$source" == *'#include <'* ]] || exit 2
@@ -609,6 +614,7 @@ new_fixture() {
     FIXTURE_CODEX_DIRECTORY="$FIXTURE_HOME/.codex"
     FIXTURE_PI_DIRECTORY="$FIXTURE_HOME/.pi/agent"
     FIXTURE_REAL_NVIM="$(command -v nvim)"
+    FIXTURE_REAL_CC="$(command -v cc)"
     if [[ -n "$package_manager" ]]; then
         FIXTURE_PACKAGE_MANAGER="$package_manager"
     elif [[ "$os_name" == "Linux" ]]; then
@@ -626,6 +632,7 @@ new_fixture() {
         "$FIXTURE_HOME" \
         "$FIXTURE_FAKE_BIN" \
         "$FIXTURE_STATE" \
+        "$FIXTURE_ROOT/tmp" \
         "$FIXTURE_CALLER_DIR" \
         "$FIXTURE_APPLICATION_DIR" \
         "$FIXTURE_FONT_DIR"
@@ -692,13 +699,15 @@ run_uninstaller() {
     shift
 
     if HOME="$FIXTURE_HOME" \
+        TMPDIR="$FIXTURE_ROOT/tmp" \
         CODEX_HOME="$FIXTURE_CODEX_DIRECTORY" \
         PI_CODING_AGENT_DIR="$FIXTURE_PI_DIRECTORY" \
-        PATH="$FIXTURE_FAKE_BIN:/usr/bin:/bin" \
+        PATH="$FIXTURE_FAKE_BIN${FIXTURE_SYSTEM_PATH:+:$FIXTURE_SYSTEM_PATH}" \
         DOTFILES_TEST_FAKE_BIN="$FIXTURE_FAKE_BIN" \
         DOTFILES_TEST_GENERIC_TEMPLATE="$FIXTURE_GENERIC_TEMPLATE" \
         DOTFILES_TEST_LOG="$FIXTURE_LOG" \
         DOTFILES_TEST_REPO_ROOT="$REPO_ROOT" \
+        DOTFILES_TEST_REAL_CC="$FIXTURE_REAL_CC" \
         DOTFILES_TEST_STATE="$FIXTURE_STATE" \
         "$REPO_ROOT/uninstall.sh" "$@" >"$FIXTURE_ROOT/uninstall.out" 2>&1
     then
@@ -1354,6 +1363,132 @@ test_uninstall_restores_latest_backups() {
     pass "uninstall restores the newest safe backups without clobbering user state"
 }
 
+test_uninstall_preserves_backups_when_destination_appears() {
+    local scope competitor target backup
+
+    for scope in direct leaf container; do
+        for competitor in directory file symlink broken-symlink; do
+            new_fixture "uninstall-race-$scope-$competitor" Darwin
+            case "$scope" in
+                direct)
+                    target="$FIXTURE_HOME/.config/fish"
+                    backup="$target.bak.1"
+                    mkdir -p "$backup"
+                    printf 'original directory\n' >"$backup/original"
+                    ln -s "$REPO_ROOT/fish" "$target"
+                    ;;
+                leaf)
+                    target="$FIXTURE_HOME/.config/herdr/config.toml"
+                    backup="$target.bak.1"
+                    mkdir -p "${target%/*}"
+                    printf 'original file\n' >"$backup"
+                    ln -s "$REPO_ROOT/herdr/config.toml" "$target"
+                    ;;
+                container)
+                    target="$FIXTURE_HOME/.config/mise/conf.d"
+                    backup="$target.bak.1"
+                    mkdir -p "$target" "$FIXTURE_HOME/user-mise"
+                    printf 'original symlink target\n' >"$FIXTURE_HOME/user-mise/original"
+                    ln -s "$FIXTURE_HOME/user-mise" "$backup"
+                    ln -s "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" "$target/00-dotfiles.toml"
+                    ;;
+            esac
+            printf '%s\n' "$target" >"$FIXTURE_STATE/restore-race-target"
+            printf '%s\n' "$competitor" >"$FIXTURE_STATE/restore-race-type"
+            mkdir -p "$FIXTURE_HOME/competing-directory"
+            ln -s "$(readlink "$FIXTURE_FAKE_BIN/mkdir")" "$FIXTURE_FAKE_BIN/mkdir-real"
+            unlink "$FIXTURE_FAKE_BIN/mkdir"
+            cat >"$FIXTURE_FAKE_BIN/mkdir" <<'SCRIPT'
+#!/usr/bin/env bash
+set -eu
+"$DOTFILES_TEST_FAKE_BIN/mkdir-real" "$@"
+IFS= read -r target <"$DOTFILES_TEST_STATE/restore-race-target"
+IFS= read -r competitor <"$DOTFILES_TEST_STATE/restore-race-type"
+if [[ "$*" == "-p ${target%/*}" && ! -e "$target" && ! -L "$target" ]]; then
+    case "$competitor" in
+        directory) "$DOTFILES_TEST_FAKE_BIN/mkdir-real" "$target" ;;
+        file) printf 'competing file\n' >"$target" ;;
+        symlink) ln -s "$HOME/competing-directory" "$target" ;;
+        broken-symlink) ln -s "$HOME/missing-directory" "$target" ;;
+    esac
+    printf 'restore race injected\n' >>"$DOTFILES_TEST_LOG"
+fi
+SCRIPT
+            chmod +x "$FIXTURE_FAKE_BIN/mkdir"
+
+            run_uninstaller 1 --restore
+
+            assert_log_count 1 'restore race injected' "$FIXTURE_LOG"
+            assert_exists "$backup"
+            case "$scope" in
+                direct) assert_eq 'original directory' "$(cat "$backup/original")" 'directory backup changed' ;;
+                leaf) assert_eq 'original file' "$(cat "$backup")" 'file backup changed' ;;
+                container) assert_symlink "$backup" "$FIXTURE_HOME/user-mise" ;;
+            esac
+            case "$competitor" in
+                directory)
+                    [[ -d "$target" && ! -L "$target" ]] || fail 'competing directory changed'
+                    assert_not_exists "$target/${backup##*/}"
+                    ;;
+                file) assert_eq 'competing file' "$(cat "$target")" 'competing file changed' ;;
+                symlink)
+                    assert_symlink "$target" "$FIXTURE_HOME/competing-directory"
+                    assert_not_exists "$FIXTURE_HOME/competing-directory/${backup##*/}"
+                    ;;
+                broken-symlink) assert_symlink "$target" "$FIXTURE_HOME/missing-directory" ;;
+            esac
+            grep -Fq "restore blocked:  $backup could not be restored to $target" "$FIXTURE_ROOT/uninstall.out" ||
+                fail 'raced restore did not report the preserved backup'
+            if grep -Fq "restored:         $target" "$FIXTURE_ROOT/uninstall.out"; then
+                fail 'raced restore falsely reported success'
+            fi
+            if compgen -G "$FIXTURE_ROOT/tmp/dotfiles-restore.*" >/dev/null; then
+                fail 'restore left its temporary helper behind'
+            fi
+        done
+    done
+    pass "raced restores preserve backups and competing files, directories, and symlinks"
+}
+
+test_uninstall_preserves_links_when_restore_compilation_is_unavailable() {
+    local failure
+    for failure in missing broken; do
+        new_fixture "uninstall-compiler-$failure" Darwin
+        mkdir -p "$FIXTURE_HOME/.config/fish.bak.1" \
+            "$FIXTURE_HOME/.config/herdr" "$FIXTURE_HOME/.config/mise/conf.d" \
+            "$FIXTURE_HOME/user-mise"
+        printf 'original directory\n' >"$FIXTURE_HOME/.config/fish.bak.1/original"
+        printf 'original file\n' >"$FIXTURE_HOME/.config/herdr/config.toml.bak.1"
+        ln -s "$REPO_ROOT/fish" "$FIXTURE_HOME/.config/fish"
+        ln -s "$REPO_ROOT/nvim" "$FIXTURE_HOME/.config/nvim"
+        ln -s "$REPO_ROOT/herdr/config.toml" "$FIXTURE_HOME/.config/herdr/config.toml"
+        ln -s "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml"
+        ln -s "$FIXTURE_HOME/user-mise" "$FIXTURE_HOME/.config/mise/conf.d.bak.1"
+        if [[ "$failure" == missing ]]; then
+            unlink "$FIXTURE_FAKE_BIN/cc"
+            FIXTURE_SYSTEM_PATH=""
+        else
+            : >"$FIXTURE_STATE/broken-cc"
+        fi
+
+        run_uninstaller 1 --restore
+
+        assert_symlink "$FIXTURE_HOME/.config/fish" "$REPO_ROOT/fish"
+        assert_symlink "$FIXTURE_HOME/.config/nvim" "$REPO_ROOT/nvim"
+        assert_symlink "$FIXTURE_HOME/.config/herdr/config.toml" "$REPO_ROOT/herdr/config.toml"
+        assert_symlink "$FIXTURE_HOME/.config/mise/conf.d/00-dotfiles.toml" "$REPO_ROOT/mise/conf.d/00-dotfiles.toml"
+        assert_eq 'original directory' "$(cat "$FIXTURE_HOME/.config/fish.bak.1/original")" 'directory backup changed'
+        assert_eq 'original file' "$(cat "$FIXTURE_HOME/.config/herdr/config.toml.bak.1")" 'file backup changed'
+        assert_symlink "$FIXTURE_HOME/.config/mise/conf.d.bak.1" "$FIXTURE_HOME/user-mise"
+        grep -Fq 'backups and managed links are preserved' "$FIXTURE_ROOT/uninstall.out" ||
+            fail 'missing restore capability did not explain its recovery behavior'
+        if compgen -G "$FIXTURE_ROOT/tmp/dotfiles-restore.*" >/dev/null; then
+            fail 'failed restore left its temporary helper behind'
+        fi
+    done
+    pass "unavailable restore compilation preserves managed links and every backup"
+}
+
 test_uninstall_blocks_unsafe_or_ambiguous_restores() {
     local parent_backup
 
@@ -1940,6 +2075,8 @@ test_uninstall_cli_is_safe
 test_install_and_uninstall_reject_unsafe_homes
 test_uninstall_removes_only_owned_links
 test_uninstall_restores_latest_backups
+test_uninstall_preserves_backups_when_destination_appears
+test_uninstall_preserves_links_when_restore_compilation_is_unavailable
 test_uninstall_blocks_unsafe_or_ambiguous_restores
 test_equivalent_relative_links_are_idempotent
 test_link_preflight_prevents_partial_configuration

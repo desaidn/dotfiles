@@ -49,14 +49,23 @@ unowned, and Deno workspaces receive neither client.
 
 Python DAP uses Mason's debugpy adapter
 while debug targets use their project environments. Both `python` and `debugpy`
-project launch types are supported. Python test commands initialize the debugger
-on first use and select the runner, test target, and directory from the source
+project launch types are supported. Generated file launches and project launch
+files capture the source buffer's project before configuration selection; an
+unrelated editor directory or later buffer switch does not change their default
+working directory or interpreter. Omitted `envFile` reads that project's `.env`,
+and relative `envFile` paths are resolved from the project root, independently
+of an explicit launch `cwd`. Absolute paths, workspace/environment variables,
+deferred inputs, and explicit interpreter/directory settings remain supported.
+
+Python test commands initialize the debugger on first use and select the runner,
+test target, and directory from the source
 project; changing the editor's directory is unnecessary. The nearest test or
 project marker sets the test directory, so nested `pytest.ini` or `manage.py`
 files can change it without changing the project interpreter or `launch.json`
-lookup. Explicit `python` or `pythonPath` launch
-settings take precedence. JavaScript/TypeScript DAP
-uses Mason's js-debug adapter while projects own non-trivial launch
+lookup. Test actions read `.env` from that selected test directory. Explicit
+`python` or `pythonPath` launch settings take precedence.
+
+JavaScript/TypeScript DAP uses Mason's js-debug adapter while projects own non-trivial launch
 configuration. Restart Neovim after changing a project's installed TypeScript
 version so its semantic route is recalculated.
 
@@ -271,8 +280,13 @@ if they prevent a finished tool's tab from closing safely.
 - `<leader>e` - Toggle neo-tree on the right and reveal the current file
 - `?` - Show explorer help
 - `a` / `d` / `r` - Add, delete, or rename the selected file
-- `<Tab>` - Cycle filesystem, buffers, and git-status sources
-- `<leader>pa` / `<leader>pr` - Copy the selected file or directory's absolute/tree-root-relative path
+- `<` / `>` - Switch to the previous/next filesystem, buffers, or git-status source
+- `<leader>pa` / `<leader>pr` - Copy the selected file or directory's absolute/source-root-relative path in any of the three sources
+
+Copying the displayed source root produces `.` for the relative path. Unnamed
+buffers, terminal entries, and virtual groups have no filesystem path; selecting
+one leaves the clipboard unchanged and shows a message. Relative copying also
+leaves the clipboard unchanged if the selected path is outside the source root.
 
 The explorer uses text symbols and the main colorscheme's Git status colors;
 no Nerd Font is required.
@@ -298,9 +312,11 @@ Formatting also runs on save unless disabled by the language configuration.
 - `F1` / `F2` / `F3` - Step into, over, or out
 - `F7` - Toggle the debugger UI and inspect the last session result
 
-Debugging loads on first use and selects `launch.json` from the current
-buffer's language-specific project root. Rust also initializes DAP when
-rust-analyzer attaches so rustaceanvim can create CodeLLDB configurations.
+Debugging normally loads on first use and selects `launch.json` from the current
+buffer's language-specific project root. Java initializes DAP before starting
+JDTLS for a Java project so its adapter and generated-main provider are available.
+Rust initializes DAP when rust-analyzer attaches so rustaceanvim can create
+CodeLLDB configurations.
 Python test actions are available through `:DapPythonTestClass` and
 `:DapPythonTestMethod`. Rust exposes additional actions through
 `:RustLsp runnables`, `:RustLsp testables`, `:RustLsp debuggables`,

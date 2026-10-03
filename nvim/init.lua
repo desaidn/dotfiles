@@ -331,8 +331,8 @@ do
   --  To update plugins, run
   --    :lua vim.pack.update()
   --
-  --  Build hooks for plugins that need native binaries or parser updates live in
-  --  lua/custom/lib/pack.lua and run after install/update via PackChanged.
+  --  Native binary build hooks live in lua/custom/lib/pack.lua. Parser update
+  --  hooks belong to lua/custom/languages/treesitter.lua; both use PackChanged.
   require('custom.lib.pack').setup()
 end
 
