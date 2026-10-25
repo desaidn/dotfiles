@@ -4,6 +4,9 @@ Personal config monorepo. Clone into a directory such as `~/dotfiles`, run `./in
 
 The setup is designed around one uniform code interface: Herdr is the daily workspace manager, Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. Tmux remains available as a deliberate fallback and compatibility multiplexer. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
 
+Ghostty and Herdr remain the work terminal and multiplexer. [Rex](rex/README.md)
+is a personal experiment that could eventually replace both.
+
 ## Layout
 
 | Source              | Target                       | Notes                                                     |
@@ -16,12 +19,13 @@ The setup is designed around one uniform code interface: Herdr is the daily work
 | `mise/conf.d/00-dotfiles.toml` | `~/.config/mise/conf.d/00-dotfiles.toml` | Global runtime defaults; user config can override them. |
 | `docs/agents/development-workflow.md` | Harness-global instruction files | Shared workflow, automatically loaded by Codex, Pi, and Claude Code; paths below. |
 | `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack`.           |
+| `rex/macos.sh`      | macOS `com.superlogical.rex` preferences | Manually applied appearance settings; personal experiment. |
 | `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer with 1-indexed windows and panes.    |
 | `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
 
 Usage guides: [Neovim](nvim/README.md), [Herdr](herdr/README.md),
 [tmux](tmux/README.md), [LazyGit](lazygit/README.md), [Fish](fish/README.md),
-[Zsh](zsh/README.md), [Ghostty](ghostty/README.md), and the
+[Zsh](zsh/README.md), [Ghostty](ghostty/README.md), [Rex](rex/README.md), and the
 [agent development workflow](docs/agents/development-workflow.md). Coding-agent constraints live in
 [AGENTS.md](AGENTS.md) and the relevant tool's guidance.
 
