@@ -1,5 +1,5 @@
 [tools]
-"core:node" = "24.18.0"
-"core:python" = "3.14.7"
-"core:rust" = { version = "1.97.1", profile = "minimal", components = ["clippy", "rustfmt", "rust-src"] }
-"core:java" = "corretto-21.0.12.8.1"
+"core:node" = "24.22.1"
+"core:python" = "3.14.9"
+"core:rust" = { version = "1.99.1", profile = "minimal", components = ["clippy", "rustfmt", "rust-src"] }
+"core:java" = "corretto-21.0.13.0.10"

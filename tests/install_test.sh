@@ -274,16 +274,16 @@ case "${1:-}" in
         fi
         case "${5:-}" in
             "tools.core:node")
-                printf '24.18.0\n'
+                printf '24.22.1\n'
                 ;;
             "tools.core:python")
-                printf '3.14.7\n'
+                printf '3.14.9\n'
                 ;;
             "tools.core:rust.version")
-                printf '1.97.1\n'
+                printf '1.99.1\n'
                 ;;
             "tools.core:java")
-                printf 'corretto-21.0.12.8.1\n'
+                printf 'corretto-21.0.13.0.10\n'
                 ;;
             *)
                 exit 2
@@ -298,16 +298,16 @@ case "${1:-}" in
         else
             case "${2:-}" in
                 node)
-                    printf '24.18.0\n'
+                    printf '24.22.1\n'
                     ;;
                 python)
-                    printf '3.14.7\n'
+                    printf '3.14.9\n'
                     ;;
                 rust)
-                    printf '1.97.1\n'
+                    printf '1.99.1\n'
                     ;;
                 java)
-                    printf 'corretto-21.0.12.8.1\n'
+                    printf 'corretto-21.0.13.0.10\n'
                     ;;
                 *)
                     exit 2
@@ -361,44 +361,44 @@ SCRIPT
 #!/usr/bin/env bash
 case "${0##*/}" in
     java)
-        java_version=21.0.12
+        java_version=21.0.13
         if [[ -f "$DOTFILES_TEST_STATE/java-version" ]]; then
             IFS= read -r java_version <"$DOTFILES_TEST_STATE/java-version"
         fi
         printf 'openjdk version "%s"\n' "$java_version" >&2
         if [[ -e "$DOTFILES_TEST_STATE/non-corretto-java" ]]; then
-            printf 'OpenJDK Runtime Environment Temurin-21.0.12+8\n' >&2
+            printf 'OpenJDK Runtime Environment Temurin-21.0.13+8\n' >&2
         else
-            printf 'OpenJDK Runtime Environment Corretto-21.0.12.8.1\n' >&2
+            printf 'OpenJDK Runtime Environment Corretto-21.0.13.0.10\n' >&2
         fi
         ;;
     node)
-        printf 'v24.18.0\n'
+        printf 'v24.22.1\n'
         ;;
     npm)
         printf '11.4.2\n'
         ;;
     python|python3)
-        printf 'Python 3.14.7\n'
+        printf 'Python 3.14.9\n'
         ;;
     rustc)
         if [[ " ${*:-} " == *' --print sysroot '* ]]; then
             printf '%s\n' "$DOTFILES_TEST_STATE/rust-sysroot"
         else
-            printf 'rustc 1.97.1\n'
+            printf 'rustc 1.99.1\n'
         fi
         ;;
     cargo)
-        printf 'cargo 1.97.1\n'
+        printf 'cargo 1.99.1\n'
         ;;
     clippy)
-        printf 'clippy 0.1.97\n'
+        printf 'clippy 0.1.99\n'
         ;;
     rustfmt)
         printf 'rustfmt 1.8.0-stable\n'
         ;;
     javac)
-        javac_version=21.0.12
+        javac_version=21.0.13
         if [[ -f "$DOTFILES_TEST_STATE/javac-version" ]]; then
             IFS= read -r javac_version <"$DOTFILES_TEST_STATE/javac-version"
         fi
@@ -2022,10 +2022,10 @@ test_dependency_manifests_match_the_install_contract() {
         "Brewfile contains an unreviewed declaration"
 
     mise_lines=(
-        '"core:node" = "24.18.0"'
-        '"core:python" = "3.14.7"'
-        '"core:rust" = { version = "1.97.1", profile = "minimal", components = ["clippy", "rustfmt", "rust-src"] }'
-        '"core:java" = "corretto-21.0.12.8.1"'
+        '"core:node" = "24.22.1"'
+        '"core:python" = "3.14.9"'
+        '"core:rust" = { version = "1.99.1", profile = "minimal", components = ["clippy", "rustfmt", "rust-src"] }'
+        '"core:java" = "corretto-21.0.13.0.10"'
     )
     for expected_line in "${mise_lines[@]}"; do
         grep -Fxq "$expected_line" "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" ||
