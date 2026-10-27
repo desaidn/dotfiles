@@ -242,6 +242,11 @@ Use [Neovim's maintenance commands](nvim/README.md#configuration) for plugin and
 editor-tool updates. Validate relevant workflows after updates and raise a
 minimum only when a required capability or known incompatibility justifies it.
 
+For an agent-led full or scoped upgrade, use the shared
+[upgrade-dependencies skill](.agents/skills/upgrade-dependencies/SKILL.md).
+Ask an agent to read that file and upgrade the managed stack, or name a subset
+such as Neovim. It follows the same ownership, validation, and review workflow.
+
 See [the dependency research note](docs/dependency-research.md) for package
 mapping and primary-source evidence.
 

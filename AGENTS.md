@@ -148,6 +148,10 @@ version requirements change.
 
 ## Agent skills
 
+For dependency upgrades or upgrade inspection, read
+[upgrade-dependencies](.agents/skills/upgrade-dependencies/SKILL.md). It covers the
+managed stack or a requested subset and can be followed directly by any harness.
+
 ### Working TODOs
 
 `TODO.md` and the index in `docs/todos/README.md` list active work only; briefs under `docs/todos/` exist only for active items. Follow the lifecycle in that README. When retiring an item, remove both index entries and delete its brief in the same change after preserving any durable knowledge in its proper home.
