@@ -207,6 +207,43 @@ check('a failed buffer display rolls back its native tab and remains retryable',
   assert(running(terminal().job), 'retry did not start a live process')
 end)
 
+check('native HunkReview parsing validates arguments before replacing a live review', function()
+  require 'custom.plugins.hunk'
+  vim.api.nvim_exec_autocmds('UIEnter', {})
+  local review_host = host(repo)
+  local base, head, next_oid = string.rep('a', 40), string.rep('b', 40), string.rep('c', 40)
+  local commands = {}
+  local jobstart = vim.fn.jobstart
+  -- Keep real terminal jobs and Neovim command parsing, without creating Hunk
+  -- sessions for synthetic commit IDs. The PTY harness exercises actual Hunk.
+  rawset(vim.fn, 'jobstart', function(command, options)
+    commands[#commands + 1] = vim.deepcopy(command)
+    return jobstart({ '/bin/cat' }, options)
+  end)
+  local ok, err = xpcall(function()
+    vim.cmd('HunkReview ' .. base .. ' ' .. head)
+    local review = terminal()
+    assert(commands[1][3] == base .. '...' .. head, 'native parsing lost the revision arguments')
+    for _, args in ipairs { '', base, base .. ' ' .. head .. ' extra', base .. ' HEAD' } do
+      local accepted, failure = pcall(function() vim.cmd('HunkReview ' .. args) end)
+      assert(not accepted and tostring(failure):find('HunkReview requires', 1, true), 'invalid args did not report the HunkReview contract')
+      assert(#commands == 1 and running(review.job), 'invalid args disrupted the active process')
+      assert(terminal().buf == review.buf, 'invalid args changed the displayed terminal')
+    end
+    vim.cmd('HunkReview ' .. base .. ' ' .. head)
+    assert(vim.api.nvim_get_current_win() == review_host and #commands == 1, 'same range did not toggle back to its host')
+    vim.cmd('HunkReview ' .. base .. ' ' .. next_oid)
+    local replacement = terminal()
+    assert(replacement.tab == review.tab and replacement.job ~= review.job, 'changed range did not replace the process in its existing tab')
+    assert(commands[2][3] == base .. '...' .. next_oid, 'replacement used stale arguments')
+    await('old review process remained alive', function() return not running(review.job) end)
+    vim.fn.jobstop(replacement.job)
+    await('finished review tab remained open', function() return not vim.api.nvim_tabpage_is_valid(replacement.tab) end)
+  end, debug.traceback)
+  rawset(vim.fn, 'jobstart', jobstart)
+  assert(ok, err)
+end)
+
 vim.api.nvim_exec_autocmds('VimLeavePre', {})
 vim.wait(100, function() return false end, 10)
 vim.cmd.tabonly { bang = true }

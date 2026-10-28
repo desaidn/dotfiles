@@ -127,42 +127,64 @@ review. A Review Branch is a snapshot marker, never a second working branch.
 
 ## Open Neovim and Hunk
 
-Use a visible Neovim host rooted in the review checkout. Set
-`review_herdr=${HERDR_BIN_PATH:-herdr}` to use the host-supplied compatible binary
-when available. Use Herdr as the primary workspace and prefer the intended
-session/workspace; inspect `"$review_herdr" workspace list` and capture actual IDs.
-From outside a Herdr pane, use explicit session/workspace targeting rather than
-assuming the focused workspace is correct. Apply the same `--session NAME`
-selector to every call when selecting a named server. Do not nest tmux in Herdr.
+Use `herdr` from `PATH`. Use a host-specific binary override only when the
+selected session requires it and the executable has been verified; an inherited
+`HERDR_BIN_PATH` alone is not a reason to use it. Inspect `herdr workspace list`
+and the intended workspace's tabs and panes, then retain their actual IDs.
+Target the session, workspace, tab, and pane explicitly instead of assuming the
+focused workspace is correct. Apply the same `--session NAME` selector to every
+call when selecting a named server. Do not nest tmux in Herdr.
 
-Inspect `hunk session list --json` first. Keep one Hunk process per checkout;
-do not silently close another review or launch an ambiguous second instance.
-Reuse an existing session only after verifying the exact checkout and revisions.
-Otherwise create the review tab with immutable context:
+For an ordinary file request, reuse a suitable visible Neovim host when its
+identity and command route are known. A request for a "new tab" means a new
+Herdr tab running Neovim unless the user specifies a Neovim tab. Open it in the
+relevant project directory and focus the resulting tab. Use a known editor
+connection or verified pane input to operate an existing host; flatten.nvim
+handles editor handoff from its terminal tools, not discovery of arbitrary
+editors elsewhere in Herdr. Opening a file does not start a formal review.
+
+For a review, use a visible Neovim host rooted in the selected checkout. Inspect
+`hunk session list --json` before changing a checkout with an existing review
+and again before launching Hunk. Keep one Hunk process per checkout. Revisit
+the same snapshot by verifying its checkout and revisions, focusing its Herdr
+tab, and showing the existing Hunk Tool Tab. Do not silently replace an unrelated
+or pending review; resolve that conflict before editing or opening another one.
+
+In an identified existing host, run `:HunkReview BASE HEAD` with the full resolved
+commit IDs. When a new review tab is requested or no suitable host exists:
 
 ```sh
-"$review_herdr" tab create --workspace "$workspace_id" --cwd "$checkout" \
-  --label "review/$review_name" --env "HUNK_REVIEW_BASE_OID=$base_oid" \
-  --env "HUNK_REVIEW_HEAD_OID=$head_oid" --focus
+herdr tab create --workspace "$workspace_id" --cwd "$checkout" \
+  --label "review/$review_name" --focus
 ```
 
 Read `result.tab.tab_id` and `result.root_pane.pane_id` from the returned JSON,
-then run `"$review_herdr" pane run "$pane_id" nvim +HunkReview`. The configured Neovim
-adapter opens full Hunk with `diff BASE...HEAD --watch --mode stack`; it validates
-the object-ID format, not Git state or approval. Hunk's `e` returns to this host
-Neovim with project language tooling. In a separately authorized terminal or
-tmux fallback, the equivalent launch from the checkout is:
+then launch in that pane. Preserve the quotes around Neovim's `-c` argument
+inside the shell command sent to Herdr:
 
 ```sh
-env HUNK_REVIEW_BASE_OID="$base_oid" HUNK_REVIEW_HEAD_OID="$head_oid" nvim +HunkReview
+herdr pane run "$pane_id" "nvim -c \"HunkReview $base_oid $head_oid\""
 ```
+
+The configured Neovim adapter opens `hunk diff BASE...HEAD --watch --mode stack`.
+It validates two full lowercase, same-length commit IDs, not Git state or
+approval. Repeating the range reuses its toggle; changing it replaces the job
+in the same Tool Tab. Invalid arguments leave the current review intact.
+`<leader>gd` always selects working-tree changes and `<leader>gD` staged changes.
+Changing any review input ends the old review; preserve its notes first and
+verify the new snapshot. Hunk's `e` returns to this host Neovim with project
+language tooling. In a separately authorized terminal or tmux fallback, run
+`nvim -c "HunkReview $base_oid $head_oid"` from the checkout.
 
 A launched pane does not prove the review is ready. Inspect the live Hunk list
 until the intended session registers (use a bounded wait, normally ten seconds).
 Verify `cwd`, `repoRoot`, and `sourceLabel` identify the selected checkout,
-`inputKind` is `vcs`, and the title identifies the full `BASE...HEAD` pair.
-Stop on mismatch, ambiguity, unavailable presentation, or timeout; close only a
-tab created by this failed attempt. Do not report a successful review yet.
+`inputKind` is `vcs`, and structured `review.base` and `review.head` equal the
+resolved full commit IDs. The title may abbreviate revisions; it is a display
+label, not proof of snapshot identity. Stop if the structured revision fields
+are missing, or on mismatch, ambiguity, unavailable presentation, or timeout;
+close only a tab created by this failed attempt. Do not report a successful
+review yet.
 
 ```sh
 hunk session get "$session_id" --json
@@ -176,8 +198,21 @@ points there. Only then publish `refs/heads/review/$review_name` using
 for an absent ref. This compare-and-update must fail if the ref changed during
 launch. Do not force it through a concurrent change. Record the verified Hunk
 session ID and Herdr tab/pane IDs alongside the snapshot in the conversation.
-Honor a requested walkthrough or comparison layout in that review. Keep
-findings on the same visible session the user is inspecting.
+
+For a requested walkthrough, first focus the review's Herdr tab and editor pane,
+then navigate inside that exact Hunk session:
+
+```sh
+herdr tab focus "$tab_id"
+hunk session navigate "$session_id" --file "$path" --new-line "$line" --json
+```
+
+Herdr selects the visible editor; Hunk selects the file and hunk within it.
+Honor the requested comparison layout. Explain the behavior before and after
+each important change, show the relevant validation evidence and its limits,
+and give the user time to inspect before moving on. Use Hunk's `e` when source
+context helps. Keep findings on this same visible session; `comment add --focus`
+can bring a new finding into view.
 
 ## Findings and approval
 
@@ -192,14 +227,21 @@ hunk session comment add "$session_id" --file "$path" --new-line "$line" \
 Use `--old-line` for removed code. Keep HEAD, index, and files unchanged while
 review is open. Hunk notes belong to its live process; conversation summaries
 must capture the findings and decision needed for continuity, not assume notes
-survive process exit. End the review before editing its checkout. Apply requested
-changes as new WIP commits, then review the new snapshot and obtain new approval.
+survive process exit. Hiding a Tool Tab, including with Neovim's `:tabclose`,
+leaves Hunk running. To finish a review, preserve its notes, quit that Hunk
+process, and verify its session is gone from `hunk session list --json`. Do not
+close a shared Neovim host containing unrelated buffers or work.
+
+A request to revise the current task authorizes ending its own review this way
+before editing. Apply the requested changes as new WIP commits, then open and
+verify the new snapshot for fresh approval. An unrelated or pending review
+still needs its owner's decision before it is replaced.
 
 Approval is the user's explicit authorization of one exact **local** snapshot,
 recorded in the conversation with its base/head/tree and Review Branch. Opening
 a review, an agent's review result, a Git ref, or an old record is not approval.
-Any WIP or Review Branch change invalidates it. Once approved, the review tab
-may close and its checkout may be reused while the approved refs stay unchanged.
+Any WIP or Review Branch change invalidates it. Once approved, the task's review
+may finish and its checkout may be reused while the approved refs stay unchanged.
 If another session cannot establish the snapshot and approval from available
 conversation evidence, perform a fresh review and obtain fresh approval.
 Create no custom approval database or on-disk review-record format. Preserve
@@ -244,10 +286,15 @@ unexpected results appear, stop and inspect; never commit mixed state or discard
 human work. Do not solve conflicts in the landing checkout or automatically reset
 after a failed operation; coordinate recovery, then return integration work to WIP.
 
+After successful landing, preserve the review findings and outcome in the
+conversation and finish any remaining Hunk review owned by this task. Close its
+dedicated review host or Herdr tab only if it contains no unrelated work. This
+is routine review cleanup; leave unrelated and pending reviews open.
+
 Leave WIP, the Review Branch, and historical evidence intact. Pushing,
-submission, onward delivery, target creation, and cleanup require their own
-project/user authorization. Carry forward authorization already given for
-those actions; local review approval alone does not supply it.
+submission, onward delivery, target creation, and branch/worktree cleanup
+require their own project/user authorization. Carry forward authorization
+already given for those actions; local review approval alone does not supply it.
 
 ## Create a CR only when requested
 

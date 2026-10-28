@@ -211,9 +211,10 @@ replacement implementation.
 The installer/uninstaller safety guards remain self-contained as required by
 project policy. Repeated link-inventory design is already an open question in
 [installer upgrade tolerance](todos/07-installer-upgrade-tolerance.md). The
-[runtime test harness](todos/01-neovim-runtime-test-harness.md) and
-[HunkReview arguments](todos/11-hunkreview-arguments.md) also have existing briefs;
-they are not new defects or part of this fix request.
+[runtime test harness](todos/01-neovim-runtime-test-harness.md) and HunkReview
+arguments were also separately tracked at the time of this audit; they were not
+new defects or part of this fix request. The implemented HunkReview interface
+is now documented in the [Neovim Git guide](../nvim/README.md#git).
 
 ## Validation and progress
 

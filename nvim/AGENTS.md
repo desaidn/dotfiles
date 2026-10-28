@@ -34,7 +34,7 @@ constraints, and required validation.
   - `init.lua` - Custom plugin imports
   - `fff.lua` - fff.nvim fuzzy file/grep finder (owns `<leader>sf` and `<leader>sg`)
   - `lazygit.lua` - Thin lazygit Git transaction launcher over `lua/custom/lib/terminal_tool.lua` (owns `<leader>gg`)
-  - `hunk.lua` - Thin Hunk stacked review launcher over `lua/custom/lib/terminal_tool.lua`; declares its working-tree and staged input variants (owns `<leader>gd` and `<leader>gD`)
+  - `hunk.lua` - Thin Hunk stacked review launcher over `lua/custom/lib/terminal_tool.lua`; declares working-tree, staged, and exact-revision inputs (owns `<leader>gd`, `<leader>gD`, and `:HunkReview`)
   - `flatten.lua` - Editor handoff for nested `nvim` calls launched from Neovim-owned tools
 - `tests/terminal_tool_spec.lua` - Headless regression harness for the terminal-tool declaration interface, Tool Tab persistence, Host Window return, editor shutdown, handoff, failure/race recovery, environment handling, and host tmux input routing
 - `tests/flatten_swap_spec.lua` - Two-Neovim regression proving that a live swap collision cannot abort a production Flatten handoff after Neovim installs the requested buffer
@@ -198,7 +198,7 @@ require('custom.lib.terminal_tool').create {
 }
 ```
 
-A tool whose single surface should review more than one input declares `variants` instead of a top-level `command`/`key`/`desc`, and each variant owns its own key:
+A tool whose single surface should review more than one input declares `variants` instead of a top-level `command`/`key`/`desc`, with a key or Ex command for each input:
 
 ```lua
 require('custom.lib.terminal_tool').create {
@@ -217,14 +217,22 @@ Keys and Ex commands must be unclaimed when the declaration loads. Ex command
 names follow Neovim's uppercase-leading alphanumeric syntax, and registration
 is atomic so a rejected declaration preserves existing mappings and commands.
 
+A command-only variant may declare `command` as a function from the Ex command's
+string arguments to an argv list. It requires `ex_command` and has no key. The
+shared module registers it with `nargs = '*'`; the function validates the tool's
+argument contract before returning argv. Resolve and validate the complete argv
+before changing any live job or tab, including before queueing a startup request.
+Keep argument interpretation in the thin declaration and lifecycle ownership in
+the shared module.
+
 - Start one persistent Neovim terminal job and Tool Tab per selected tool instance. Invoking a tool selects its existing Tool Tab; invoking its running variant's toggle from that tab returns directly to the latest non-tool Host Window. Before Neovim exits, the shared module stops and briefly waits for every active terminal-tool job across all instances.
-- Variants share one Tool Tab, one process slot, one `env`, and one handoff identity within each instance. Selecting a variant other than the running one restarts that instance's job in place; only the running variant's own key hides the Tool Tab. Prefer variants over a second tool id when one CLI's inputs are alternative views of the same review, since duplicate processes within a repository make session selectors ambiguous.
-- A `variants` list must be a gapless list of two or more entries with distinct keys and distinct commands; use a top-level `command` for a single input. These are load-time assertions because a silently dropped entry would leave a documented key doing nothing.
+- Variants share one Tool Tab, one process slot, one `env`, and one handoff identity within each instance. Selecting another variant or changing its resolved argv restarts that instance's job in place. The same variant and argv reuse its toggle; invoking it from the Tool Tab returns to the Host Window. Prefer variants over a second tool id when one CLI's inputs are alternative views of the same review, since duplicate processes within a repository make session selectors ambiguous.
+- A `variants` list must be a gapless list of two or more entries, with distinct declared keys, Ex command names, and fixed commands; use a top-level `command` for a single input. Each variant needs a key or Ex command. These are load-time assertions because a silently dropped entry would leave a documented entry point doing nothing.
 - Keep declarations singleton by default. A singleton restarts inside its existing Tool Tab when the Host Window's effective working directory changes; this remains LazyGit's policy.
 - Use `instances = 'repo'` for Hunk: resolve the canonical Git checkout root and launch there, so subdirectories and aliases share one review while separate worktrees remain independent. Keep only the singleton and checkout policies needed by the configured tools.
 - Keep every Tool Tab instance independent. Switching tools or contexts must not replace the Host Window, and a tool-to-tool launch derives its working directory from the Host Window. Selecting another variant within a Tool Tab targets that displayed instance. Native `:tabclose` hides only that instance's live terminal buffer; the next invocation recreates its Tool Tab, while process exit removes only that instance. If a modified ordinary split prevents safe tab closure, preserve it and release the finished tool's ownership so relaunch remains possible.
 - Let the shared module install the normal-mode mapping; declarations do not receive or inspect mutable buffer, window, tab, or job state. Terminal input stays untouched, so use `<Esc><Esc>` before a normal-mode tool key.
-- Let the shared module register an optional variant `ex_command`; do not duplicate a mapping's launch behavior in plugin-specific command callbacks. If an external workflow invokes that shared callback during Neovim startup, the module coalesces requests and waits until after `UIEnter` before starting the terminal job so automatic terminal-capability detection matches an interactive mapping.
+- Let the shared module register an optional variant `ex_command`; do not duplicate launch behavior in plugin-specific command callbacks. If an external workflow invokes it during Neovim startup, the module retains the latest valid request's variant and resolved argv and waits until after `UIEnter` before starting the terminal job so automatic terminal-capability detection matches an interactive invocation.
 - Use ordinary full-tab windows inside and outside tmux. This keeps sizing native and, when using the tmux fallback, keeps the host tmux client upstream so its prefix, session picker, and pane navigation remain available while the tool is running.
 - Pass through shell-owned `EDITOR`, `VISUAL`, and `GIT_EDITOR`; do not override the editor contract in tool-specific config.
 - Keep tool-specific environment exceptions declarative in `env`; reserved editor and handoff variables are rejected so the source marker and shell-owned editor contract cannot be replaced.
@@ -235,19 +243,22 @@ is atomic so a rejected declaration preserves existing mappings and commands.
 ### Git Integration
 
 Keep gitsigns actions hunk-local and use LazyGit for Git transactions and object
-selection. Hunk owns full stacked working-tree and staged review. Hunk's two
-review inputs share a Tool Tab and process per Git checkout to keep
+selection. Hunk owns full stacked working-tree, staged, and exact-revision
+review. Its inputs share a Tool Tab and process per Git checkout to keep
 `--watch` live and the `--repo .` selector on `hunk session` subcommands unambiguous. See the
 [Git guide](README.md#git) for mappings and Editor Handoff behavior.
 
-When `HUNK_REVIEW_BASE_OID` and `HUNK_REVIEW_HEAD_OID` supply full commit
-object IDs, `<leader>gd` and `:HunkReview` share the aggregate `BASE...HEAD`
-review toggle. If either variable is present, the Neovim adapter must reject
-incomplete, malformed, or mismatched-length IDs before registration. The caller
-owns commit resolution, review-base selection, and launching Neovim in the
-intended checkout. Hunk's `e` action returns through flatten.nvim to that
-review's Neovim with normal project-root discovery and full language tooling.
-Keep the environment contract independent of any workflow CLI or agent harness.
+`:HunkReview BASE HEAD` is always available and requires exactly two full
+lowercase hexadecimal commit IDs of matching length: 40 characters for SHA-1
+or 64 for SHA-256. Reject missing, extra, malformed, or mismatched-length
+arguments before disturbing any running review. Repeating a range reuses its
+toggle; changing it replaces the job in the same Tool Tab. Keep requested ranges
+independent across checkouts and preserve arguments through startup deferral.
+`<leader>gd` always selects working-tree changes and `<leader>gD` staged changes.
+The caller owns commit resolution, review-base selection, and the intended
+checkout. Hunk's `e` action returns through flatten.nvim to that review's Neovim
+with normal project-root discovery and full language tooling. Keep the command
+independent of any workflow CLI or agent harness.
 
 ## Dependencies
 

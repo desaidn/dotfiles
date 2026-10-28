@@ -187,7 +187,8 @@ copied devflow commands, `DEVFLOW_REVIEW_*`, and old hook entry points. Update
 only actual obsolete invocation/policy, preserving unrelated content and human
 work. Coordinate tracked edits through each project's workflow. Historical ADRs,
 commit history, this removal guide, and archived backups may legitimately retain
-the name. Preserve the current `HUNK_REVIEW_*` adapter and shared workflow links.
+the name. Preserve the current `:HunkReview BASE HEAD` adapter and shared workflow
+links; its usage is documented in the [Neovim Git guide](../../nvim/README.md#git).
 
 ## 5. Uninstall the owned application
 

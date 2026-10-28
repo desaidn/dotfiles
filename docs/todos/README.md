@@ -48,4 +48,3 @@ Point an agent at one brief and ask it to take ownership of that item. The agent
 - [Improve installer upgrade tolerance](07-installer-upgrade-tolerance.md)
 - [Add a curlable dotfiles bootstrap](08-curlable-dotfiles-bootstrap.md)
 - [Complete the primary Neovim language-support plan](09-complete-primary-language-support.md)
-- [Pass review revisions as HunkReview arguments](11-hunkreview-arguments.md)

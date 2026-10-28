@@ -234,6 +234,7 @@ labels without requiring a Nerd Font.
 - `<leader>gg` - Toggle lazygit
 - `<leader>gd` - Toggle Hunk stacked working-tree review
 - `<leader>gD` - Toggle the same Hunk review for staged changes
+- `:HunkReview BASE HEAD` - Toggle an exact aggregate commit review
 - `<leader>ga` - Stage/add current hunk
 - `<leader>gr` - Reset current hunk
 - `<leader>gu` - Undo staged hunk
@@ -249,31 +250,34 @@ originating Git surface. Start a review from the intended checkout so pressing
 language tooling using the checkout's project and build context.
 
 To open an aggregate commit review, resolve the base and head to full commit
-object IDs, then launch this Neovim configuration from the checkout root:
+object IDs, then run `:HunkReview BASE HEAD` in the intended checkout's Neovim.
+It also works when launching this configuration from that checkout:
 
 ```sh
-env HUNK_REVIEW_BASE_OID='<full-base-oid>' \
-  HUNK_REVIEW_HEAD_OID='<full-head-oid>' nvim +HunkReview
+nvim -c 'HunkReview <full-base-oid> <full-head-oid>'
 ```
 
 Replace both placeholders with lowercase hexadecimal IDs of the same length
-(40 for SHA-1 or 64 for SHA-256). Both variables must be supplied together;
-malformed or incomplete context stops Hunk's declaration before registration.
-This configuration validates their format; the caller owns commit resolution
-and review-base selection. `:HunkReview` and `<leader>gd` share one toggle for
-`hunk diff BASE...HEAD --watch --mode stack`. Without either variable,
-`<leader>gd` reviews the working tree and `:HunkReview` is not registered.
-`<leader>gD` continues to select staged changes in either context.
+(40 for SHA-1 or 64 for SHA-256). The command is always available and requires
+exactly two IDs; invalid arguments leave any running review unchanged. This
+configuration validates their format; the caller owns commit resolution and
+review-base selection. The command runs
+`hunk diff BASE...HEAD --watch --mode stack`. Repeating the same range toggles
+its existing review; changing the range replaces its job in the same Tool Tab.
+`<leader>gd` always selects the working tree and `<leader>gD` staged changes.
 
 Each terminal tool uses a persistent Tool Tab. LazyGit restarts in its existing
 tab when the working directory changes; Hunk keeps an instance per canonical
 Git checkout root. Subdirectories and aliases share that instance; different
-repositories and worktrees remain live independently. Working-tree and
-staged review share the same Hunk tab and process: choosing the other input
-retargets that review, and invoking its active toggle returns to the Host
+repositories and worktrees remain live independently. Working-tree, staged,
+and exact-revision review share the same Hunk tab and process: choosing another
+input replaces that review, and invoking its active toggle returns to the Host
 Window. Choosing another input while viewing a Hunk tab retargets that tab's
-checkout. Jobs stop when Neovim exits. Ordinary unsaved splits are preserved
-if they prevent a finished tool's tab from closing safely.
+checkout. Preserve review notes before changing inputs or quitting Hunk.
+Neovim's `:tabclose` only hides a live tool; its next invocation recreates the
+tab. Quit Hunk to finish the review, and use `hunk session list --json` to verify
+it has ended. Jobs also stop when Neovim exits. Ordinary unsaved splits are
+preserved if they prevent a finished tool's tab from closing safely.
 
 ### File Explorer
 

@@ -184,6 +184,7 @@ local function clear_generation(tool, instance, generation, buf, retried)
   instance.job = nil
   instance.cwd = nil
   instance.variant = nil
+  instance.command = nil
   unregister_instance(tool, instance)
   return true
 end
@@ -251,6 +252,7 @@ local function stop_generation(tool, instance, preserve_tab)
   instance.job = nil
   instance.cwd = nil
   instance.variant = nil
+  instance.command = nil
   return true
 end
 
@@ -292,10 +294,12 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
 
 local function after_ui_enter(callback)
   local pending = false
+  local pending_command
 
-  return function()
+  return function(command)
+    pending_command = command
     if pending then return true end
-    if ui_entered then return callback() end
+    if ui_entered then return callback(command) end
 
     pending = true
     vim.api.nvim_create_autocmd('UIEnter', {
@@ -306,7 +310,8 @@ local function after_ui_enter(callback)
         -- after UIEnter keeps +cmd launches identical to interactive mappings.
         vim.schedule(function()
           pending = false
-          callback()
+          callback(pending_command)
+          pending_command = nil
         end)
       end,
       desc = 'Start terminal tool after UI initialization',
@@ -315,7 +320,7 @@ local function after_ui_enter(callback)
   end
 end
 
-local function start_tool(tool, instance, variant, cwd, return_win)
+local function start_tool(tool, instance, variant, command, cwd, return_win)
   instance.generation = instance.generation + 1
   local generation = instance.generation
 
@@ -331,6 +336,7 @@ local function start_tool(tool, instance, variant, cwd, return_win)
   instance.buf = buf
   instance.cwd = cwd
   instance.variant = variant
+  instance.command = command
   if not open_tool_tab(tool, instance) then
     clear_generation(tool, instance, generation, buf)
     restore_window(return_win)
@@ -338,7 +344,7 @@ local function start_tool(tool, instance, variant, cwd, return_win)
   end
 
   local started, job = pcall(vim.api.nvim_win_call, instance.win, function()
-    return vim.fn.jobstart(vim.deepcopy(variant.command), {
+    return vim.fn.jobstart(vim.deepcopy(command), {
       term = true,
       cwd = cwd,
       env = job_env(tool.spec.id, instance, generation, tool.spec.env),
@@ -355,7 +361,7 @@ local function start_tool(tool, instance, variant, cwd, return_win)
     if not started then
       reason = 'could not start its job: ' .. tostring(job)
     else
-      reason = job == -1 and ('executable not found: ' .. variant.command[1]) or 'Neovim could not start the job'
+      reason = job == -1 and ('executable not found: ' .. command[1]) or 'Neovim could not start the job'
     end
     notify(tool, reason, vim.log.levels.ERROR, variant)
     return false
@@ -406,14 +412,22 @@ local function instance_key(tool, cwd)
   return SINGLETON_INSTANCE_KEY
 end
 
-local function toggle(tool, variant)
+local function same_command(left, right)
+  if left == nil or #left ~= #right then return false end
+  for index, value in ipairs(left) do
+    if value ~= right[index] then return false end
+  end
+  return true
+end
+
+local function toggle(tool, variant, command)
   local current_win = vim.api.nvim_get_current_win()
   local current_tab = vim.api.nvim_get_current_tabpage()
   local current_instance = instance_for_tab(tool, current_tab)
 
-  -- Only the running variant's own key hides the Tool Tab. Another variant's
-  -- key retargets this instance instead of toggling it closed.
-  if current_instance and current_instance.variant == variant then return focus_host_window() end
+  -- Repeating the running input hides its Tool Tab. A different variant or
+  -- resolved command retargets this instance instead of toggling it closed.
+  if current_instance and current_instance.variant == variant and same_command(current_instance.command, command) then return focus_host_window() end
   if not current_tab_is_tool() then host_win = current_win end
 
   local cwd = current_instance and current_instance.cwd or host_cwd()
@@ -432,7 +446,8 @@ local function toggle(tool, variant)
 
   if instance.buf and not vim.api.nvim_buf_is_valid(instance.buf) and not stop_generation(tool, instance, false) then return false end
   local changed_cwd = tool.spec.instances == 'singleton' and instance.cwd ~= cwd
-  if instance.buf and (changed_cwd or instance.variant ~= variant) and not stop_generation(tool, instance, true) then return false end
+  local changed_input = instance.variant ~= variant or not same_command(instance.command, command)
+  if instance.buf and (changed_cwd or changed_input) and not stop_generation(tool, instance, true) then return false end
 
   if instance.buf then
     local focused, focus_error = focus_terminal(tool, instance)
@@ -445,7 +460,7 @@ local function toggle(tool, variant)
   end
 
   local launch_cwd = tool.spec.instances ~= 'singleton' and key or cwd
-  return start_tool(tool, instance, variant, launch_cwd, current_win)
+  return start_tool(tool, instance, variant, command, launch_cwd, current_win)
 end
 
 local function acknowledge_editor_return(tool, instance)
@@ -476,20 +491,38 @@ local function assert_nonempty_string(value, message)
   return value
 end
 
-local function normalize_variant(variant, declared_keys, declared_ex_commands, existing_ex_commands)
-  local key = assert_nonempty_string(variant.key, 'terminal tool key is required')
-  assert(tool_keys[key] == nil, string.format('terminal tool key %s is already registered by %s', key, tool_keys[key] or ''))
-  assert(not declared_keys[key], 'terminal tool declares key more than once: ' .. key)
-  -- maparg applies <leader> and key-notation semantics exactly as
-  -- vim.keymap.set does; the keymap-list APIs expose only normalized lhs text.
-  local existing_mapping = vim.fn.maparg(key, 'n', false, true)
-  assert(type(existing_mapping) == 'table' and next(existing_mapping) == nil, 'terminal tool key is already mapped by Neovim: ' .. key)
-  declared_keys[key] = true
-
-  local command = variant.command
+local function validate_command(command)
   assert(type(command) == 'table' and #command > 0, 'terminal tool command must be a non-empty argv table')
+  local count = 0
+  for _ in pairs(command) do
+    count = count + 1
+  end
+  assert(count == #command, 'terminal tool command must be a gapless argv table without named entries')
   for index, value in ipairs(command) do
     assert_nonempty_string(value, string.format('terminal tool command argument %d must be a non-empty string', index))
+  end
+  return vim.deepcopy(command)
+end
+
+local function normalize_variant(variant, declared_keys, declared_ex_commands, existing_ex_commands)
+  local key = variant.key
+  assert(key ~= nil or variant.ex_command ~= nil, 'terminal tool key or Ex command is required')
+  if key ~= nil then
+    assert_nonempty_string(key, 'terminal tool key must be a non-empty string')
+    assert(tool_keys[key] == nil, string.format('terminal tool key %s is already registered by %s', key, tool_keys[key] or ''))
+    assert(not declared_keys[key], 'terminal tool declares key more than once: ' .. key)
+    -- maparg applies <leader> and key-notation semantics exactly as
+    -- vim.keymap.set does; the keymap-list APIs expose only normalized lhs text.
+    local existing_mapping = vim.fn.maparg(key, 'n', false, true)
+    assert(type(existing_mapping) == 'table' and next(existing_mapping) == nil, 'terminal tool key is already mapped by Neovim: ' .. key)
+    declared_keys[key] = true
+  end
+
+  local command = variant.command
+  if type(command) == 'function' then
+    assert(variant.ex_command ~= nil and key == nil, 'terminal tool command functions require an Ex command without a key')
+  else
+    command = validate_command(command)
   end
 
   local ex_command = variant.ex_command
@@ -511,7 +544,7 @@ local function normalize_variant(variant, declared_keys, declared_ex_commands, e
   return {
     key = key,
     desc = assert_nonempty_string(variant.desc, 'terminal tool desc is required'),
-    command = vim.deepcopy(command),
+    command = command,
     ex_command = ex_command,
   }
 end
@@ -528,12 +561,12 @@ local function normalize_config(config)
   local declared_variants = config.variants
   if declared_variants == nil then
     assert(config.command ~= nil, 'terminal tool requires a command or a variants list')
-    declared_variants = { { key = config.key, desc = config.desc, command = config.command } }
+    declared_variants = { { key = config.key, desc = config.desc, command = config.command, ex_command = config.ex_command } }
   else
     assert(type(declared_variants) == 'table', 'terminal tool variants must be a list')
     assert(
-      config.key == nil and config.command == nil and config.desc == nil,
-      'terminal tool variants own key, command, and desc; do not also declare them at the top level'
+      config.key == nil and config.command == nil and config.desc == nil and config.ex_command == nil,
+      'terminal tool variants own key, command, desc, and ex_command; do not also declare them at the top level'
     )
     -- A gap or string key would make ipairs stop early and silently drop an input.
     local counted = 0
@@ -552,8 +585,14 @@ local function normalize_config(config)
   for _, variant in ipairs(declared_variants) do
     assert(type(variant) == 'table', 'each terminal tool variant must be a table')
     local normalized = normalize_variant(variant, declared_keys, declared_ex_commands, existing_ex_commands)
-    local argv = table.concat(normalized.command, '\0')
-    assert(not declared_commands[argv], 'terminal tool declares the same command more than once: ' .. table.concat(normalized.command, ' '))
+    local command = normalized.command
+    local argv
+    if type(command) == 'function' then
+      argv = command
+    else
+      argv = table.concat(command, '\0')
+    end
+    assert(not declared_commands[argv], 'terminal tool declares the same command more than once')
     declared_commands[argv] = true
     variants[#variants + 1] = normalized
   end
@@ -591,16 +630,17 @@ local function normalize_config(config)
 end
 
 ---@class custom.TerminalToolVariant
----@field command string[]
----@field key string
+---@field command string[]|fun(args: string[]): string[]
+---@field key? string
 ---@field desc string
 ---@field ex_command? string
 
 ---@class custom.TerminalToolConfig
 ---@field id string
----@field command? string[] single-command shape; mutually exclusive with variants
+---@field command? string[]|fun(args: string[]): string[] single-command shape; mutually exclusive with variants
 ---@field key? string
 ---@field desc? string
+---@field ex_command? string
 ---@field variants? custom.TerminalToolVariant[] input variants sharing one Tool Tab
 ---@field env? table<string, string>
 ---@field handoff? 'return'|'return-and-acknowledge'
@@ -617,8 +657,13 @@ function M.create(config)
 
   local registrations = {}
   for _, variant in ipairs(tool.spec.variants) do
-    local callback = function() return toggle(tool, variant) end
-    if variant.ex_command then callback = after_ui_enter(callback) end
+    local launch = function(command) return toggle(tool, variant, command) end
+    if variant.ex_command then launch = after_ui_enter(launch) end
+    local callback = function(options)
+      local command = variant.command
+      if type(command) == 'function' then command = validate_command(command(options.fargs)) end
+      return launch(command)
+    end
     registrations[#registrations + 1] = {
       variant = variant,
       callback = callback,
@@ -633,15 +678,21 @@ function M.create(config)
     for _, registration in ipairs(registrations) do
       local variant = registration.variant
       if variant.ex_command then
-        vim.api.nvim_create_user_command(variant.ex_command, registration.callback, { desc = variant.desc, force = false })
+        vim.api.nvim_create_user_command(variant.ex_command, registration.callback, {
+          desc = variant.desc,
+          force = false,
+          nargs = type(variant.command) == 'function' and '*' or 0,
+        })
         registered_commands[#registered_commands + 1] = variant.ex_command
       end
     end
 
     for _, registration in ipairs(registrations) do
       local variant = registration.variant
-      vim.keymap.set('n', variant.key, registration.callback, { desc = variant.desc })
-      registered_mappings[#registered_mappings + 1] = variant.key
+      if variant.key then
+        vim.keymap.set('n', variant.key, registration.callback, { desc = variant.desc })
+        registered_mappings[#registered_mappings + 1] = variant.key
+      end
     end
   end)
 
@@ -656,7 +707,7 @@ function M.create(config)
   end
 
   for _, variant in ipairs(tool.spec.variants) do
-    tool_keys[variant.key] = tool.spec.id
+    if variant.key then tool_keys[variant.key] = tool.spec.id end
     if variant.ex_command then tool_commands[variant.ex_command] = tool.spec.id end
   end
   tools[tool.spec.id] = tool

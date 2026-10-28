@@ -362,9 +362,9 @@ local function fake_vim(options)
     return mapping.callback()
   end
 
-  function fixture.invoke_command(name)
+  function fixture.invoke_command(name, args)
     local command = assert(fixture.user_commands[name], 'missing user command :' .. name)
-    return command.callback {}
+    return command.callback { fargs = args or {} }
   end
 
   function fixture.surface()
@@ -860,18 +860,15 @@ end
 
 local function launched(fixture, index) return table.concat(fixture.job_attempts[index].command, ' ') end
 
-local function load_production_hunk(review_env)
-  local fake, fixture = fake_vim()
-  for name, value in pairs(review_env or {}) do
-    fake.env[name] = value
-  end
+local function load_production_hunk(fake_options)
+  local fake, fixture = fake_vim(fake_options)
   _G.vim = fake
   local terminal_tool = dofile(terminal_tool_path)
   local previous = package.loaded['custom.lib.terminal_tool']
   package.loaded['custom.lib.terminal_tool'] = terminal_tool
   local loaded, load_error = pcall(dofile, hunk_path)
   package.loaded['custom.lib.terminal_tool'] = previous
-  return fixture, loaded, load_error
+  return fixture, loaded, load_error, terminal_tool
 end
 
 check('input variants share one Tool Tab and one process slot', function()
@@ -1156,66 +1153,123 @@ check('a variant restarts in a new effective working directory', function()
   assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'replacement process did not start in the new directory')
 end)
 
-check('production Hunk declaration owns both review inputs', function()
+check('production Hunk keeps working-tree and staged keys independent of exact reviews', function()
   local fixture, loaded, load_error = load_production_hunk()
   assert(loaded, load_error)
+  assert(fixture.user_commands.HunkReview, 'ordinary Neovim did not register :HunkReview')
 
   fixture.invoke('n', '<leader>gd')
-  assert(table.concat(fixture.job_attempts[1].command, ' ') == 'hunk diff --watch --mode stack', 'production working-tree review lost its watch or layout')
-  assert(fixture.user_commands.HunkReview == nil, 'ordinary Hunk context unexpectedly registered :HunkReview')
-
+  assert(launched(fixture, 1) == 'hunk diff --watch --mode stack', 'working-tree key launched a different input')
+  fixture.invoke_command('HunkReview', { string.rep('a', 40), string.rep('b', 40) })
   fixture.invoke('n', '<leader>gD')
-  assert(table.concat(fixture.job_attempts[2].command, ' ') == 'hunk diff --staged --watch --mode stack', 'production staged review lost its watch or layout')
-  assert(fixture.job_attempts[2].options.env.OPENTUI_GRAPHICS == 'false', 'production staged review lost its render fix')
+  assert(launched(fixture, 3) == 'hunk diff --staged --watch --mode stack', 'staged key lost its input')
+  assert(fixture.job_attempts[3].options.env.OPENTUI_GRAPHICS == 'false', 'staged review lost its render fix')
+  fixture.invoke('n', '<leader>gd')
+  assert(launched(fixture, 4) == 'hunk diff --watch --mode stack', 'exact review changed the working-tree key')
 end)
 
-check('production Hunk review context exposes the aggregate Change Set through one toggle', function()
+check('production Hunk accepts full SHA-1 and SHA-256 review arguments', function()
   for _, oid_length in ipairs { 40, 64 } do
     local base_oid = string.rep('a', oid_length)
     local head_oid = string.rep('b', oid_length)
-    local fixture, loaded, load_error = load_production_hunk {
-      HUNK_REVIEW_BASE_OID = base_oid,
-      HUNK_REVIEW_HEAD_OID = head_oid,
-    }
+    local fixture, loaded, load_error = load_production_hunk()
     assert(loaded, load_error)
-
-    local mapping = assert(fixture.mapping('n', '<leader>gd'), 'review context lost the Hunk diff key')
-    local command = assert(fixture.user_commands.HunkReview, 'review context did not register :HunkReview')
-    assert(mapping.callback == command.callback, ':HunkReview and <leader>gd do not share one toggle callback')
-
-    fixture.invoke_command 'HunkReview'
-    assert(
-      table.concat(fixture.job_attempts[1].command, ' ') == 'hunk diff ' .. base_oid .. '...' .. head_oid .. ' --watch --mode stack',
-      ':HunkReview did not launch the immutable aggregate diff'
-    )
+    assert(fixture.user_commands.HunkReview.options.nargs == '*', 'review command does not accept separate arguments')
+    fixture.invoke_command('HunkReview', { base_oid, head_oid })
+    assert(launched(fixture, 1) == 'hunk diff ' .. base_oid .. '...' .. head_oid .. ' --watch --mode stack', 'review command launched the wrong range')
   end
 end)
 
-check('production Hunk fails closed for incomplete or malformed review identity', function()
-  local valid_oid = string.rep('a', 40)
-  local invalid_contexts = {
-    { name = 'base only', base = valid_oid },
-    { name = 'head only', head = valid_oid },
-    { name = 'empty values', base = '', head = '' },
-    { name = 'short base', base = string.rep('a', 39), head = valid_oid },
-    { name = 'long head', base = valid_oid, head = string.rep('b', 65) },
-    { name = 'SHA-1 base with SHA-256 head', base = valid_oid, head = string.rep('b', 64) },
-    { name = 'SHA-256 base with SHA-1 head', base = string.rep('a', 64), head = valid_oid },
-    { name = 'uppercase base', base = string.rep('A', 40), head = valid_oid },
-    { name = 'non-hex head', base = valid_oid, head = string.rep('g', 40) },
+check('invalid Hunk review arguments leave the active process and presentation unchanged', function()
+  local oid = string.rep('a', 40)
+  local invalid_args = {
+    {},
+    { oid },
+    { oid, oid, oid },
+    { '', '' },
+    { string.rep('a', 39), oid },
+    { oid, string.rep('b', 65) },
+    { oid, string.rep('b', 64) },
+    { string.rep('a', 64), oid },
+    { string.rep('A', 40), oid },
+    { oid, string.rep('g', 40) },
+    { oid, 'HEAD' },
   }
-
-  for _, context in ipairs(invalid_contexts) do
-    local fixture, loaded, load_error = load_production_hunk {
-      HUNK_REVIEW_BASE_OID = context.base,
-      HUNK_REVIEW_HEAD_OID = context.head,
-    }
-
-    assert(not loaded, context.name .. ' review context unexpectedly loaded Hunk')
-    assert(tostring(load_error):match 'Hunk review context', context.name .. ' failed without a clear review-context error')
-    assert(fixture.mapping('n', '<leader>gd') == nil, context.name .. ' registered a Hunk mapping before failing')
-    assert(fixture.user_commands.HunkReview == nil, context.name .. ' registered :HunkReview before failing')
+  local fixture, loaded, load_error = load_production_hunk()
+  assert(loaded, load_error)
+  fixture.invoke_command('HunkReview', { oid, string.rep('b', 40) })
+  local tab = fixture.current_tab
+  local buf = fixture.surface().buf
+  for _, args in ipairs(invalid_args) do
+    local ok, err = pcall(fixture.invoke_command, 'HunkReview', args)
+    assert(not ok and tostring(err):match 'HunkReview requires', 'invalid args did not produce a clear validation error')
+    assert(#fixture.job_attempts == 1 and fixture.jobs[1].running, 'invalid args replaced the active process')
+    assert(fixture.current_tab == tab and fixture.surface().buf == buf, 'invalid args changed the presentation')
   end
+end)
+
+check('startup retains the latest valid Hunk range through UIEnter deferral', function()
+  local fixture, loaded, load_error = load_production_hunk { vim_did_enter = 0, queue_schedules = true }
+  assert(loaded, load_error)
+  local base, first, latest = string.rep('a', 40), string.rep('b', 40), string.rep('c', 40)
+  fixture.invoke_command('HunkReview', { base, first })
+  fixture.invoke_command('HunkReview', { base, latest })
+  assert(not pcall(fixture.invoke_command, 'HunkReview', { 'bad', latest }), 'invalid startup request was accepted')
+  assert(#fixture.job_attempts == 0, 'review launched before UIEnter')
+  fixture.fire 'UIEnter'
+  fixture.invoke_command('HunkReview', { base, latest })
+  assert(#fixture.job_attempts == 0, 'review bypassed the scheduled startup launch')
+  fixture.run_scheduled()
+  assert(#fixture.job_attempts == 1, 'startup requests launched multiple processes')
+  assert(launched(fixture, 1) == 'hunk diff ' .. base .. '...' .. latest .. ' --watch --mode stack', 'deferred launch lost the latest valid range')
+  assert(fixture.current_win ~= 1, 'coalesced requests toggled the review closed')
+end)
+
+check('same Hunk range toggles while changed base or head replaces its process in place', function()
+  local fixture, loaded, load_error, terminal_tool = load_production_hunk()
+  assert(loaded, load_error)
+  local base, head, next_oid = string.rep('a', 40), string.rep('b', 40), string.rep('c', 40)
+  fixture.invoke_command('HunkReview', { base, head })
+  local tab = fixture.current_tab
+  fixture.invoke_command('HunkReview', { base, head })
+  assert(fixture.current_win == 1 and #fixture.job_attempts == 1, 'same range did not return to the host')
+  fixture.invoke_command('HunkReview', { base, head })
+  assert(fixture.current_tab == tab and #fixture.job_attempts == 1, 'same range did not reuse its process')
+  fixture.invoke_command('HunkReview', { base, next_oid })
+  assert(fixture.current_tab == tab and #fixture.job_attempts == 2 and not fixture.jobs[1].running, 'changed head did not replace in place')
+  fixture.invoke_command('HunkReview', { base, next_oid })
+  fixture.invoke_command('HunkReview', { head, next_oid })
+  assert(fixture.current_tab == tab and #fixture.job_attempts == 3 and not fixture.jobs[2].running, 'changed base from host did not replace in place')
+  use_handoff_env(fixture, 3)
+  assert(terminal_tool.complete_editor_handoff(terminal_tool.editor_handoff_data()), 'argument-based review lost editor handoff')
+  assert(fixture.current_win == 1 and fixture.jobs[3].running, 'handoff did not preserve the review process')
+  fixture.exit_job(3)
+  fixture.invoke_command('HunkReview', { head, next_oid })
+  assert(launched(fixture, 4) == launched(fixture, 3), 'relaunch restored a stale review range')
+end)
+
+check('Hunk range changes target the viewed checkout and preserve other checkout reviews', function()
+  local fixture, loaded, load_error = load_production_hunk()
+  assert(loaded, load_error)
+  local base, head, next_oid = string.rep('a', 40), string.rep('b', 40), string.rep('c', 40)
+  fixture.invoke_command('HunkReview', { base, head })
+  local first_tab = fixture.current_tab
+  fixture.invoke_command('HunkReview', { base, head })
+  fixture.cwd = '/repo/two'
+  fixture.invoke_command('HunkReview', { head, next_oid })
+  local second_tab = fixture.current_tab
+  assert(first_tab ~= second_tab and fixture.jobs[1].running, 'second checkout replaced the first review')
+  vim.api.nvim_set_current_tabpage(first_tab)
+  fixture.invoke_command('HunkReview', { base, next_oid })
+  assert(
+    fixture.current_tab == first_tab and fixture.job_attempts[3].options.cwd == '/repo/one',
+    'range change followed the host instead of the viewed checkout'
+  )
+  assert(not fixture.jobs[1].running and fixture.jobs[2].running, 'range change disrupted the wrong checkout')
+  vim.api.nvim_set_current_tabpage(second_tab)
+  fixture.invoke_command('HunkReview', { head, next_oid })
+  fixture.invoke_command('HunkReview', { head, next_oid })
+  assert(fixture.current_tab == second_tab and #fixture.job_attempts == 3, 'second checkout forgot its selected range')
 end)
 
 check('tool environment extends the shell-owned editor contract', function()

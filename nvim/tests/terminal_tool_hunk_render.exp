@@ -34,6 +34,25 @@ proc capture_ansi {socket target} {
   return [exec tmux -S $socket capture-pane -p -e -t $target]
 }
 
+proc wait_for_nvim_ready {socket} {
+  global timeout
+  for {set attempt 0} {$attempt < $timeout * 10} {incr attempt} {
+    if {![catch { exec nvim --server $socket --remote-expr {v:vim_did_enter} } ready] && $ready == 1} { return }
+    after 100
+  }
+  error "timed out waiting for Neovim startup"
+}
+
+proc wait_for_replacement_terminal {socket previous_pid} {
+  global timeout
+  for {set attempt 0} {$attempt < $timeout * 10} {incr attempt} {
+    set pid [current_nvim_terminal_pid $socket]
+    if {$pid ne "" && $pid ne $previous_pid} { return $pid }
+    after 100
+  }
+  error "timed out waiting for Hunk to replace the previous review"
+}
+
 proc ansi_palette {screen} {
   return [lsort -unique [regexp -all -inline \
     {(?:38|48|58);(?:2;[0-9]+;[0-9]+;[0-9]+|5;[0-9]+)} $screen]]
@@ -191,11 +210,17 @@ proc wait_for_nvim_terminal_pid {socket} {
 proc current_nvim_terminal_pids {socket} {
   if {[catch {
     exec nvim --server $socket --remote-expr \
-      {luaeval("HunkRenderTerminalPids()")}
+      {join(luaeval("HunkRenderTerminalPids()"), ' ')}
   } raw]} {
     return {}
   }
-  return [regexp -all -inline {[0-9]+} $raw]
+  set pids [split [string trim $raw] " "]
+  foreach pid $pids {
+    if {![string is integer -strict $pid] || $pid <= 0} {
+      error "invalid Neovim terminal PID list: '$raw'"
+    }
+  }
+  return $pids
 }
 
 proc terminal_buffer_count {socket} {
@@ -345,6 +370,13 @@ proc run_test {} {
   exec git -C $review_fixture -c user.name=Test -c user.email=test@example.com commit -qm change
   set review_head [string trim [exec git -C $review_fixture rev-parse HEAD]]
 
+  set retarget_file [open "$review_fixture/retarget.txt" w]
+  puts $retarget_file "new review range"
+  close $retarget_file
+  exec git -C $review_fixture add retarget.txt
+  exec git -C $review_fixture -c user.name=Test -c user.email=test@example.com commit -qm retarget
+  set retarget_head [string trim [exec git -C $review_fixture rev-parse HEAD]]
+
   set startup_fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-startup-$suffix.XXXXXX"]]
   set manual_fixture [exec mktemp -d [file join $temp_root "codex-hunk-render-manual-$suffix.XXXXXX"]]
   exec git clone -q $review_fixture $startup_fixture
@@ -352,9 +384,12 @@ proc run_test {} {
 
   set render_init "$repo_root/nvim/tests/terminal_tool_hunk_render_init.lua"
   exec tmux -S $startup_host_socket -f /dev/null new-session -d -x 80 -y 24 -s startup -c $startup_fixture \
-    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$startup_fixture HUNK_RENDER_SECOND_FIXTURE=$startup_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup HUNK_REVIEW_BASE_OID=$review_base HUNK_REVIEW_HEAD_OID=$review_head nvim --clean --listen $startup_nvim_socket -u $render_init +HunkReview"
+    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$startup_fixture HUNK_RENDER_SECOND_FIXTURE=$startup_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup nvim --clean --listen $startup_nvim_socket -u $render_init -c 'HunkReview $review_base $review_head'"
   exec tmux -S $manual_host_socket -f /dev/null new-session -d -x 80 -y 24 -s manual -c $manual_fixture \
-    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$manual_fixture HUNK_RENDER_SECOND_FIXTURE=$manual_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=manual HUNK_REVIEW_BASE_OID=$review_base HUNK_REVIEW_HEAD_OID=$review_head nvim --clean --listen $manual_nvim_socket -u $render_init"
+    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$manual_fixture HUNK_RENDER_SECOND_FIXTURE=$manual_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup nvim --clean --listen $manual_nvim_socket -u $render_init"
+
+  wait_for_nvim_ready $manual_nvim_socket
+  exec nvim --server $manual_nvim_socket --remote-expr "execute('HunkReview $review_base $review_head')"
 
   set startup_hunk_pid [wait_for_nvim_terminal_pid $startup_nvim_socket]
   set manual_hunk_pid [wait_for_nvim_terminal_pid $manual_nvim_socket]
@@ -369,6 +404,27 @@ proc run_test {} {
   set manual_content_styles [lindex $manual_signature 1]
   set signatures_match [expr {$startup_signature eq $manual_signature}]
 
+  set review_tab [exec nvim --server $manual_nvim_socket --remote-expr {tabpagenr()}]
+  exec nvim --server $manual_nvim_socket --remote-expr "execute('HunkReview $review_base $review_head')"
+  set repeated_pids [current_nvim_terminal_pids $manual_nvim_socket]
+  if {$repeated_pids ne [list $manual_hunk_pid]} {
+    error "FAIL repeating the same review range replaced its process: expected $manual_hunk_pid, got '$repeated_pids'"
+  }
+  exec nvim --server $manual_nvim_socket --remote-expr "execute('HunkReview $review_base $review_head')"
+  if {[exec nvim --server $manual_nvim_socket --remote-expr {tabpagenr()}] != $review_tab} {
+    error "FAIL repeating the same review range did not return to its Tool Tab"
+  }
+  set previous_pid $manual_hunk_pid
+  exec nvim --server $manual_nvim_socket --remote-expr "execute('HunkReview $review_head $retarget_head')"
+  set manual_hunk_pid [wait_for_replacement_terminal $manual_nvim_socket $previous_pid]
+  wait_for_screen $manual_host_socket manual:0.0 {retarget.txt}
+  if {![wait_for_process_exit $previous_pid] || [terminal_buffer_count $manual_nvim_socket] != 1} {
+    error "FAIL changing review ranges left the previous Hunk process or terminal buffer alive"
+  }
+  if {[exec nvim --server $manual_nvim_socket --remote-expr {tabpagenr()}] != $review_tab} {
+    error "FAIL changing review ranges replaced the Tool Tab"
+  }
+
   catch { exec nvim --server $startup_nvim_socket --remote-expr {execute('qa!')} }
   catch { exec nvim --server $manual_nvim_socket --remote-expr {execute('qa!')} }
   if {![wait_for_process_exit $startup_hunk_pid] || ![wait_for_process_exit $manual_hunk_pid]} {
@@ -377,10 +433,10 @@ proc run_test {} {
   set startup_hunk_pid ""
   set manual_hunk_pid ""
   if {![palette_has_rgb $manual_palette]} {
-    error "HARNESS ERROR: post-startup <leader>gd did not render any RGB ANSI colors\n  <leader>gd: [printable_palette $manual_palette]"
+    error "HARNESS ERROR: post-startup HunkReview did not render any RGB ANSI colors\n  HunkReview: [printable_palette $manual_palette]"
   }
   if {!$signatures_match} {
-    error "FAIL nvim +HunkReview and the post-startup <leader>gd action render different content-bound ANSI styles\n  +HunkReview palette: [printable_palette $startup_palette]\n  <leader>gd palette: [printable_palette $manual_palette]\n  +HunkReview content: [printable_content_styles $startup_content_styles]\n  <leader>gd content: [printable_content_styles $manual_content_styles]"
+    error "FAIL startup and post-startup HunkReview render different content-bound ANSI styles\n  startup palette: [printable_palette $startup_palette]\n  post-startup palette: [printable_palette $manual_palette]\n  startup content: [printable_content_styles $startup_content_styles]\n  post-startup content: [printable_content_styles $manual_content_styles]"
   }
 
   set menu_pattern {File +View +Navigate +(Theme +)?Agent +Help}
@@ -477,7 +533,7 @@ proc run_test {} {
     wait_for_row $host_socket host:0.0 1 $menu_pattern
     wait_for_screen $host_socket host:0.0 {second.txt}
 
-    return "PASS nvim +HunkReview matches the post-startup <leader>gd ANSI palette; two production Hunk Tool Tabs render cleanly, survive tab switches and a native 80x20 to 100x30 resize, isolate process exit, and leave C-b s plus C-b h with host tmux"
+    return "PASS startup HunkReview arguments match the post-startup ANSI palette; same ranges reuse and changed ranges replace one process in the same Tool Tab; two production Hunk Tool Tabs render cleanly, survive tab switches and a native 80x20 to 100x30 resize, isolate process exit, and leave C-b s plus C-b h with host tmux"
   }
 
   if {$menu_present} {

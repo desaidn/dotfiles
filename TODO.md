@@ -8,4 +8,3 @@
 - [Improve installer upgrade tolerance](docs/todos/07-installer-upgrade-tolerance.md)
 - [Add a curlable dotfiles bootstrap](docs/todos/08-curlable-dotfiles-bootstrap.md)
 - [Complete the primary Neovim language-support plan](docs/todos/09-complete-primary-language-support.md)
-- [Pass review revisions as HunkReview arguments](docs/todos/11-hunkreview-arguments.md)
