@@ -79,7 +79,7 @@ One direct repository workflow is outside `install.sh`: [`docs/agents/issue-trac
 
 The enabled [language adapters](../nvim/lua/custom/languages/adapters/) declare their tools. [`config.lua`](../nvim/lua/custom/languages/config.lua) deduplicates those package names into `mason_tools`, which is passed to Mason Tool Installer so Mason attempts to install every listed tool. Mason installs editor tooling, but its own documentation says that it shells out to external package managers such as `npm`; language runtimes remain machine capabilities. In this repository, **mise should own versioned Node, Python, and Rust runtimes plus Amazon Corretto JDK 21**, while Mason owns the LSP/formatter/linter executables. Mise has core backends for all four runtimes and deliberately does not replace system package management. ([Mason requirements](https://github.com/mason-org/mason.nvim#requirements), [mise core tools](https://mise.jdx.dev/core-tools.html), [mise ownership boundary](https://mise.jdx.dev/faq.html#mise-is-for-dev-tools-not-applications-or-system-packages))
 
-The tracked Mise fragment pins Node 24.22.1, Python 3.14.9, Rust 1.99.1,
+The tracked Mise fragment pins Node 24.22.1, Python 3.14.10, Rust 1.99.1,
 and Amazon Corretto JDK 21 at `corretto-21.0.13.0.10`. Exact selectors make a
 successful second install a stable no-op; advancing a runtime is an explicit
 manifest change rather than a side effect of resolving `latest`, `lts`, or a

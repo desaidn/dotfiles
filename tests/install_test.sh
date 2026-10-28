@@ -277,7 +277,7 @@ case "${1:-}" in
                 printf '24.22.1\n'
                 ;;
             "tools.core:python")
-                printf '3.14.9\n'
+                printf '3.14.10\n'
                 ;;
             "tools.core:rust.version")
                 printf '1.99.1\n'
@@ -301,7 +301,7 @@ case "${1:-}" in
                     printf '24.22.1\n'
                     ;;
                 python)
-                    printf '3.14.9\n'
+                    printf '3.14.10\n'
                     ;;
                 rust)
                     printf '1.99.1\n'
@@ -379,7 +379,7 @@ case "${0##*/}" in
         printf '11.4.2\n'
         ;;
     python|python3)
-        printf 'Python 3.14.9\n'
+        printf 'Python 3.14.10\n'
         ;;
     rustc)
         if [[ " ${*:-} " == *' --print sysroot '* ]]; then
@@ -2023,7 +2023,7 @@ test_dependency_manifests_match_the_install_contract() {
 
     mise_lines=(
         '"core:node" = "24.22.1"'
-        '"core:python" = "3.14.9"'
+        '"core:python" = "3.14.10"'
         '"core:rust" = { version = "1.99.1", profile = "minimal", components = ["clippy", "rustfmt", "rust-src"] }'
         '"core:java" = "corretto-21.0.13.0.10"'
     )
