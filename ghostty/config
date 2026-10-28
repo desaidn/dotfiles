@@ -12,7 +12,8 @@ shell-integration-features = no-cursor,ssh-terminfo,ssh-env
 
 window-padding-x = 15
 window-padding-y = 10
-background = #000000
-background-opacity = 1.00
+background = #0e0e0e
+background-opacity = 0.90
+background-blur = macos-glass-regular
 macos-option-as-alt = true
 keybind = shift+enter=text:\n
