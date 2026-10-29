@@ -133,34 +133,55 @@ selected session requires it and the executable has been verified; an inherited
 and the intended workspace's tabs and panes, then retain their actual IDs.
 Target the session, workspace, tab, and pane explicitly instead of assuming the
 focused workspace is correct. Apply the same `--session NAME` selector to every
-call when selecting a named server. Do not nest tmux in Herdr.
+call when selecting a named server. Do not nest tmux in Herdr. Resolve the
+destination from the task's agreed workspace or the calling pane's verified
+workspace, independently of the UI-focused workspace.
 
-For an ordinary file request, reuse a suitable visible Neovim host when its
-identity and command route are known. A request for a "new tab" means a new
-Herdr tab running Neovim unless the user specifies a Neovim tab. Open it in the
-relevant project directory and focus the resulting tab. Use a known editor
+Preserve the user's workspace, tab, and pane focus by default. Create tabs
+with `--no-focus`, then prepare them using the returned pane IDs. Opening a
+file, creating a tab, preparing a review, and revisiting a review do not
+request a focus change. Use `--focus` or explicit workspace, tab, or pane
+focus commands only when the user asks to see or switch to that destination;
+a requested walkthrough authorizes that switch. Do not infer permission from
+an earlier focus snapshot or restore an earlier selection after launch,
+because the user may navigate while the agent works.
+
+When a new tab is ready, report its workspace, label, and tab ID and send one
+Herdr notification without selecting it. For a review, complete the Hunk
+verification below before announcing readiness:
+
+```sh
+herdr notification show "Tab ready: $tab_label" \
+  --body "Workspace $workspace_id, tab $tab_id" --sound done
+```
+
+For an ordinary file request, reuse a suitable Neovim host when its identity
+and command route are known. A request for a "new tab" means a new Herdr tab
+running Neovim unless the user specifies a Neovim tab. Open it in the relevant
+project directory and prepare the tab in the background. Use a known editor
 connection or verified pane input to operate an existing host; flatten.nvim
 handles editor handoff from its terminal tools, not discovery of arbitrary
 editors elsewhere in Herdr. Opening a file does not start a formal review.
 
-For a review, use a visible Neovim host rooted in the selected checkout. Inspect
+For a review, use a Neovim host rooted in the selected checkout. Inspect
 `hunk session list --json` before changing a checkout with an existing review
 and again before launching Hunk. Keep one Hunk process per checkout. Revisit
-the same snapshot by verifying its checkout and revisions, focusing its Herdr
-tab, and showing the existing Hunk Tool Tab. Do not silently replace an unrelated
-or pending review; resolve that conflict before editing or opening another one.
+the same snapshot by verifying its checkout and revisions and showing the
+existing Hunk Tool Tab in that host. Preserve Herdr focus unless the user
+requested a switch. Do not silently replace an unrelated or pending review;
+resolve that conflict before editing or opening another one.
 
 In an identified existing host, run `:HunkReview BASE HEAD` with the full resolved
 commit IDs. When a new review tab is requested or no suitable host exists:
 
 ```sh
 herdr tab create --workspace "$workspace_id" --cwd "$checkout" \
-  --label "review/$review_name" --focus
+  --label "review/$review_name" --no-focus
 ```
 
-Read `result.tab.tab_id` and `result.root_pane.pane_id` from the returned JSON,
-then launch in that pane. Preserve the quotes around Neovim's `-c` argument
-inside the shell command sent to Herdr:
+Read `result.tab.tab_id`, `result.tab.label`, and `result.root_pane.pane_id` from
+the returned JSON, then launch in that pane. Preserve the quotes around
+Neovim's `-c` argument inside the shell command sent to Herdr:
 
 ```sh
 herdr pane run "$pane_id" "nvim -c \"HunkReview $base_oid $head_oid\""
