@@ -208,9 +208,10 @@ navigation-only command above does not build one.
 ## Clipboard
 
 Use `pbcopy`/`pbpaste` on macOS or a working Wayland/X11 clipboard provider on
-Linux. A remote session inside tmux explicitly uses its clipboard provider,
-including on macOS. A remote session with no display and no tmux falls back to OSC 52 so the
-host terminal receives copies. OSC 52 clipboard reads are disabled because
+Linux. Local macOS and Windows sessions retain native clipboard detection.
+Linux and SSH sessions without a display use tmux's clipboard provider when inside
+tmux, or fall back to OSC 52 so the host terminal receives copies.
+OSC 52 clipboard reads are disabled because
 they block waiting on the terminal, so pastes replay Neovim's own yanks.
 `:checkhealth vim.provider` reports the active provider.
 
