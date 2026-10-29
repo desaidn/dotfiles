@@ -199,6 +199,12 @@ bounded and the effective source list checked before installation. A user's norm
 `~/.config/mise/config.toml` remains untouched and has higher precedence in
 interactive shells.
 
+To apply committed runtime pins on another host, including after pulling this
+repository, run `./install.sh` from the repository root. It installs missing
+pinned runtimes, validates them, and reuses existing matching configuration links
+and installed versions. Open a fresh shell afterward and use `mise current` to
+inspect the effective versions.
+
 Java compatibility is independent of vendor; Corretto is the deliberate
 provisioning choice in the manifest.
 

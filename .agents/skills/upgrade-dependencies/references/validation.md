@@ -28,10 +28,29 @@ nvim --clean --headless -l nvim/tests/diagnostics.lua
 Use writable temporary `XDG_STATE_HOME` and `XDG_CACHE_HOME` for isolated tests,
 while preserving installed `XDG_DATA_HOME` so the upgraded plugins are exercised.
 Keep `--clean` for these harnesses; normal startup provisioning belongs only to
-the authorized maintenance and fresh health-check runs. Capture the health buffer
-and inspect it, not just the Neovim exit code. Separate optional providers or
-upstream filetype notices from broken configured features. Do not install unused
-providers to make every warning disappear.
+the authorized maintenance and fresh health-check runs.
+
+After Mason and parser installation finishes, capture the health report from a
+fresh configured process. The installed Neovim health command runs its checks
+synchronously; capture the named `health://` buffer after the command returns.
+Use the normal Lua command context rather than an installation's fast callback.
+Set `DOTFILES_HEALTH_LOG` to a file in a writable temporary directory:
+
+```lua
+local output = assert(vim.env.DOTFILES_HEALTH_LOG, 'Set DOTFILES_HEALTH_LOG')
+vim.cmd('checkhealth')
+local report = vim.fn.bufnr('health://')
+assert(report > 0 and vim.api.nvim_buf_is_valid(report), 'Health report missing')
+local lines = vim.api.nvim_buf_get_lines(report, 0, -1, false)
+assert(table.concat(lines, '\n'):find('%S'), 'Health report is empty')
+assert(vim.fn.writefile(lines, output) == 0, 'Could not save health report')
+```
+
+Check command-completion behavior against the installed API if it changes.
+Inspect the saved report's errors and warnings; successful capture and a zero
+Neovim exit alone do not establish a healthy installation. Separate optional
+providers or upstream filetype notices from broken configured features. Do not
+install unused providers to make every warning disappear.
 
 Before formal review, account for every selected dependency and inspect the full
 tracked diff. It should contain intended lockfile/pin changes, necessary active

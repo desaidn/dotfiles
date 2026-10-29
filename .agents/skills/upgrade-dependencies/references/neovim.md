@@ -26,6 +26,39 @@ notifications. Early startup errors also need inspection; a later successful
 command does not erase them. Do not use normal startup to perform read-only
 discovery or isolated unit tests.
 
+## Requested reset and reinstall
+
+Use this path when the user requests `nvim-reset` followed by a full reinstall.
+It clears Neovim's installed data, state, and cache. A subset upgrade alone does
+not authorize clearing shared Neovim state.
+
+1. Inspect active Neovim and Hunk sessions using real host access. Coordinate
+   their shutdown before resetting shared directories. Perform the plugin
+   local-edit checks below for every plugin directory the reset would remove,
+   and account for any additional installed packages or user-owned data.
+2. Preserve the upgraded tracked lockfile and selected plugin revisions. Verify
+   the existing `nvim-reset` definition in the configured shell against the
+   actual data/state/cache paths; resolve any mismatch before executing it.
+3. From the selected checkout, use that shell and the selected Mise environment:
+
+   ```sh
+   nvim-reset
+   nvim
+   ```
+
+   Normal configured Neovim installs the locked plugins and starts their build
+   hooks and editor-tool installation. For an agent-operated headless reinstall,
+   handle native `vim.pack.add` installation confirmations before configuration
+   loads (`--cmd`), using its `confirm = false` option only for the authorized
+   declarations. Use the maintenance process above and explicitly await the
+   selected Mason and Treesitter operations below.
+4. Verify the tracked lockfile is preserved, every selected plugin HEAD matches
+   its locked revision, and native builds work. Reconcile every declared Mason
+   package and parser with its expected version/revision, wait for installation
+   to finish, and verify parser loading. Finish with the
+   [fresh configured startup and health checks](validation.md); a started editor
+   is not proof that installation completed.
+
 ## Plugins
 
 1. Reconcile `vim.pack.get(nil, { info = false })` with the lockfile and declared

@@ -11,6 +11,11 @@ this dotfiles repository, not application dependencies in unrelated projects.
 It uses ordinary Markdown and native tools; any agent can follow this file
 directly, without a harness-specific command or plugin.
 
+For an upgrade request, start from the current checkout and installed inventory:
+discover compatible updates, deliberately update selected pins and lockfiles,
+install, validate, and review tracked changes. This works without pulling any
+repository changes first.
+
 Paths named in prose are relative to the canonical repository root. Read
 [AGENTS.md](../../../AGENTS.md), the
 [development workflow](../../../docs/agents/development-workflow.md), and
@@ -94,8 +99,10 @@ Parallelize independent discovery or reviews when helpful; serialize managers
 that write the same installed packages, lockfile, or caches. Keep one Neovim
 maintenance process at a time. Preserve existing installations and backups;
 cleanup, package removal, and unrelated global configuration edits are separate
-work. Do not run the full installer merely to upgrade dependencies: it also
-changes configuration links and intentionally avoids broad upgrades.
+work. A requested Neovim rebuild follows the
+[reset-and-reinstall procedure](references/neovim.md#requested-reset-and-reinstall).
+Use the owner-specific commands for upgrade execution; the full installer also
+changes configuration links and intentionally avoids broad Homebrew upgrades.
 
 If a layer fails, retain its logs and partial outcomes. Diagnose the failed item
 before retrying it; continue independent authorized work when possible. Never
@@ -134,5 +141,7 @@ Report the scope and meaningful before/after versions, verified counts, held or
 failed items, validation results, and actual Git delivery state. Installed
 machine updates take effect before Git landing; say clearly if those succeeded
 while review or landing is still pending. Mention fresh shell/editor sessions
-when needed. Preserve WIP/review history and obtain separate authorization for
+when needed. When Mise pins change, include the
+[instructions for applying committed pins on another host](../../../README.md#mise-runtimes)
+in the result. Preserve WIP/review history and obtain separate authorization for
 any push, submission, or cleanup required beyond the agreed task.

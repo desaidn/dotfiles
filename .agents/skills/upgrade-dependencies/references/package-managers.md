@@ -70,16 +70,34 @@ empty selections.
      brew upgrade --cask "${selected_casks[@]}"
    ```
 
+   If the formula preview includes unrelated dependents, verify that the
+   installed Homebrew supports `HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK`. Repeat
+   the preview with that option and require the resulting package list to stay
+   within the selected dependency closure:
+
+   ```bash
+   HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+     HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 \
+     brew upgrade --formula --dry-run "${selected_formulae[@]}"
+   ```
+
+   Once that preview is acceptable, run the same command without `--dry-run`.
+   Keep this environment option local to those commands. It suppresses both
+   outdated-dependent upgrades and automatic dependent linkage repairs; account
+   for any necessary repair that would extend the selected scope before proceeding.
+
    Again, skip empty lists. Use the installed CLI's supported noninteractive
    confirmation flag when needed and already authorized. Keep package pins,
    tap trust, cleanup, and unrelated applications unchanged. A blocked tap or
    failed installation is a reported partial result, not permission to change
-   trust or force overwrites. `install.sh` deliberately uses `--no-upgrade` and
-   is not an upgrade command.
+   trust or force overwrites. `install.sh` deliberately uses `--no-upgrade` for
+   Homebrew provisioning; selected Homebrew updates use `brew upgrade`.
 
 6. Re-query the selected dependency closure and executable versions. Classify
    each selected item as updated, already current, intentionally retained, or
-   failed/unverified; report transitive changes too. Keep compatibility
+   failed/unverified; report transitive changes too. For a nonempty formula
+   selection, run `brew linkage --test "${selected_formulae[@]}"` as well,
+   including after suppressing installed-dependent checks. Keep compatibility
    minimums unchanged unless a required capability actually demands a raise.
 
 Upgrading an active terminal, workspace manager, or Hunk binary needs special
