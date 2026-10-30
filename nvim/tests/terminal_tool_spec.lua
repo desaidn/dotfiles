@@ -907,6 +907,55 @@ check('each variant key toggles only its own running input', function()
   assert(#fixture.job_attempts == 2, 'reselecting the running variant restarted its process')
 end)
 
+check('a resume key preserves the active input while its Ex command selects the declared input', function()
+  local fixture = setup_variants {
+    variants = {
+      { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk review', ex_command = 'HunkReview', resume = true },
+      { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged' },
+    },
+  }
+  fixture.invoke('n', '<leader>gD')
+  local tab, buf = fixture.current_tab, fixture.surface().buf
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_win == 1 and fixture.jobs[1].running, 'resume key replaced the displayed staged input')
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_tab == tab and fixture.surface().buf == buf, 'resume key did not restore the same terminal')
+  assert(#fixture.job_attempts == 1, 'resuming restarted the active process')
+  fixture.invoke_command 'HunkReview'
+  assert(launched(fixture, 2) == 'hunk diff', 'explicit command resumed instead of selecting its input')
+  assert(fixture.current_tab == tab and not fixture.jobs[1].running, 'explicit input change lost its tab or old process')
+end)
+
+check('a singleton resume key falls back to its declared input when the Host Window directory changes', function()
+  local fixture = setup_variants {
+    variants = {
+      { command = { 'hunk', 'diff' }, key = '<leader>gd', desc = 'Hunk review', resume = true },
+      { command = { 'hunk', 'diff', '--staged' }, key = '<leader>gD', desc = 'Hunk staged' },
+    },
+  }
+  fixture.invoke('n', '<leader>gD')
+  fixture.invoke('n', '<leader>gd')
+  fixture.cwd = '/repo/two'
+  fixture.invoke('n', '<leader>gd')
+  assert(launched(fixture, 2) == 'hunk diff', 'new directory inherited the previous input')
+  assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'resume key ignored the new Host Window directory')
+end)
+
+check('resume declarations require a boolean and a key without leaving partial registrations', function()
+  for _, config in ipairs {
+    { resume = 'yes', key = '<leader>gd' },
+    { resume = true, ex_command = 'HunkReview' },
+  } do
+    local fake, fixture = fake_vim()
+    _G.vim = fake
+    local terminal_tool = dofile(terminal_tool_path)
+    config.id, config.desc, config.command = 'hunk', 'Hunk review', { 'hunk', 'diff' }
+    local ok, err = pcall(terminal_tool.create, config)
+    assert(not ok and tostring(err):match 'resume', 'invalid resume declaration was accepted')
+    assert(fixture.mapping('n', '<leader>gd') == nil and fixture.user_commands.HunkReview == nil, 'invalid resume declaration left registrations')
+  end
+end)
+
 check('variants share the tool environment and handoff identity', function()
   local fixture, terminal_tool = setup_variants()
   fixture.invoke('n', '<leader>gD')
@@ -1153,19 +1202,65 @@ check('a variant restarts in a new effective working directory', function()
   assert(fixture.job_attempts[2].options.cwd == '/repo/two', 'replacement process did not start in the new directory')
 end)
 
-check('production Hunk keeps working-tree and staged keys independent of exact reviews', function()
-  local fixture, loaded, load_error = load_production_hunk()
+check('production Hunk resumes an exact or staged review after editor handoff', function()
+  local fixture, loaded, load_error, terminal_tool = load_production_hunk()
   assert(loaded, load_error)
   assert(fixture.user_commands.HunkReview, 'ordinary Neovim did not register :HunkReview')
 
   fixture.invoke('n', '<leader>gd')
   assert(launched(fixture, 1) == 'hunk diff --watch --mode stack', 'working-tree key launched a different input')
   fixture.invoke_command('HunkReview', { string.rep('a', 40), string.rep('b', 40) })
+  local tab, buf = fixture.current_tab, fixture.surface().buf
+  use_handoff_env(fixture, 2)
+  assert(terminal_tool.complete_editor_handoff(terminal_tool.editor_handoff_data()), 'exact review did not return to its editor')
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_tab == tab and fixture.surface().buf == buf, 'resume key lost the exact review terminal')
+  assert(#fixture.job_attempts == 2 and fixture.jobs[2].running, 'returning from the editor replaced the exact review')
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_win == 1 and #fixture.job_attempts == 2, 'resume key did not toggle back to the editor')
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_tab == tab and #fixture.job_attempts == 2, 'repeated resume restarted the exact review')
+
   fixture.invoke('n', '<leader>gD')
   assert(launched(fixture, 3) == 'hunk diff --staged --watch --mode stack', 'staged key lost its input')
   assert(fixture.job_attempts[3].options.env.OPENTUI_GRAPHICS == 'false', 'staged review lost its render fix')
+  use_handoff_env(fixture, 3)
+  assert(terminal_tool.complete_editor_handoff(terminal_tool.editor_handoff_data()), 'staged review did not return to its editor')
   fixture.invoke('n', '<leader>gd')
-  assert(launched(fixture, 4) == 'hunk diff --watch --mode stack', 'exact review changed the working-tree key')
+  assert(#fixture.job_attempts == 3 and fixture.jobs[3].running, 'resume key replaced the staged review')
+  assert(fixture.current_tab == tab, 'staged resume recreated its Tool Tab')
+end)
+
+check('argument-free HunkReview selects the working tree and reuses an already selected working-tree process', function()
+  local fixture, loaded, load_error = load_production_hunk()
+  assert(loaded, load_error)
+  fixture.invoke_command 'HunkReview'
+  assert(launched(fixture, 1) == 'hunk diff --watch --mode stack', 'argument-free command did not start the working-tree input')
+  local tab = fixture.current_tab
+  fixture.invoke_command('HunkReview', { string.rep('a', 40), string.rep('b', 40) })
+  fixture.invoke_command 'HunkReview'
+  assert(launched(fixture, 3) == launched(fixture, 1), 'argument-free command did not replace the exact range')
+  assert(fixture.current_tab == tab and not fixture.jobs[2].running, 'working-tree selection lost its tab or old process')
+  fixture.invoke('n', '<leader>gd')
+  fixture.invoke_command 'HunkReview'
+  assert(#fixture.job_attempts == 3 and fixture.current_tab == tab, 'working-tree selection restarted the default input')
+  fixture.invoke('n', '<leader>gD')
+  fixture.invoke_command 'HunkReview'
+  assert(launched(fixture, 5) == launched(fixture, 1), 'argument-free command did not replace the staged input')
+end)
+
+check('Hunk resume preserves hidden reviews and defaults to the working tree after process exit', function()
+  local fixture, loaded, load_error = load_production_hunk()
+  assert(loaded, load_error)
+  fixture.invoke_command('HunkReview', { string.rep('a', 40), string.rep('b', 40) })
+  local tab, buf = fixture.current_tab, fixture.surface().buf
+  vim.cmd.tabclose { args = { tostring(tab) } }
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_tab ~= tab and fixture.surface().buf == buf, 'hidden review did not recreate its tab around the same buffer')
+  assert(#fixture.job_attempts == 1 and fixture.jobs[1].running, 'hidden review was replaced by a working-tree diff')
+  fixture.exit_job(1)
+  fixture.invoke('n', '<leader>gd')
+  assert(launched(fixture, 2) == 'hunk diff --watch --mode stack', 'finished review left a stale range in the resume key')
 end)
 
 check('production Hunk accepts full SHA-1 and SHA-256 review arguments', function()
@@ -1183,7 +1278,6 @@ end)
 check('invalid Hunk review arguments leave the active process and presentation unchanged', function()
   local oid = string.rep('a', 40)
   local invalid_args = {
-    {},
     { oid },
     { oid, oid, oid },
     { '', '' },
@@ -1214,15 +1308,27 @@ check('startup retains the latest valid Hunk range through UIEnter deferral', fu
   local base, first, latest = string.rep('a', 40), string.rep('b', 40), string.rep('c', 40)
   fixture.invoke_command('HunkReview', { base, first })
   fixture.invoke_command('HunkReview', { base, latest })
+  fixture.invoke('n', '<leader>gd')
   assert(not pcall(fixture.invoke_command, 'HunkReview', { 'bad', latest }), 'invalid startup request was accepted')
   assert(#fixture.job_attempts == 0, 'review launched before UIEnter')
   fixture.fire 'UIEnter'
+  fixture.invoke('n', '<leader>gd')
   fixture.invoke_command('HunkReview', { base, latest })
   assert(#fixture.job_attempts == 0, 'review bypassed the scheduled startup launch')
   fixture.run_scheduled()
   assert(#fixture.job_attempts == 1, 'startup requests launched multiple processes')
   assert(launched(fixture, 1) == 'hunk diff ' .. base .. '...' .. latest .. ' --watch --mode stack', 'deferred launch lost the latest valid range')
   assert(fixture.current_win ~= 1, 'coalesced requests toggled the review closed')
+end)
+
+check('argument-free HunkReview replaces a pending startup range with the working tree', function()
+  local fixture, loaded, load_error = load_production_hunk { vim_did_enter = 0, queue_schedules = true }
+  assert(loaded, load_error)
+  fixture.invoke_command('HunkReview', { string.rep('a', 40), string.rep('b', 40) })
+  fixture.invoke_command 'HunkReview'
+  fixture.fire 'UIEnter'
+  fixture.run_scheduled()
+  assert(#fixture.job_attempts == 1 and launched(fixture, 1) == 'hunk diff --watch --mode stack', 'startup reset retained the exact range')
 end)
 
 check('same Hunk range toggles while changed base or head replaces its process in place', function()
@@ -1270,6 +1376,31 @@ check('Hunk range changes target the viewed checkout and preserve other checkout
   fixture.invoke_command('HunkReview', { head, next_oid })
   fixture.invoke_command('HunkReview', { head, next_oid })
   assert(fixture.current_tab == second_tab and #fixture.job_attempts == 3, 'second checkout forgot its selected range')
+end)
+
+check('Hunk resume selects the Host Window checkout and does not retarget a displayed review', function()
+  local fixture, loaded, load_error, terminal_tool = load_production_hunk()
+  assert(loaded, load_error)
+  local base, head, next_oid = string.rep('a', 40), string.rep('b', 40), string.rep('c', 40)
+  fixture.invoke_command('HunkReview', { base, head })
+  local first_tab = fixture.current_tab
+  fixture.invoke('n', '<leader>gd')
+  fixture.cwd = '/repo/two'
+  fixture.invoke_command('HunkReview', { head, next_oid })
+  local second_tab = fixture.current_tab
+  vim.api.nvim_set_current_tabpage(first_tab)
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_win == 1 and #fixture.job_attempts == 2, 'displayed review was retargeted instead of returning to the Host Window')
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_tab == second_tab and #fixture.job_attempts == 2, 'resume key selected another checkout')
+  fixture.invoke('n', '<leader>gd')
+  fixture.cwd = '/repo/one'
+  terminal_tool.create { id = 'lazygit', command = { 'lazygit' }, key = '<leader>gg', desc = 'Lazygit' }
+  fixture.invoke('n', '<leader>gg')
+  fixture.windows[fixture.current_win].cwd = '/tool-local'
+  fixture.invoke('n', '<leader>gd')
+  assert(fixture.current_tab == first_tab and #fixture.job_attempts == 3, 'tool-to-tool resume ignored the Host Window checkout')
+  assert(fixture.jobs[1].running and fixture.jobs[2].running, 'resume replaced an existing checkout review')
 end)
 
 check('tool environment extends the shell-owned editor contract', function()

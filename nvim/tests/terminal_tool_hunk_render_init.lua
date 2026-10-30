@@ -58,6 +58,16 @@ end
 
 require 'custom.plugins.hunk'
 
+local flatten_root = vim.fn.stdpath 'data' .. '/site/pack/core/opt/flatten.nvim'
+assert(vim.uv.fs_stat(flatten_root), 'flatten.nvim is not installed at ' .. flatten_root)
+vim.opt.runtimepath:append(flatten_root)
+local pack_add = vim.pack.add
+local function ignore_package_additions(_, _) end
+vim.pack.add = ignore_package_additions
+local loaded, load_error = pcall(require, 'custom.plugins.flatten')
+vim.pack.add = pack_add
+assert(loaded, load_error)
+
 if start_mode == 'manual' then
   vim.defer_fn(invoke_hunk, 100)
 elseif start_mode ~= 'startup' then

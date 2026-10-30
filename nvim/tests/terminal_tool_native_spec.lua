@@ -213,18 +213,20 @@ check('native HunkReview parsing validates arguments before replacing a live rev
   local review_host = host(repo)
   local base, head, next_oid = string.rep('a', 40), string.rep('b', 40), string.rep('c', 40)
   local commands = {}
+  local environments = {}
   local jobstart = vim.fn.jobstart
   -- Keep real terminal jobs and Neovim command parsing, without creating Hunk
   -- sessions for synthetic commit IDs. The PTY harness exercises actual Hunk.
   rawset(vim.fn, 'jobstart', function(command, options)
     commands[#commands + 1] = vim.deepcopy(command)
+    environments[#environments + 1] = vim.deepcopy(options.env)
     return jobstart({ '/bin/cat' }, options)
   end)
   local ok, err = xpcall(function()
     vim.cmd('HunkReview ' .. base .. ' ' .. head)
     local review = terminal()
     assert(commands[1][3] == base .. '...' .. head, 'native parsing lost the revision arguments')
-    for _, args in ipairs { '', base, base .. ' ' .. head .. ' extra', base .. ' HEAD' } do
+    for _, args in ipairs { base, base .. ' ' .. head .. ' extra', base .. ' HEAD' } do
       local accepted, failure = pcall(function() vim.cmd('HunkReview ' .. args) end)
       assert(not accepted and tostring(failure):find('HunkReview requires', 1, true), 'invalid args did not report the HunkReview contract')
       assert(#commands == 1 and running(review.job), 'invalid args disrupted the active process')
@@ -232,13 +234,36 @@ check('native HunkReview parsing validates arguments before replacing a live rev
     end
     vim.cmd('HunkReview ' .. base .. ' ' .. head)
     assert(vim.api.nvim_get_current_win() == review_host and #commands == 1, 'same range did not toggle back to its host')
+    assert(invoke '<leader>gd')
+    assert(terminal().job == review.job and #commands == 1, 'resume key replaced the native exact review')
+    local previous_env = {}
+    local handoff_names = { 'DOTFILES_EDITOR_HANDOFF_SOURCE', 'DOTFILES_EDITOR_HANDOFF_INSTANCE', 'DOTFILES_EDITOR_HANDOFF_GENERATION' }
+    for _, name in ipairs(handoff_names) do
+      previous_env[name] = vim.env[name]
+      vim.env[name] = environments[1][name]
+    end
+    local handed_off = tool.complete_editor_handoff(tool.editor_handoff_data())
+    for _, name in ipairs(handoff_names) do
+      vim.env[name] = previous_env[name]
+    end
+    assert(handed_off and vim.api.nvim_get_current_win() == review_host, 'native editor handoff did not return to its Host Window')
+    assert(invoke '<leader>gd')
+    assert(terminal().buf == review.buf and terminal().job == review.job, 'native handoff return replaced the review terminal')
     vim.cmd('HunkReview ' .. base .. ' ' .. next_oid)
     local replacement = terminal()
     assert(replacement.tab == review.tab and replacement.job ~= review.job, 'changed range did not replace the process in its existing tab')
     assert(commands[2][3] == base .. '...' .. next_oid, 'replacement used stale arguments')
     await('old review process remained alive', function() return not running(review.job) end)
-    vim.fn.jobstop(replacement.job)
-    await('finished review tab remained open', function() return not vim.api.nvim_tabpage_is_valid(replacement.tab) end)
+    vim.cmd 'HunkReview'
+    local working_tree = terminal()
+    assert(commands[3][3] == '--watch', 'argument-free native command retained a revision range')
+    assert(working_tree.tab == review.tab and working_tree.job ~= replacement.job, 'working-tree selection did not replace its input in place')
+    await('exact review remained alive after working-tree selection', function() return not running(replacement.job) end)
+    assert(invoke '<leader>gd')
+    assert(invoke '<leader>gd')
+    assert(terminal().job == working_tree.job and #commands == 3, 'native working-tree resume restarted its process')
+    vim.fn.jobstop(working_tree.job)
+    await('finished review tab remained open', function() return not vim.api.nvim_tabpage_is_valid(working_tree.tab) end)
   end, debug.traceback)
   rawset(vim.fn, 'jobstart', jobstart)
   assert(ok, err)

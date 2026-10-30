@@ -13,25 +13,23 @@ require('custom.lib.terminal_tool').create {
   env = { OPENTUI_GRAPHICS = 'false' },
   variants = {
     {
-      command = { 'hunk', 'diff', '--watch', '--mode', 'stack' },
+      command = function(args)
+        if #args == 0 then return { 'hunk', 'diff', '--watch', '--mode', 'stack' } end
+        local base, head = args[1], args[2]
+        if #args ~= 2 or not valid_review_oid(base) or not valid_review_oid(head) or #base ~= #head then
+          error('HunkReview requires no arguments or base and head as two same-length full lowercase hexadecimal commit IDs', 0)
+        end
+        return { 'hunk', 'diff', base .. '...' .. head, '--watch', '--mode', 'stack' }
+      end,
       key = '<leader>gd',
-      desc = 'Hunk diff',
+      resume = true,
+      ex_command = 'HunkReview',
+      desc = 'Hunk review',
     },
     {
       command = { 'hunk', 'diff', '--staged', '--watch', '--mode', 'stack' },
       key = '<leader>gD',
       desc = 'Hunk diff (staged)',
-    },
-    {
-      command = function(args)
-        local base, head = args[1], args[2]
-        if #args ~= 2 or not valid_review_oid(base) or not valid_review_oid(head) or #base ~= #head then
-          error('HunkReview requires base and head as two same-length full lowercase hexadecimal commit IDs', 0)
-        end
-        return { 'hunk', 'diff', base .. '...' .. head, '--watch', '--mode', 'stack' }
-      end,
-      ex_command = 'HunkReview',
-      desc = 'Hunk exact revision review',
     },
   },
   instances = 'repo',

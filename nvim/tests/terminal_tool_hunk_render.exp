@@ -329,6 +329,7 @@ proc cleanup {sockets files fixtures} {
 }
 
 proc run_test {} {
+  global timeout
   global repo_root suffix temp_root host_socket direct_socket nvim_socket startup_host_socket manual_host_socket
   global startup_nvim_socket manual_nvim_socket fixture second_fixture review_fixture startup_fixture manual_fixture host_spawn_id host_slave
   global direct_hunk_pid nvim_hunk_pid startup_hunk_pid manual_hunk_pid
@@ -383,8 +384,9 @@ proc run_test {} {
   exec git clone -q $review_fixture $manual_fixture
 
   set render_init "$repo_root/nvim/tests/terminal_tool_hunk_render_init.lua"
+  set test_editor "nvim --clean -u $render_init"
   exec tmux -S $startup_host_socket -f /dev/null new-session -d -x 80 -y 24 -s startup -c $startup_fixture \
-    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$startup_fixture HUNK_RENDER_SECOND_FIXTURE=$startup_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup nvim --clean --listen $startup_nvim_socket -u $render_init -c 'HunkReview $review_base $review_head'"
+    "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor EDITOR='$test_editor' VISUAL='$test_editor' GIT_EDITOR='$test_editor' HUNK_RENDER_FIXTURE=$startup_fixture HUNK_RENDER_SECOND_FIXTURE=$startup_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup nvim --clean --listen $startup_nvim_socket -u $render_init -c 'HunkReview $review_base $review_head'"
   exec tmux -S $manual_host_socket -f /dev/null new-session -d -x 80 -y 24 -s manual -c $manual_fixture \
     "/usr/bin/env TERM=tmux-256color COLORTERM=truecolor HUNK_RENDER_FIXTURE=$manual_fixture HUNK_RENDER_SECOND_FIXTURE=$manual_fixture DOTFILES_REPO_ROOT=$repo_root HUNK_RENDER_START_MODE=startup nvim --clean --listen $manual_nvim_socket -u $render_init"
 
@@ -403,6 +405,34 @@ proc run_test {} {
   set startup_content_styles [lindex $startup_signature 1]
   set manual_content_styles [lindex $manual_signature 1]
   set signatures_match [expr {$startup_signature eq $manual_signature}]
+
+  set startup_review_tab [exec nvim --server $startup_nvim_socket --remote-expr {tabpagenr()}]
+  set startup_review_buffer [exec nvim --server $startup_nvim_socket --remote-expr {bufnr()}]
+  exec hunk session comment add --repo $startup_fixture --file palette.txt --new-line 2 \
+    --summary "Keep this note after editor handoff" --author "Regression test" --json
+  exec hunk session navigate --repo $startup_fixture --file palette.txt --new-line 2 --json
+  exec tmux -S $startup_host_socket send-keys -t startup:0.0 e
+  wait_for_screen $startup_host_socket startup:0.0 {GREEN changed}
+  for {set attempt 0} {$attempt < $timeout * 10} {incr attempt} {
+    set edited_file [exec nvim --server $startup_nvim_socket --remote-expr {expand('%:t')}]
+    if {$edited_file eq "palette.txt"} { break }
+    after 100
+  }
+  if {$edited_file ne "palette.txt"} {
+    error "FAIL Hunk's e did not open palette.txt in its host Neovim"
+  }
+  exec nvim --server $startup_nvim_socket --remote-expr \
+    {luaeval("vim.fn.maparg('<leader>gd', 'n', false, true).callback()")}
+  if {[current_nvim_terminal_pid $startup_nvim_socket] ne $startup_hunk_pid ||
+      [exec nvim --server $startup_nvim_socket --remote-expr {tabpagenr()}] != $startup_review_tab ||
+      [exec nvim --server $startup_nvim_socket --remote-expr {bufnr()}] != $startup_review_buffer} {
+    error "FAIL returning from Hunk's e with the resume key replaced its review process, tab, or buffer"
+  }
+  wait_for_screen $startup_host_socket startup:0.0 {palette.txt}
+  set retained_notes [exec hunk session comment list --repo $startup_fixture --json]
+  if {[string first "Keep this note after editor handoff" $retained_notes] < 0} {
+    error "FAIL returning to the exact review lost its note"
+  }
 
   set review_tab [exec nvim --server $manual_nvim_socket --remote-expr {tabpagenr()}]
   exec nvim --server $manual_nvim_socket --remote-expr "execute('HunkReview $review_base $review_head')"
@@ -423,6 +453,18 @@ proc run_test {} {
   }
   if {[exec nvim --server $manual_nvim_socket --remote-expr {tabpagenr()}] != $review_tab} {
     error "FAIL changing review ranges replaced the Tool Tab"
+  }
+
+  set working_tree_file [open "$manual_fixture/palette.txt" w]
+  puts $working_tree_file "working-tree selection"
+  close $working_tree_file
+  set previous_pid $manual_hunk_pid
+  exec nvim --server $manual_nvim_socket --remote-expr {execute('HunkReview')}
+  set manual_hunk_pid [wait_for_replacement_terminal $manual_nvim_socket $previous_pid]
+  wait_for_screen $manual_host_socket manual:0.0 {working-tree selection}
+  if {![wait_for_process_exit $previous_pid] ||
+      [exec nvim --server $manual_nvim_socket --remote-expr {tabpagenr()}] != $review_tab} {
+    error "FAIL argument-free HunkReview did not replace the range with working-tree changes in the same tab"
   }
 
   catch { exec nvim --server $startup_nvim_socket --remote-expr {execute('qa!')} }
@@ -533,7 +575,7 @@ proc run_test {} {
     wait_for_row $host_socket host:0.0 1 $menu_pattern
     wait_for_screen $host_socket host:0.0 {second.txt}
 
-    return "PASS startup HunkReview arguments match the post-startup ANSI palette; same ranges reuse and changed ranges replace one process in the same Tool Tab; two production Hunk Tool Tabs render cleanly, survive tab switches and a native 80x20 to 100x30 resize, isolate process exit, and leave C-b s plus C-b h with host tmux"
+    return "PASS startup HunkReview matches post-startup colors; e and the resume key preserve the exact review process, terminal, and notes; argument-free HunkReview selects working-tree changes; same ranges reuse and changed ranges replace one process in the same tab; two production Hunk tabs render cleanly, survive switching and resize, isolate exit, and preserve host tmux navigation"
   }
 
   if {$menu_present} {

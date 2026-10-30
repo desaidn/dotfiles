@@ -96,7 +96,7 @@ Run the matching checks when their surface changes:
 - `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` for terminal-tool lifecycle, handoff, and host input routing.
 - `nvim --clean --headless -l nvim/tests/terminal_tool_native_spec.lua` for native directory/tab behavior, checkout identity, process exit, and preservation of modified ordinary splits.
 - `nvim/tests/languages/lint_spec.lua`, `python_runtime_spec.lua`, and `tests/neo_tree_spec.lua` exercise installed plugins; run them after the normal editor dependencies are available. They stub provisioning and external actions, not the Neovim APIs under test.
-- `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` for real Hunk rendering, switching, isolated exit, resize, and host tmux prefix routing. It requires Expect, tmux, Git, Hunk, and Neovim on `PATH`.
+- `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` for real Hunk rendering, Editor Handoff and review resumption, input selection, switching, isolated exit, resize, and host tmux prefix routing. It requires Expect, tmux, Git, Hunk, and Neovim on `PATH`, plus installed flatten.nvim.
 
 Installed-plugin tests may write Neovim state or cache files. In a sandbox, set
 `XDG_STATE_HOME` and `XDG_CACHE_HOME` to writable temporary directories while
@@ -211,17 +211,26 @@ require('custom.lib.terminal_tool').create {
 ```
 
 A variant may also declare an `ex_command` when an external workflow needs a
-deterministic Neovim entry point. The command and key invoke the exact same
-private toggle callback; declarations still receive no lifecycle controller.
+deterministic Neovim entry point. By default, the command and key invoke the
+exact same private toggle callback; declarations still receive no lifecycle
+controller.
 Keys and Ex commands must be unclaimed when the declaration loads. Ex command
 names follow Neovim's uppercase-leading alphanumeric syntax, and registration
 is atomic so a rejected declaration preserves existing mappings and commands.
 
-A command-only variant may declare `command` as a function from the Ex command's
-string arguments to an argv list. It requires `ex_command` and has no key. The
-shared module registers it with `nargs = '*'`; the function validates the tool's
-argument contract before returning argv. Resolve and validate the complete argv
-before changing any live job or tab, including before queueing a startup request.
+A variant may declare `resume = true` to make its key toggle the selected
+instance's active input. Its declared command supplies the fallback when no
+input is running; its Ex command still selects its resolved input explicitly.
+Preserve the existing process, terminal buffer, and input when resuming,
+including after Editor Handoff or native `:tabclose`.
+
+A variant may declare `command` as a function from the Ex command's
+string arguments to an argv list. It requires `ex_command`; any key must use
+`resume = true`, and the function must accept an empty argument list for that
+key's fallback. The shared module registers it with `nargs = '*'`; the function
+validates the tool's argument contract before returning argv. Resolve and
+validate the complete argv before changing any live job or tab, including before
+queueing a startup request.
 Keep argument interpretation in the thin declaration and lifecycle ownership in
 the shared module.
 
@@ -248,13 +257,16 @@ review. Its inputs share a Tool Tab and process per Git checkout to keep
 `--watch` live and the `--repo .` selector on `hunk session` subcommands unambiguous. See the
 [Git guide](README.md#git) for mappings and Editor Handoff behavior.
 
-`:HunkReview BASE HEAD` is always available and requires exactly two full
-lowercase hexadecimal commit IDs of matching length: 40 characters for SHA-1
-or 64 for SHA-256. Reject missing, extra, malformed, or mismatched-length
-arguments before disturbing any running review. Repeating a range reuses its
-toggle; changing it replaces the job in the same Tool Tab. Keep requested ranges
-independent across checkouts and preserve arguments through startup deferral.
-`<leader>gd` always selects working-tree changes and `<leader>gD` staged changes.
+`:HunkReview` is always available and accepts no arguments for working-tree
+changes or exactly two full lowercase hexadecimal commit IDs of matching
+length: 40 characters for SHA-1 or 64 for SHA-256. Reject one, extra, malformed,
+or mismatched-length arguments before disturbing any running review. Repeating
+a range reuses its toggle; changing it replaces the job in the same Tool Tab.
+Keep requested ranges independent across checkouts and preserve arguments
+through startup deferral.
+`<leader>gd` resumes the selected checkout's current input and defaults to
+working-tree changes only when none is running. `<leader>gD` selects staged
+changes; argument-free `:HunkReview` explicitly selects working-tree changes.
 The caller owns commit resolution, review-base selection, and the intended
 checkout. Hunk's `e` action returns through flatten.nvim to that review's Neovim
 with normal project-root discovery and full language tooling. Keep the command

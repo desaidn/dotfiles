@@ -191,7 +191,10 @@ The configured Neovim adapter opens `hunk diff BASE...HEAD --watch --mode stack`
 It validates two full lowercase, same-length commit IDs, not Git state or
 approval. Repeating the range reuses its toggle; changing it replaces the job
 in the same Tool Tab. Invalid arguments leave the current review intact.
-`<leader>gd` always selects working-tree changes and `<leader>gD` staged changes.
+`<leader>gd` resumes the checkout's current review after Editor Handoff and
+defaults to working-tree changes when none is running. Argument-free
+`:HunkReview` explicitly selects working-tree changes; `<leader>gD` selects
+staged changes.
 Changing any review input ends the old review; preserve its notes first and
 verify the new snapshot. Hunk's `e` returns to this host Neovim with project
 language tooling. In a separately authorized terminal or tmux fallback, run

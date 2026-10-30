@@ -233,8 +233,9 @@ labels without requiring a Nerd Font.
 ### Git
 
 - `<leader>gg` - Toggle lazygit
-- `<leader>gd` - Toggle Hunk stacked working-tree review
+- `<leader>gd` - Toggle the current Hunk review; start a stacked working-tree review when none exists
 - `<leader>gD` - Toggle the same Hunk review for staged changes
+- `:HunkReview` - Select working-tree changes
 - `:HunkReview BASE HEAD` - Toggle an exact aggregate commit review
 - `<leader>ga` - Stage/add current hunk
 - `<leader>gr` - Reset current hunk
@@ -260,12 +261,16 @@ nvim -c 'HunkReview <full-base-oid> <full-head-oid>'
 
 Replace both placeholders with lowercase hexadecimal IDs of the same length
 (40 for SHA-1 or 64 for SHA-256). The command is always available and requires
-exactly two IDs; invalid arguments leave any running review unchanged. This
+either no arguments for working-tree changes or exactly two IDs for a commit
+range; invalid arguments leave any running review unchanged. This
 configuration validates their format; the caller owns commit resolution and
 review-base selection. The command runs
 `hunk diff BASE...HEAD --watch --mode stack`. Repeating the same range toggles
 its existing review; changing the range replaces its job in the same Tool Tab.
-`<leader>gd` always selects the working tree and `<leader>gD` staged changes.
+`<leader>gd` resumes the checkout's current review, including its commit range,
+notes, and position after pressing `e` to open a file in Neovim. It starts a
+working-tree review when no review is running. Use `:HunkReview` without
+arguments to switch to working-tree changes, or `<leader>gD` for staged changes.
 
 Each terminal tool uses a persistent Tool Tab. LazyGit restarts in its existing
 tab when the working directory changes; Hunk keeps an instance per canonical

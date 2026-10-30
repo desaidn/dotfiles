@@ -294,13 +294,16 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
 
 local function after_ui_enter(callback)
   local pending = false
-  local pending_command
+  local pending_request
 
-  return function(command)
-    pending_command = command
-    if pending then return true end
-    if ui_entered then return callback(command) end
+  return function(request)
+    if pending then
+      if not request.resume then pending_request = request end
+      return true
+    end
+    if ui_entered then return callback(request) end
 
+    pending_request = request
     pending = true
     vim.api.nvim_create_autocmd('UIEnter', {
       group = lifecycle_group,
@@ -310,8 +313,8 @@ local function after_ui_enter(callback)
         -- after UIEnter keeps +cmd launches identical to interactive mappings.
         vim.schedule(function()
           pending = false
-          callback(pending_command)
-          pending_command = nil
+          callback(pending_request)
+          pending_request = nil
         end)
       end,
       desc = 'Start terminal tool after UI initialization',
@@ -420,14 +423,16 @@ local function same_command(left, right)
   return true
 end
 
-local function toggle(tool, variant, command)
+local function toggle(tool, variant, command, resume)
   local current_win = vim.api.nvim_get_current_win()
   local current_tab = vim.api.nvim_get_current_tabpage()
   local current_instance = instance_for_tab(tool, current_tab)
 
-  -- Repeating the running input hides its Tool Tab. A different variant or
-  -- resolved command retargets this instance instead of toggling it closed.
-  if current_instance and current_instance.variant == variant and same_command(current_instance.command, command) then return focus_host_window() end
+  -- Resuming or repeating the running input hides its Tool Tab. Explicitly
+  -- selecting another input retargets this instance instead of hiding it.
+  if current_instance and (resume or (current_instance.variant == variant and same_command(current_instance.command, command))) then
+    return focus_host_window()
+  end
   if not current_tab_is_tool() then host_win = current_win end
 
   local cwd = current_instance and current_instance.cwd or host_cwd()
@@ -446,6 +451,9 @@ local function toggle(tool, variant, command)
 
   if instance.buf and not vim.api.nvim_buf_is_valid(instance.buf) and not stop_generation(tool, instance, false) then return false end
   local changed_cwd = tool.spec.instances == 'singleton' and instance.cwd ~= cwd
+  if resume and instance.buf and not changed_cwd then
+    variant, command = instance.variant, instance.command
+  end
   local changed_input = instance.variant ~= variant or not same_command(instance.command, command)
   if instance.buf and (changed_cwd or changed_input) and not stop_generation(tool, instance, true) then return false end
 
@@ -518,9 +526,16 @@ local function normalize_variant(variant, declared_keys, declared_ex_commands, e
     declared_keys[key] = true
   end
 
+  local resume = variant.resume
+  assert(resume == nil or type(resume) == 'boolean', 'terminal tool resume must be a boolean')
+  assert(not resume or key ~= nil, 'terminal tool resume requires a key')
+
   local command = variant.command
   if type(command) == 'function' then
-    assert(variant.ex_command ~= nil and key == nil, 'terminal tool command functions require an Ex command without a key')
+    assert(
+      variant.ex_command ~= nil and (key == nil or resume),
+      'terminal tool command functions require an Ex command and any key must resume the active input'
+    )
   else
     command = validate_command(command)
   end
@@ -546,6 +561,7 @@ local function normalize_variant(variant, declared_keys, declared_ex_commands, e
     desc = assert_nonempty_string(variant.desc, 'terminal tool desc is required'),
     command = command,
     ex_command = ex_command,
+    resume = resume == true,
   }
 end
 
@@ -561,12 +577,12 @@ local function normalize_config(config)
   local declared_variants = config.variants
   if declared_variants == nil then
     assert(config.command ~= nil, 'terminal tool requires a command or a variants list')
-    declared_variants = { { key = config.key, desc = config.desc, command = config.command, ex_command = config.ex_command } }
+    declared_variants = { { key = config.key, desc = config.desc, command = config.command, ex_command = config.ex_command, resume = config.resume } }
   else
     assert(type(declared_variants) == 'table', 'terminal tool variants must be a list')
     assert(
-      config.key == nil and config.command == nil and config.desc == nil and config.ex_command == nil,
-      'terminal tool variants own key, command, desc, and ex_command; do not also declare them at the top level'
+      config.key == nil and config.command == nil and config.desc == nil and config.ex_command == nil and config.resume == nil,
+      'terminal tool variants own key, command, desc, ex_command, and resume; do not also declare them at the top level'
     )
     -- A gap or string key would make ipairs stop early and silently drop an input.
     local counted = 0
@@ -634,6 +650,7 @@ end
 ---@field key? string
 ---@field desc string
 ---@field ex_command? string
+---@field resume? boolean key resumes the active input; zero-argument command is the fallback
 
 ---@class custom.TerminalToolConfig
 ---@field id string
@@ -641,6 +658,7 @@ end
 ---@field key? string
 ---@field desc? string
 ---@field ex_command? string
+---@field resume? boolean
 ---@field variants? custom.TerminalToolVariant[] input variants sharing one Tool Tab
 ---@field env? table<string, string>
 ---@field handoff? 'return'|'return-and-acknowledge'
@@ -657,16 +675,18 @@ function M.create(config)
 
   local registrations = {}
   for _, variant in ipairs(tool.spec.variants) do
-    local launch = function(command) return toggle(tool, variant, command) end
+    local launch = function(request) return toggle(tool, variant, request.command, request.resume) end
     if variant.ex_command then launch = after_ui_enter(launch) end
-    local callback = function(options)
+    local invoke = function(args, resume)
       local command = variant.command
-      if type(command) == 'function' then command = validate_command(command(options.fargs)) end
-      return launch(command)
+      if type(command) == 'function' then command = validate_command(command(args)) end
+      return launch { command = command, resume = resume }
     end
+    local callback = function(options) return invoke(options and options.fargs or {}, false) end
     registrations[#registrations + 1] = {
       variant = variant,
       callback = callback,
+      key_callback = variant.resume and function() return invoke({}, true) end or callback,
     }
   end
 
@@ -690,7 +710,7 @@ function M.create(config)
     for _, registration in ipairs(registrations) do
       local variant = registration.variant
       if variant.key then
-        vim.keymap.set('n', variant.key, registration.callback, { desc = variant.desc })
+        vim.keymap.set('n', variant.key, registration.key_callback, { desc = variant.desc })
         registered_mappings[#registered_mappings + 1] = variant.key
       end
     end
