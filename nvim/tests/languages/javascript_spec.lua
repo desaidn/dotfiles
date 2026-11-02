@@ -94,21 +94,6 @@ local setup_ok, setup_error = xpcall(function()
     assert(fake_dap.adapters.node == nil, 'js-debug must remain unconfigured before a debug action')
   end)
 
-  check('does not route Deno buffers to the Node and browser debugger', function()
-    local deno_source = project_root .. '/packages/deno/mod.ts'
-    assert(vim.fn.mkdir(vim.fs.dirname(deno_source), 'p') == 1)
-    assert(vim.fn.writefile({}, project_root .. '/packages/deno/deno.json') == 0)
-    assert(vim.fn.writefile({}, deno_source) == 0)
-    local deno = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_buf_set_name(deno, deno_source)
-    vim.bo[deno].filetype = 'typescript'
-
-    local languages = require 'custom.languages.config'
-    local project = require('custom.languages.context').for_buffer(deno, languages.dap_by_ft.typescript.root_profile)
-    vim.api.nvim_buf_delete(deno, { force = true })
-    assert(project == nil, 'Deno must not use the Node/browser DAP project profile')
-  end)
-
   check('reports a missing js-debug executable and remains retryable', function()
     local configured, configure_error = pcall(shared_dap.ensure_buffer, javascript)
     assert(not configured, 'a missing js-debug adapter must fail the debug action')
@@ -158,16 +143,6 @@ local setup_ok, setup_error = xpcall(function()
     assert(launch.program() == fake_dap.ABORT, 'an unowned JavaScript file must not become a debug target')
     assert(launch.cwd() == fake_dap.ABORT, 'an unowned JavaScript file must not inherit Neovim cwd')
     vim.api.nvim_buf_delete(unowned, { force = true })
-
-    local deno_source = project_root .. '/packages/deno/index.js'
-    assert(vim.fn.writefile({}, deno_source) == 0)
-    local deno = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_buf_set_name(deno, deno_source)
-    vim.bo[deno].filetype = 'javascript'
-    vim.api.nvim_set_current_buf(deno)
-    assert(launch.program() == fake_dap.ABORT, 'a Deno JavaScript file must not become a Node debug target')
-    assert(launch.cwd() == fake_dap.ABORT, 'a Deno JavaScript file must not inherit the Node project root')
-    vim.api.nvim_buf_delete(deno, { force = true })
   end)
 end, debug.traceback)
 

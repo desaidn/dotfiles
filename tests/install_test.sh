@@ -463,6 +463,14 @@ case "${0##*/}" in
     tree-sitter)
         printf 'tree-sitter 0.26.1\n'
         ;;
+    ghostty)
+        [[ "${1:-}" == +version ]] || exit 2
+        if [[ -f "$DOTFILES_TEST_STATE/ghostty-version" ]]; then
+            printf 'Ghostty %s\n' "$(cat "$DOTFILES_TEST_STATE/ghostty-version")"
+        else
+            printf 'Ghostty 1.3.0\n'
+        fi
+        ;;
     *)
         exit 0
         ;;
@@ -501,6 +509,12 @@ cask_name() {
 
 case "${1:-}" in
     shellenv)
+        if [[ -e "$DOTFILES_TEST_STATE/require-bash-shellenv" && "${2:-}" != bash ]]; then
+            # Homebrew falls back to $SHELL when parent-process inspection is
+            # unavailable; its Fish output cannot be evaluated by this Bash caller.
+            printf 'set --global --export HOMEBREW_PREFIX "%s";\n' "$DOTFILES_TEST_BREW_PREFIX"
+            exit 0
+        fi
         printf "export PATH=\"%s:\$PATH\"\n" "$DOTFILES_TEST_FAKE_BIN"
         ;;
     bundle)
@@ -554,8 +568,10 @@ case "${1:-}" in
                 : >"$DOTFILES_TEST_STATE/cask-$name"
                 case "$name" in
                     ghostty)
-                        mkdir -p "$DOTFILES_TEST_APPLICATION_DIR/Ghostty.app"
-                        cp "$DOTFILES_TEST_GENERIC_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/ghostty"
+                        mkdir -p "$DOTFILES_TEST_APPLICATION_DIR/Ghostty.app/Contents/MacOS"
+                        cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_APPLICATION_DIR/Ghostty.app/Contents/MacOS/ghostty"
+                        chmod +x "$DOTFILES_TEST_APPLICATION_DIR/Ghostty.app/Contents/MacOS/ghostty"
+                        cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/ghostty"
                         chmod +x "$DOTFILES_TEST_FAKE_BIN/ghostty"
                         ;;
                     font-jetbrains-mono)
@@ -797,6 +813,105 @@ test_macos_fresh_and_second_run() {
     assert_eq "1" "$(count_zsh_backups)" "a second run should not create another zsh backup"
     assert_common_links
     pass "fresh macOS provisioning, non-destructive linking, and second-run no-op"
+}
+
+test_installer_requests_bash_shellenv() {
+    new_fixture bash-shellenv Darwin
+    : >"$FIXTURE_STATE/require-bash-shellenv"
+    run_installer
+    assert_common_links
+    pass "installer requests Bash syntax instead of relying on Homebrew shell detection"
+}
+
+test_ghostty_compatibility_precedes_configuration_links() {
+    local version
+    for version in 1.2.3 1.3.0 1.4.0; do
+        new_fixture "ghostty-$version" Darwin
+        # A manually installed application need not have a Homebrew receipt or
+        # CLI on PATH. Use the same bundle executable layout as the real app.
+        mkdir -p "$FIXTURE_APPLICATION_DIR/Ghostty.app/Contents/MacOS"
+        cp "$FIXTURE_FORMULA_TEMPLATE" "$FIXTURE_APPLICATION_DIR/Ghostty.app/Contents/MacOS/ghostty"
+        chmod +x "$FIXTURE_APPLICATION_DIR/Ghostty.app/Contents/MacOS/ghostty"
+        printf '%s\n' "$version" >"$FIXTURE_STATE/ghostty-version"
+        if [[ "$version" == 1.2.3 ]]; then
+            run_installer failure
+            grep -Fq 'Ghostty 1.3+ is required' "$FIXTURE_OUTPUT" ||
+                fail "incompatible Ghostty did not explain its required version"
+            assert_not_exists "$FIXTURE_HOME/.config"
+            assert_not_exists "$FIXTURE_HOME/.zshrc"
+        else
+            run_installer
+            assert_common_links
+            assert_symlink "$FIXTURE_HOME/.config/ghostty" "$REPO_ROOT/ghostty"
+        fi
+        assert_log_count 0 'brew cask install ghostty' "$FIXTURE_LOG"
+    done
+    pass "Ghostty compatibility is checked before linking and newer versions are accepted"
+}
+
+test_concurrent_installers_preserve_original_backup() {
+    local first_pid second_status deadline backup
+    new_fixture concurrent-installs Darwin
+    run_installer
+    unlink "$FIXTURE_HOME/.zshrc"
+    printf 'original user configuration\n' >"$FIXTURE_HOME/.zshrc"
+
+    # Both installers can reach backup selection within one clock second.
+    # Pause one at the real mv boundary while the other finishes linking.
+    unlink "$FIXTURE_FAKE_BIN/date"
+    cat >"$FIXTURE_FAKE_BIN/date" <<'SCRIPT'
+#!/usr/bin/env bash
+printf '1800000000\n'
+SCRIPT
+    unlink "$FIXTURE_FAKE_BIN/mv"
+    cat >"$FIXTURE_FAKE_BIN/mv" <<'SCRIPT'
+#!/usr/bin/env bash
+if [[ "${DOTFILES_TEST_RACER:-}" == first && "$1" == "$HOME/.zshrc" ]]; then
+    : >"$DOTFILES_TEST_STATE/first-ready"
+    deadline=$((SECONDS + 30))
+    until [[ -f "$DOTFILES_TEST_STATE/release-first" ]]; do
+        (( SECONDS < deadline )) || exit 9
+        /bin/sleep 0.02
+    done
+fi
+exec /bin/mv "$@"
+SCRIPT
+    chmod +x "$FIXTURE_FAKE_BIN/date" "$FIXTURE_FAKE_BIN/mv"
+    (
+        export DOTFILES_TEST_RACER=first
+        FIXTURE_OUTPUT="$FIXTURE_ROOT/first.out"
+        run_installer
+    ) &
+    first_pid=$!
+    deadline=$((SECONDS + 30))
+    until [[ -f "$FIXTURE_STATE/first-ready" ]]; do
+        if (( SECONDS >= deadline )); then
+            : >"$FIXTURE_STATE/release-first"
+            wait "$first_pid" || true
+            fail "first installer did not reach the backup boundary"
+        fi
+        /bin/sleep 0.02
+    done
+    if (
+        export DOTFILES_TEST_RACER=second
+        FIXTURE_OUTPUT="$FIXTURE_ROOT/second.out"
+        run_installer failure
+    ); then
+        second_status=0
+    else
+        second_status=$?
+    fi
+    : >"$FIXTURE_STATE/release-first"
+    wait "$first_pid" || fail "first concurrent installer failed"
+
+    backup="$FIXTURE_HOME/.zshrc.bak.1800000000"
+    [[ ! -L "$backup" ]] && grep -Fxq 'original user configuration' "$backup" ||
+        fail "concurrent installers lost the original configuration backup"
+    assert_eq 0 "$second_status" "concurrent configuration linking was not rejected"
+    grep -Fq 'another installer' "$FIXTURE_ROOT/second.out" ||
+        fail "concurrent installer did not explain why it stopped"
+    assert_common_links
+    pass "concurrent installers cannot overwrite the original configuration backup"
 }
 
 assert_linux_native_install_once() {
@@ -2054,6 +2169,9 @@ test_install_cli_is_safe
 test_skip_mise_runtimes_completes_yum_setup
 test_skip_mise_runtimes_retains_existing_manifest
 test_macos_fresh_and_second_run
+test_installer_requests_bash_shellenv
+test_ghostty_compatibility_precedes_configuration_links
+test_concurrent_installers_preserve_original_backup
 test_broken_font_links_do_not_count_as_installed
 test_local_templates_are_published_complete_without_overwriting
 test_linux_manager_fresh_and_second_run apt-get

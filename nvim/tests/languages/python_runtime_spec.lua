@@ -15,6 +15,7 @@ package.loaded['mason-registry'] = {
 local fixture = vim.fn.tempname()
 local previous = vim.fn.getcwd()
 local original_virtual_env, original_conda_prefix = vim.env.VIRTUAL_ENV, vim.env.CONDA_PREFIX
+local original_path = vim.env.PATH
 local original_env_file = vim.env.DOTFILES_TEST_ENV_FILE
 local original_input, original_ui_input = vim.fn.input, vim.ui.input
 vim.env.VIRTUAL_ENV, vim.env.CONDA_PREFIX = nil, nil
@@ -97,6 +98,66 @@ local ok, err = xpcall(function()
     local enriched = enrich(defaults[index])
     assert(vim.deep_equal(enriched.python, expected) and enriched.pythonPath == nil, vim.inspect(enriched))
   end
+
+  -- Opening another project from an activated virtualenv must not carry that
+  -- project's interpreter into generated launches for a project without a venv.
+  local fallback_python = vim.fn.exepath 'python3'
+  local unrelated_venv = fixture .. '/other/.venv'
+  local created_venv = vim.system({ fallback_python, '-m', 'venv', '--without-pip', unrelated_venv }, { text = true }):wait()
+  assert(created_venv.code == 0, created_venv.stderr)
+  local venv_bin = unrelated_venv .. (vim.fn.has 'win32' == 1 and '/Scripts' or '/bin')
+  local separator = vim.fn.has 'win32' == 1 and ';' or ':'
+  vim.env.VIRTUAL_ENV = unrelated_venv
+  vim.env.PATH = venv_bin .. separator .. original_path
+  local active_python = vim.fn.exepath 'python3'
+  local active_prefix = vim.system({ active_python, '-c', 'import sys; print(sys.prefix)' }, { text = true }):wait()
+  assert(active_prefix.code == 0 and vim.trim(active_prefix.stdout) == unrelated_venv, 'fixture did not activate a real virtualenv')
+  local foreign_defaults = require('dap').providers.configs['dap.global'](vim.api.nvim_get_current_buf())
+  local file_launch = vim.iter(foreign_defaults):find(function(config) return config.name == 'file' end)
+  assert(file_launch, 'missing generated file launch')
+  local foreign_launch = enrich(file_launch)
+  local selected_prefix = vim.system({ foreign_launch.pythonPath, '-c', 'import sys; print(sys.prefix)' }, { text = true }):wait()
+  assert(selected_prefix.code == 0, selected_prefix.stderr)
+  assert(vim.trim(selected_prefix.stdout) ~= unrelated_venv, "project without a venv launched another project's environment: " .. foreign_launch.pythonPath)
+  assert(foreign_launch.pythonPath == fallback_python, 'fallback lost the next visible interpreter: ' .. foreign_launch.pythonPath)
+  vim.env.VIRTUAL_ENV = nil
+  vim.env.PATH = original_path
+
+  -- Stdlib activation retains the path used to create an environment, even
+  -- when Neovim resolves a project symlink to its real directory.
+  local aliased_venv = fixture .. '/alias/.custom-env'
+  local created_alias = vim.system({ fallback_python, '-m', 'venv', '--without-pip', aliased_venv }, { text = true }):wait()
+  assert(created_alias.code == 0, created_alias.stderr)
+  local capture_environment = fixture .. '/capture_environment.py'
+  write(capture_environment, {
+    'import json, os, sys, sysconfig',
+    'print(json.dumps({"virtual_env": os.environ["VIRTUAL_ENV"], "path": os.environ["PATH"], "prefix": sys.prefix, "site": sysconfig.get_path("purelib")}))',
+  })
+  local windows = vim.fn.has 'win32' == 1
+  local activate = aliased_venv .. (windows and '/Scripts/activate.bat' or '/bin/activate')
+  local activate_command = windows and { 'cmd.exe', '/d', '/c', 'call "%DOTFILES_TEST_ACTIVATE%" && python "%DOTFILES_TEST_CAPTURE%"' }
+    or { 'sh', '-c', '. "$DOTFILES_TEST_ACTIVATE" && exec python "$DOTFILES_TEST_CAPTURE"' }
+  local activation = vim
+    .system(activate_command, {
+      text = true,
+      env = { DOTFILES_TEST_ACTIVATE = activate, DOTFILES_TEST_CAPTURE = capture_environment },
+    })
+    :wait()
+  assert(activation.code == 0, activation.stderr)
+  local activated = vim.json.decode(activation.stdout)
+  assert(vim.fs.normalize(activated.virtual_env) == aliased_venv, 'native activation did not retain the project alias')
+  assert(vim.uv.fs_realpath(activated.prefix) == fixture .. '/project/.custom-env', 'fixture did not activate the project environment')
+  write(activated.site .. '/dotfiles_alias_probe.py', { 'VALUE = "project-environment"' })
+  vim.env.VIRTUAL_ENV, vim.env.PATH = activated.virtual_env, activated.path
+  local alias_defaults = require('dap').providers.configs['dap.global'](vim.api.nvim_get_current_buf())
+  local alias_launch = enrich(assert(vim.iter(alias_defaults):find(function(config) return config.name == 'file' end)))
+  local selected_alias = vim
+    .system({ alias_launch.pythonPath, '-c', 'import sys, dotfiles_alias_probe; print(sys.prefix); print(dotfiles_alias_probe.VALUE)' }, { text = true })
+    :wait()
+  assert(selected_alias.code == 0, 'project alias lost its activated environment: ' .. alias_launch.pythonPath .. '\n' .. selected_alias.stderr)
+  local alias_output = vim.split(vim.trim(selected_alias.stdout), '\n', { plain = true })
+  assert(vim.uv.fs_realpath(alias_output[1]) == fixture .. '/project/.custom-env' and alias_output[2] == 'project-environment', selected_alias.stdout)
+  vim.env.VIRTUAL_ENV, vim.env.PATH = nil, original_path
 
   local source = vim.api.nvim_get_current_buf()
   local source_path = vim.api.nvim_buf_get_name(source)
@@ -373,6 +434,7 @@ end, debug.traceback)
 vim.cmd.cd(previous)
 vim.fs.rm(fixture, { recursive = true, force = true })
 vim.env.VIRTUAL_ENV, vim.env.CONDA_PREFIX = original_virtual_env, original_conda_prefix
+vim.env.PATH = original_path
 vim.env.DOTFILES_TEST_ENV_FILE = original_env_file
 vim.fn.input, vim.ui.input = original_input, original_ui_input
 assert(ok, err)

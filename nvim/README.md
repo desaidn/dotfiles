@@ -38,14 +38,13 @@ automatically.
 
 Mise owns machine runtimes and Mason owns editor tools. JavaScript/TypeScript
 semantics come from each project's root-local TypeScript installation. The
-configuration selects a package-manager or Git root and excludes a nearer Deno
-project. A parseable TypeScript 7+ installation uses that root's exact
-`node_modules/.bin/tsc` LSP; earlier versions use Mason's
-`typescript-language-server` transport pointed at the same project's
+configuration selects a package-manager or Git root. A parseable TypeScript 7+
+installation uses that root's exact `node_modules/.bin/tsc` LSP; earlier versions
+use Mason's `typescript-language-server` transport pointed at the same project's
 `node_modules/typescript/lib/tsserver.js`. The compatibility client accepts only
 the expected `$/typescriptVersion` report from `user-setting` and terminates
-bundled, workspace-fallback, or mismatched TypeScript. Missing, unparseable,
-unowned, and Deno workspaces receive neither client.
+bundled, workspace-fallback, or mismatched TypeScript. Missing, unparseable, and
+unowned workspaces receive neither client.
 
 Python DAP uses Mason's debugpy adapter
 while debug targets use their project environments. Both `python` and `debugpy`
@@ -57,13 +56,26 @@ and relative `envFile` paths are resolved from the project root, independently
 of an explicit launch `cwd`. Absolute paths, workspace/environment variables,
 deferred inputs, and explicit interpreter/directory settings remain supported.
 
+Automatic interpreter selection is deliberately project-local: it considers an
+active `VIRTUAL_ENV` or `CONDA_PREFIX` under the source project, then checks that
+project's `.venv`, `venv`, `.env`, and `env` directories. If none is usable, it
+looks for `python3` on `PATH` while excluding active environment directories
+outside the project. This prevents an environment inherited from another project
+from silently becoming the debug target's interpreter.
+
+Directory location is a conservative selection policy, not proof of ownership.
+For a centrally stored environment, such as `~/.virtualenvs/my-project` or an
+external Conda environment, set `python` or `pythonPath` explicitly in the
+project's `.vscode/launch.json`; explicit choices take precedence over discovery.
+This policy selects the debug target's interpreter. BasedPyright uses its own
+[Python environment configuration](https://docs.basedpyright.com/latest/usage/import-resolution/#configuring-your-python-environment).
+
 Python test commands initialize the debugger on first use and select the runner,
 test target, and directory from the source
 project; changing the editor's directory is unnecessary. The nearest test or
 project marker sets the test directory, so nested `pytest.ini` or `manage.py`
 files can change it without changing the project interpreter or `launch.json`
-lookup. Test actions read `.env` from that selected test directory. Explicit
-`python` or `pythonPath` launch settings take precedence.
+lookup. Test actions read `.env` from that selected test directory.
 
 JavaScript/TypeScript DAP uses Mason's js-debug adapter while projects own non-trivial launch
 configuration. Restart Neovim after changing a project's installed TypeScript

@@ -26,8 +26,8 @@ Phase 6 even though earlier exit criteria remain open:
   but configured project runtimes, shared completion capabilities, stable server
   path resolution, and real Gradle/Maven/test/debug scenarios remain open.
 - TypeScript/JavaScript has mutually exclusive project-local routing and the
-  js-debug adapter, but source-mapped Node, browser, worker, child-process, and
-  Deno scenarios still need live verification.
+  js-debug adapter, but source-mapped Node, browser, worker, and child-process
+  scenarios still need live verification.
 - Fish and Bash/POSIX `sh` have their intended servers, formatters, and diagnostic
   ownership in configuration, but only inventory-level tests cover them.
 - Kotlin still has generic `kotlin_lsp` enablement plus ktlint. It has no
@@ -97,8 +97,7 @@ primary plan.
      capabilities, Gradle and Maven multi-module projects, main, JUnit/TestNG,
      attach, and same-basename isolation;
    - TypeScript/JavaScript: exact project compiler provenance, Node launch/attach
-     and child processes, source-mapped TypeScript, Chromium bundles/workers,
-     and Deno exclusion/routing;
+     and child processes, source-mapped TypeScript, and Chromium bundles/workers;
    - Fish: cross-file navigation/rename, diagnostics, and one formatting edit
      across config, function, and completion fixtures; and
    - Bash/POSIX `sh`: sourced siblings, ShellCheck, `.editorconfig`-driven shfmt,

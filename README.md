@@ -76,6 +76,10 @@ setup explicitly in degraded mode:
 - Existing files/dirs at ordinary configuration link targets are renamed to
   `<path>.bak.<unix-timestamp>`, never deleted. Existing unmanaged global
   instruction files require explicit migration before installation.
+- Configuration linking is serialized so concurrent installers cannot replace
+  each other's backups. A competing run stops with the lock path. If an abruptly
+  killed process leaves `~/.local/share/dotfiles/.install-lock`, confirm no
+  installer is running, then remove that empty directory with `rmdir` and retry.
 - Re-running it with the current manifests performs checks and no package or
   link mutations. Brew is invoked with `--no-upgrade`, so the installer does
   not request broad upgrades; Homebrew may still upgrade a dependency when a
@@ -176,7 +180,8 @@ layer:
 | `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
 
 On macOS, the configured UI also uses the `ghostty` and
-`font-jetbrains-mono` casks. Ghostty configuration is skipped on Linux.
+`font-jetbrains-mono` casks. Ghostty 1.3.0 or newer is required for the native
+glass background setting. Ghostty configuration is skipped on Linux.
 
 ### Mise runtimes
 
@@ -184,7 +189,7 @@ The enabled Neovim language capabilities require Node.js/npm, Python, Rust
 with Cargo, Clippy, rustfmt, and rust-src, and a Java runtime and compiler at
 version 21 or newer. These runtimes belong to Mise; Mason installs the declared
 editor tooling. TypeScript is a
-project-owned semantic exception: each recognized non-Deno workspace supplies
+project-owned semantic exception: each recognized workspace supplies
 its root-local compiler, and Mason owns only the compatibility transport.
 See [Neovim's project requirements](nvim/README.md#language-project-requirements)
 for version routing and debugging setup.
@@ -228,6 +233,26 @@ Remote sessions without a display fall back to OSC 52 copy inside Neovim.
 enhancements. Expect is needed only for the real-PTY Hunk regression test.
 `fd` is not a base dependency: fff.nvim owns normal file finding and `rg` is
 already available to Telescope.
+
+### Implementation language exceptions
+
+Repository-owned automation and test runners use Lua or shell, following the
+[language policy](AGENTS.md#implementation-languages). Lua runners use Neovim's
+existing runtime. The following exceptions serve specific tools or tests:
+
+- Native tool and document formats remain native, including Homebrew's Ruby-based
+  `Brewfile`, JSON/TOML/YAML configuration, and browser-rendered HTML/JavaScript
+  reports. Homebrew owns its Ruby runtime; the repository does not add a separate
+  Ruby installation.
+- The installer embeds C/C++ probes to check real compilation and standard-library
+  linking. The uninstaller's embedded C helper calls the platform's exclusive
+  rename operation for safe restoration. Both use the platform toolchain.
+- The Hunk terminal regression uses Expect/Tcl to drive a real terminal. Expect
+  is a test-only prerequisite; see [Neovim validation](nvim/AGENTS.md#headless-specs).
+- Language integration fixtures contain small programs in the language under
+  test. In particular, Python environment checks need a real Python interpreter
+  and its standard-library `venv` module. Mise owns Python, which is also needed
+  by the configured Python development tools; it is not the general test runner.
 
 ### Version policy and updates
 
@@ -297,8 +322,12 @@ explicit runtime-skip setup, safe restoration,
 and a mutation-free second run without touching the network, sudo, package
 managers, or the caller's home directory.
 
-`python3 tests/shell_test.py` exercises real Fish, Zsh, Homebrew shellenv, and
-available Ghostty integration scripts with isolated HOME directories.
+`nvim --clean --headless -l tests/shell_test.lua` exercises real Fish, Zsh,
+Homebrew shellenv, and available Ghostty integration scripts with isolated HOME
+and XDG directories. It requires Neovim, Fish, Zsh, Homebrew, and Git. The real
+virtual-environment regression additionally uses `python3` and its `venv` module;
+when Python is absent, that check reports a skip while the other shell checks
+still run. Ghostty integration also reports a skip when its resources are absent.
 `bash tests/nvim_performance_test.sh` checks benchmark configuration selection
 using a tiny fixture init and real Neovim.
 

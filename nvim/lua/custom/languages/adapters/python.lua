@@ -25,6 +25,38 @@ local function conda_python(environment)
   if vim.uv.fs_stat(python) and (is_windows() or vim.fn.executable(python) == 1) then return python end
 end
 
+local function fallback_python(project)
+  local root = vim.uv.fs_realpath(project.root) or project.root
+  local rejected = {}
+  for _, name in ipairs { 'VIRTUAL_ENV', 'CONDA_PREFIX' } do
+    local environment = vim.env[name]
+    if environment then
+      environment = (vim.uv.fs_realpath(environment) or environment) --[[@as string]]
+      if not vim.fs.relpath(root, environment) then rejected[#rejected + 1] = environment end
+    end
+  end
+  local function allowed(python)
+    -- Resolve the containing directory, not the executable: venv binaries can
+    -- be symlinks to the base interpreter while still selecting the venv.
+    local directory = vim.fs.dirname(python)
+    directory = vim.uv.fs_realpath(directory) or directory
+    for _, environment in ipairs(rejected) do
+      if vim.fs.relpath(environment, directory) then return false end
+    end
+    return true
+  end
+
+  local python = vim.fn.exepath 'python3'
+  if python == '' or #rejected == 0 or allowed(python) then return python end
+  -- Retain PATH precedence and native executable/extension lookup without
+  -- changing Neovim's environment or reusing a rejected active environment.
+  for _, directory in ipairs(vim.split(vim.env.PATH or '', is_windows() and ';' or ':', { plain = true })) do
+    local candidate = vim.fn.exepath(vim.fs.joinpath(directory == '' and '.' or directory, 'python3'))
+    if candidate ~= '' and allowed(candidate) then return candidate end
+  end
+  return ''
+end
+
 local function project_python(project)
   project = project or context.for_buffer(nil, root_profile)
   if not project then return vim.fn.exepath 'python3' end
@@ -42,7 +74,7 @@ local function project_python(project)
     local python = python_in(vim.fs.joinpath(project.root, directory))
     if python then return python end
   end
-  return vim.fn.exepath 'python3'
+  return fallback_python(project)
 end
 
 local function debugpy_python()

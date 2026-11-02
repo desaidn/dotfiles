@@ -9,6 +9,18 @@ begin
             if contains -- "$HOMEBREW_PREFIX/bin" $inherited_path
                 set -gx PATH $inherited_path
                 fish_add_path --path --append "$HOMEBREW_PREFIX/sbin"
+            else
+                # Keep inherited runtime/custom paths ahead of newly added Brew paths.
+                set -l before_system
+                for directory in $inherited_path
+                    contains -- $directory /usr/bin /bin /usr/sbin /sbin; and break
+                    set -a before_system $directory
+                end
+                set -l merged_path $before_system
+                for directory in $PATH
+                    contains -- $directory $merged_path; or set -a merged_path $directory
+                end
+                set -gx PATH $merged_path
             end
             break
         end

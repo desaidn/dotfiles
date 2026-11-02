@@ -3,10 +3,8 @@
 -- See: https://luals.github.io/wiki/settings/
 ---@param client vim.lsp.Client
 local function configure_neovim_lua_workspace(client)
-  if client.workspace_folders then
-    local path = vim.fn.resolve(client.workspace_folders[1].name)
-    if path ~= vim.fn.resolve(vim.fn.stdpath 'config') then return end
-  end
+  local workspace = client.workspace_folders and client.workspace_folders[1]
+  if not workspace or vim.fn.resolve(workspace.name) ~= vim.fn.resolve(vim.fn.stdpath 'config') then return end
 
   local current = client.config.settings.Lua or {} --[[@as table]]
   client.config.settings.Lua = vim.tbl_deep_extend('force', current, {

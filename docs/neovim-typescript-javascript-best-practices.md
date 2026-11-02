@@ -19,7 +19,7 @@ conditional:
 
 | Concern | Decision | Owner |
 | --- | --- | --- |
-| JS/TS semantic LSP | Route a recognized non-Deno root by its project-local TypeScript version: 7+ uses native `tsc --lsp --stdio`; earlier versions with a root-local `typescript/lib/tsserver.js` use `ts_ls`. | The project owns TypeScript semantics and compiler; Neovim selects exactly one client. |
+| JS/TS semantic LSP | Route a recognized root by its project-local TypeScript version: 7+ uses native `tsc --lsp --stdio`; earlier versions with a root-local `typescript/lib/tsserver.js` use `ts_ls`. | The project owns TypeScript semantics and compiler; Neovim selects exactly one client. |
 | Pre-TypeScript-7 compatibility | Install Mason's `typescript-language-server` only as transport and initialize it with the exact project's `node_modules/typescript/lib/tsserver.js`. | Mason owns the wrapper transport; the project owns the language service. |
 | ESLint diagnostics | Retain the working `nvim-lint` + `eslint_d` integration for now. | Mason owns `eslint_d`; the project owns ESLint and its config/plugins. |
 | Formatting | Keep Prettier/Prettierd through Conform as the only save formatter. | Conform owns buffer mutation. |
@@ -52,8 +52,8 @@ recipe](https://github.com/mason-org/mason-registry/blob/main/packages/tsc/packa
 The current upstream nvim-lspconfig `tsc` definition verifies that a candidate
 is TypeScript 7 or newer, prefers a root-local executable, starts one server at
 the workspace root, routes nested `tsconfig.json`/`jsconfig.json` projects
-inside that server, and excludes nearer Deno roots. One server per workspace is
-the intended monorepo shape; one client per TSConfig would waste resources and
+inside that server. One server per workspace is the intended monorepo shape;
+one client per TSConfig would waste resources and
 fight TypeScript's own project routing. [nvim-lspconfig `tsc`
 definition](https://github.com/neovim/nvim-lspconfig/blob/master/lsp/tsc.lua),
 [TypeScript project routing](https://github.com/microsoft/typescript-go/blob/main/internal/project/projectcollection.go)
@@ -73,19 +73,18 @@ configuration should therefore narrow, not recreate, upstream behavior:
 
 1. require a named JS/TS buffer under a recognized package-manager or Git
    root;
-2. suppress attachment when a nearer/equal Deno root owns the file;
-3. require that root's `node_modules/.bin/tsc` and parse its version;
-4. for TypeScript 7+, start that exact executable with `--lsp --stdio`;
-5. for an earlier version, additionally require
+2. require that root's `node_modules/.bin/tsc` and parse its version;
+3. for TypeScript 7+, start that exact executable with `--lsp --stdio`;
+4. for an earlier version, additionally require
    `node_modules/typescript/lib/tsserver.js`, then start Mason's
    `typescript-language-server` transport with that exact path in
    `initializationOptions.tsserver.path`;
-6. attach neither client for a missing/unparseable compiler, a pre-7 project
-   without that language-service file, an unowned buffer, or a Deno root;
-7. accept the compatibility server only when its `$/typescriptVersion`
+5. attach neither client for a missing/unparseable compiler, a pre-7 project
+   without that language-service file, or an unowned buffer;
+6. accept the compatibility server only when its `$/typescriptVersion`
    notification reports the expected version from `user-setting`; terminate it
    if the configured path fell through to workspace or bundled TypeScript;
-8. never fall back to process CWD, PATH, or a wrapper-bundled TypeScript, and
+7. never fall back to process CWD, PATH, or a wrapper-bundled TypeScript, and
    let exactly one root client own all nested TSConfig/JSConfig projects.
 
 The resolved project version and paths are cached for the Neovim session.
@@ -216,7 +215,7 @@ mappings](https://github.com/microsoft/vscode-js-debug/blob/main/src/common/cont
 [nvim-dap adapter lookup](https://github.com/mfussenegger/nvim-dap/blob/master/lua/dap.lua)
 
 A plain JavaScript current-file Node launch is a safe dotfiles default only
-inside a recognized non-Deno project. Unowned buffers abort instead of
+inside a recognized project. Unowned buffers abort instead of
 inheriting Neovim's current directory. TypeScript execution, test runners,
 browser URLs/executables, transpilers, environment files, output paths, remote
 mappings, and source-map overrides are project facts and belong in
@@ -261,11 +260,14 @@ boundaries remain explicit:
    generic state, but the repository has no JS/TS-specific health output. Add a
    small check reporting the selected root, trusted status, local TypeScript
    path/version, chosen semantic client, local ESLint version/owner, and Mason
-   js-debug path/version. It should explain that Deno is intentionally excluded
-   and that pre-7 projects without a root-local `tsserver.js` receive no
-   TypeScript client. [Neovim LSP health guidance](https://github.com/neovim/neovim/blob/v0.12.5/runtime/doc/lsp.txt)
+   js-debug path/version. It should explain that pre-7 projects without a
+   root-local `tsserver.js` receive no TypeScript client. [Neovim LSP health guidance](https://github.com/neovim/neovim/blob/v0.12.5/runtime/doc/lsp.txt)
 
 ## Implementation
+
+The implementation and verification below record the August 2026 work. The
+Deno exclusions and their fixtures were removed on 2026-10-31; current JS/TS
+root selection follows the shared package-manager/Git rules above.
 
 The completed vertical slice has a small production surface and a
 verification-heavy edge:
@@ -333,5 +335,4 @@ slice.
 
 Remaining live verification covers project-defined TypeScript execution with
 original-source breakpoints, Node attach and child processes, and a
-source-mapped Chromium bundle including a worker. A live fixture should also
-confirm that a Deno file receives neither TypeScript semantic route.
+source-mapped Chromium bundle including a worker.

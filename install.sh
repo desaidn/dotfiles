@@ -7,6 +7,7 @@ MISE_BOOTSTRAP_CONFIG_DIR="$REPO_ROOT/mise"
 MISE_MANIFEST="$MISE_BOOTSTRAP_CONFIG_DIR/conf.d/00-dotfiles.toml"
 HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 BREW_BIN=""
+GHOSTTY_BIN=""
 LINUX_PACKAGE_MANAGER=""
 LINUX_FISH_PATH=""
 SKIP_MISE_RUNTIMES=0
@@ -344,7 +345,7 @@ find_brew() {
 
 activate_brew() {
     local shell_environment
-    shell_environment="$("$BREW_BIN" shellenv)" ||
+    shell_environment="$("$BREW_BIN" shellenv bash)" ||
         die "Homebrew was found at '$BREW_BIN' but 'brew shellenv' failed"
     eval "$shell_environment"
     hash -r
@@ -379,25 +380,22 @@ install_brew_dependencies() {
     fi
 }
 
-path_list_has_directory() {
-    local directory_list="$1" child="$2" candidate old_ifs
+has_ghostty() {
+    local application_dirs candidate old_ifs
+    GHOSTTY_BIN="$(command -v ghostty || true)"
+    [[ -z "$GHOSTTY_BIN" ]] || return 0
+    application_dirs="${DOTFILES_APPLICATION_DIRS:-/Applications:$HOME/Applications}"
     old_ifs="$IFS"
     IFS=:
-    for candidate in $directory_list; do
-        if [[ -d "$candidate/$child" ]]; then
+    for candidate in $application_dirs; do
+        if [[ -x "$candidate/Ghostty.app/Contents/MacOS/ghostty" ]]; then
+            GHOSTTY_BIN="$candidate/Ghostty.app/Contents/MacOS/ghostty"
             IFS="$old_ifs"
             return 0
         fi
     done
     IFS="$old_ifs"
     return 1
-}
-
-has_ghostty() {
-    local application_dirs
-    command -v ghostty >/dev/null 2>&1 && return 0
-    application_dirs="${DOTFILES_APPLICATION_DIRS:-/Applications:$HOME/Applications}"
-    path_list_has_directory "$application_dirs" "Ghostty.app"
 }
 
 has_jetbrains_mono_file() {
@@ -422,6 +420,7 @@ brew_cask_installed() {
 }
 
 install_macos_casks() {
+    local output version
     if [[ "$OS_NAME" != "Darwin" ]]; then
         return 0
     fi
@@ -434,6 +433,12 @@ install_macos_casks() {
         "$BREW_BIN" install --cask ghostty
     fi
     has_ghostty || die "Ghostty installation completed but Ghostty.app could not be found"
+    output="$("$GHOSTTY_BIN" +version 2>/dev/null)" ||
+        die "Ghostty at '$GHOSTTY_BIN' could not report its version; repair the application and rerun"
+    version="${output%%$'\n'*}"
+    version="${version#Ghostty }"
+    version_at_least "$version" "1.3.0" ||
+        die "Ghostty 1.3+ is required for native glass backgrounds (found '${version:-unknown}'); update Ghostty and rerun"
 
     if ! has_jetbrains_mono_file; then
         if brew_cask_installed font-jetbrains-mono; then
@@ -814,7 +819,17 @@ initialize_local_template() (
     fi
 )
 
-link_configs() {
+link_configs() (
+    local lock_directory="$LOCAL_DIR/.install-lock"
+    mkdir -p "$LOCAL_DIR"
+    mkdir "$lock_directory" 2>/dev/null ||
+        die "another installer may be linking configuration; if none is running, remove the empty lock directory and retry: $lock_directory"
+    trap 'rmdir "$lock_directory"' EXIT
+    trap 'exit 1' HUP INT TERM
+
+    # Dependencies may take time to install. Recheck destinations while this
+    # invocation exclusively owns configuration linking and backup creation.
+    preflight_links
     section "Linking configuration"
     link fish        .config/fish
     if [[ "$OS_NAME" == "Darwin" ]]; then
@@ -845,7 +860,7 @@ link_configs() {
     for template in local.fish local.zsh; do
         initialize_local_template "$template"
     done
-}
+)
 
 resolve_linux_fish_path() {
     local brew_prefix

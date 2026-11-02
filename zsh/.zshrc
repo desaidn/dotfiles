@@ -15,7 +15,8 @@ git_prompt() {
     if (( ${#branch} > ${#truncated} )); then
         branch="${truncated}..."
     fi
-    [ -n "${branch}" ] && echo "[branch: ${branch}]"
+    # Prompt expansion runs after command substitution, so keep branch text literal.
+    [ -n "${branch}" ] && print -r -- "[branch: ${branch//\%/%%}]"
 }
 
 PROMPT='%F{white}[%D %*] [%~]%f $(git_prompt)

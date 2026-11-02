@@ -88,14 +88,14 @@ adapter is outside the test's scope.
 
 Run the matching checks when their surface changes:
 
-- `nvim --clean --headless -l nvim/tests/diagnostics.lua` scans every Neovim Lua file, including tests, with the installed Lua language server and this configuration's Neovim workspace settings. It checks every diagnostic severity and requires the Mason-managed `lua-language-server`.
+- `nvim --clean --headless -l nvim/tests/diagnostics.lua` scans every Neovim Lua file, including tests, with this configuration's Neovim workspace settings, then checks repository-level Lua tests using `tests/.luarc.json`. It checks every diagnostic severity and requires the Mason-managed `lua-language-server`.
 - `nvim --clean --headless -l nvim/tests/neovim_spec.lua` for the shared Neovim minimum, prerelease handling, and startup/health consumers.
 - `nvim --clean --headless -l nvim/tests/pack_spec.lua` for native package build hooks.
 - `nvim --clean --headless -l nvim/tests/languages/treesitter_spec.lua` for parser attachment after asynchronous installation and buffer lifetime changes.
 - `nvim --clean --headless -l nvim/tests/neo_tree_spec.lua` for selected-node path copying and refresh after a missed filesystem change.
 - `nvim --clean --headless -l nvim/tests/terminal_tool_spec.lua` for terminal-tool lifecycle, handoff, and host input routing.
 - `nvim --clean --headless -l nvim/tests/terminal_tool_native_spec.lua` for native directory/tab behavior, checkout identity, process exit, and preservation of modified ordinary splits.
-- `nvim/tests/languages/lint_spec.lua`, `python_runtime_spec.lua`, and `tests/neo_tree_spec.lua` exercise installed plugins; run them after the normal editor dependencies are available. They stub provisioning and external actions, not the Neovim APIs under test.
+- `nvim/tests/languages/lint_spec.lua`, `python_runtime_spec.lua`, `lua_runtime_spec.lua`, and `tests/neo_tree_spec.lua` exercise installed plugins; run them after the normal editor dependencies are available. The Lua runtime check also starts the installed Lua language server to verify standalone-file settings. They isolate provisioning and external actions while retaining the Neovim APIs under test.
 - `/usr/bin/expect nvim/tests/terminal_tool_hunk_render.exp` for real Hunk rendering, Editor Handoff and review resumption, input selection, switching, isolated exit, resize, and host tmux prefix routing. It requires Expect, tmux, Git, Hunk, and Neovim on `PATH`, plus installed flatten.nvim.
 
 Installed-plugin tests may write Neovim state or cache files. In a sandbox, set
@@ -150,7 +150,7 @@ contract, so stub-only tests do not establish correct environment-file behavior.
 
 Preserve the [TypeScript semantic-ownership contract](README.md#language-project-requirements):
 only the exact root-local compiler/language service may supply project
-semantics, selected by version after root recognition and Deno exclusion.
+semantics, selected by version after root recognition.
 The compatibility client must reject fallback or mismatched version reports.
 Mason owns the compatibility transport, js-debug, and `eslint_d`; projects own
 TypeScript, ESLint, runtime semantics, and non-trivial Node/browser

@@ -101,7 +101,11 @@ local ok, err = xpcall(function()
       local expected_root = assert(vim.uv.fs_realpath(root))
       assert(root_for(path) == expected_root, 'shrinkwrap must select its own project compiler')
       local profile = languages.dap_by_ft.typescript.root_profile
-      assert(profile.resolve(vim.fs.joinpath(expected_root, 'src/index.ts')) == expected_root, 'DAP must share shrinkwrap project ownership')
+      local buffer = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_buf_set_name(buffer, path)
+      local project = require('custom.languages.context').for_buffer(buffer, profile)
+      vim.api.nvim_buf_delete(buffer, { force = true })
+      assert(project and project.root == expected_root, 'DAP must share shrinkwrap project ownership')
     end
   end)
 
@@ -202,25 +206,6 @@ local ok, err = xpcall(function()
     assert(vim.uv.fs_chmod(legacy_compiler, 493))
     assert(root_for(legacy_source) == nil, 'TypeScript 6 must use an explicit compatibility lane')
     assert(root_for_config(legacy_config, legacy_source) == nil, 'a compatibility project must provide a root-local tsserver file')
-
-    local deno_source = project_root .. '/packages/deno/mod.ts'
-    create_file(project_root .. '/packages/deno/deno.json')
-    create_file(deno_source)
-    assert(root_for(deno_source) == nil, 'a nearer Deno project must own its TypeScript buffers')
-    assert(root_for_config(legacy_config, deno_source) == nil, 'Deno must not use the compatibility client')
-
-    create_file(project_root .. '/deno.json')
-    assert(root_for(source) == nil, 'a Deno config at the workspace root must own its TypeScript buffers')
-    assert(vim.fn.delete(project_root .. '/deno.json') == 0)
-
-    create_file(project_root .. '/deno.lock')
-    assert(root_for(source) == expected_project_root, 'a root-level Deno lock must not override the package-manager root')
-    assert(vim.fn.delete(project_root .. '/deno.lock') == 0)
-
-    local deno_lock_source = project_root .. '/packages/deno-lock/mod.ts'
-    create_file(project_root .. '/packages/deno-lock/deno.lock')
-    create_file(deno_lock_source)
-    assert(root_for(deno_lock_source) == nil, 'a nearer Deno lock must own its TypeScript buffers')
 
     local unowned_source = fixture .. '/unowned/index.ts'
     create_file(unowned_source)

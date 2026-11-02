@@ -17,20 +17,8 @@ local javascript_launch_aliases = {
   msedge = 'pwa-msedge',
 }
 
-local function javascript_root(path)
-  local project_root = vim.fs.root(path, javascript_root_markers)
-  if not project_root then return nil end
-
-  local deno_root = vim.fs.root(path, { 'deno.json', 'deno.jsonc' })
-  local deno_lock_root = vim.fs.root(path, { 'deno.lock' })
-  if deno_lock_root and #deno_lock_root > #project_root then return nil end
-  if deno_root and #deno_root >= #project_root then return nil end
-  return project_root
-end
-
 local javascript_root_profile = {
   markers = javascript_root_markers,
-  resolve = javascript_root,
 }
 
 local function prepare_javascript_launch(config)

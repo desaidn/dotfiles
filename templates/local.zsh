@@ -30,9 +30,18 @@ if [ -n "$_dotfiles_brew" ]; then
         if (( ! ${path[(Ie)$HOMEBREW_PREFIX/sbin]} )); then
             path+=("$HOMEBREW_PREFIX/sbin")
         fi
+    else
+        # Keep inherited runtime/custom paths ahead of newly added Brew paths.
+        typeset -aU _dotfiles_merged_path=()
+        for _dotfiles_dir in "${_dotfiles_inherited_path[@]}"; do
+            case "$_dotfiles_dir" in /usr/bin | /bin | /usr/sbin | /sbin) break ;; esac
+            _dotfiles_merged_path+=("$_dotfiles_dir")
+        done
+        _dotfiles_merged_path+=("${path[@]}")
+        path=("${_dotfiles_merged_path[@]}")
     fi
 fi
-unset _dotfiles_brew _dotfiles_brew_candidate _dotfiles_inherited_path
+unset _dotfiles_brew _dotfiles_brew_candidate _dotfiles_inherited_path _dotfiles_merged_path _dotfiles_dir
 
 # Optional tools are fallbacks; never displace an inherited runtime.
 for _dotfiles_bin in \

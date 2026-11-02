@@ -64,6 +64,21 @@ All configurations follow these principles:
 - Prefer standard, idiomatic shortcuts and conventions over custom bindings to ensure compatibility across systems (e.g., use Ctrl+W for delete-word rather than custom Cmd+Backspace)
 - Platform-agnostic rc files: no hardcoded `/opt/homebrew/...` paths in `fish/config.fish` or `zsh/.zshrc`. Per-machine state lives in `~/.local/share/dotfiles/local.{fish,zsh}`.
 
+### Implementation languages
+
+Use Lua or shell for repository-owned automation and test orchestration. Use
+shell for bootstrap and command-oriented work, and Lua for Neovim configuration
+or structured logic. Lua test runners use the existing Neovim runtime; do not
+add a standalone Lua runtime or a general-purpose Python harness.
+
+Use a tool's native configuration format where required. Other languages are
+appropriate for focused fixtures that exercise that language, or for a tool or
+platform interface that Lua and shell cannot adequately provide. Document each
+exception's purpose and dependency ownership in the
+[root dependency inventory](README.md#implementation-language-exceptions).
+Keep these exceptions narrow; supporting Python development does not make
+Python the repository's automation language.
+
 ## Workflow constraints
 
 Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside
@@ -189,6 +204,8 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
   parent paths before installing dependencies or changing link targets.
 - Perform all dependency installation and validation before changing link
   targets, so a partial bootstrap can be resumed safely.
+- Serialize configuration linking and backup creation across installer processes;
+  recheck destination preflight while holding the link-phase lock.
 - Validate both native C and C++ compilation and standard-library linking before
   provisioning Homebrew; executable presence alone does not establish a working SDK.
 - Use the official Homebrew installer only when Brew cannot be discovered;
