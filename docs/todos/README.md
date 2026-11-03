@@ -50,3 +50,4 @@ Point an agent at one brief and ask it to take ownership of that item. The agent
 - [Complete the primary Neovim language-support plan](09-complete-primary-language-support.md)
 - [Align Rex's background with Ghostty and Herdr](10-align-rex-background.md)
 - [Unify macOS app installation](11-unify-macos-app-installation.md)
+- [Establish shared configuration quality tooling](12-configuration-quality-tooling.md)

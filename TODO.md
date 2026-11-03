@@ -10,3 +10,4 @@
 - [Complete the primary Neovim language-support plan](docs/todos/09-complete-primary-language-support.md)
 - [Align Rex's background with Ghostty and Herdr](docs/todos/10-align-rex-background.md)
 - [Unify macOS app installation](docs/todos/11-unify-macos-app-installation.md)
+- [Establish shared configuration quality tooling](docs/todos/12-configuration-quality-tooling.md)
