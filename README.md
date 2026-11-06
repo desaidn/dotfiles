@@ -2,10 +2,12 @@
 
 Personal config monorepo. Clone into a directory such as `~/dotfiles`, run `./install.sh`, and your system is wired up via symlinks into `~/.config/` and `~/`. Keep the checkout outside the configuration paths the installer replaces; overlapping paths are rejected before provisioning.
 
-The setup is designed around one uniform code interface: Herdr is the daily workspace manager, Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. Tmux remains available as a deliberate fallback and compatibility multiplexer. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
+The setup is designed around one uniform code interface: Herdr TUI is the daily workspace manager, Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. Tmux remains available as a deliberate fallback and compatibility multiplexer. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
 
-Ghostty and Herdr remain the work terminal and multiplexer. [Rex](rex/README.md)
-is a personal experiment that could eventually replace both.
+Ghostty with Herdr TUI remains the daily terminal and workspace setup.
+[Herdr app](herdr-app/README.md) and [Rex](rex/README.md) are personal
+experiments that could replace both. Herdr app currently looks more promising
+and uses the migrated Herdr bindings and dark terminal theme.
 
 ## Layout
 
@@ -14,6 +16,7 @@ is a personal experiment that could eventually replace both.
 | `fish/`             | `~/.config/fish/`            | Prompt + `nvim-reset` alias. Platform-agnostic.           |
 | `ghostty/`          | `~/.config/ghostty/`         | macOS Ghostty terminal config.                            |
 | `herdr/config.toml` | `~/.config/herdr/config.toml` | Daily workspace config; mutable runtime state is local.   |
+| `herdr-app/` | Personal files under `~/.config/herdr-app/` | macOS app settings, theme, and Ctrl+B prefix; file-level links only. |
 | `hunk/config.toml`  | `~/.config/hunk/config.toml`  | Review preferences; mutable runtime state remains local.  |
 | `lazygit/`          | `~/.config/lazygit/`         | Git Transaction Surface with Hunk as its Diffing Solution. |
 | `mise/conf.d/00-dotfiles.toml` | `~/.config/mise/conf.d/00-dotfiles.toml` | Global runtime defaults; user config can override them. |
@@ -24,6 +27,7 @@ is a personal experiment that could eventually replace both.
 | `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt + `nvim-reset` alias. No OMZ dependency.         |
 
 Usage guides: [Neovim](nvim/README.md), [Herdr](herdr/README.md),
+[Herdr app](herdr-app/README.md),
 [tmux](tmux/README.md), [LazyGit](lazygit/README.md), [Fish](fish/README.md),
 [Zsh](zsh/README.md), [Ghostty](ghostty/README.md), [Rex](rex/README.md), and the
 [agent development workflow](docs/agents/development-workflow.md). Coding-agent constraints live in
@@ -71,6 +75,13 @@ setup explicitly in degraded mode:
 - On macOS, a missing Xcode Command Line Tools install may require completing
   Apple's system dialog and rerunning the script. On Linux, native bootstrap
   packages are supported through `apt-get`, `dnf`, `yum`, and `pacman`.
+- On macOS, it installs missing Ghostty, JetBrains Mono, and Herdr app casks,
+  preserving compatible manual installations. Herdr app's cask requires Apple
+  Silicon; the app handles Herdr core installation on first launch.
+- Herdr app personal files are linked individually, with generated files and
+  runtime state kept local. `HERDR_APP_HOME` may select another absolute home.
+  A fresh home receives the migrated agent grouping and welcome preferences;
+  existing app state is preserved. Linux skips its app and configuration.
 - Run it as a normal user with sudo access. Homebrew and this dotfiles setup
   intentionally refuse a root-owned installation.
 - Existing files/dirs at ordinary configuration link targets are renamed to
@@ -97,15 +108,23 @@ setup explicitly in degraded mode:
 
 ## Daily workspace
 
+On macOS, open Ghostty and run `herdr` from its shell for the daily workspace.
+
 ```bash
-# Normal daily workspace
+# Current daily workspace on macOS or Linux
 herdr
+
+# Personal experiment on macOS
+herdr-app
 
 # Deliberate fallback/compatibility session
 tmux new-session -A -s dev
 ```
 
-These are top-level alternatives. Plain `herdr` starts or reattaches the daily workspace; tmux remains independently available when a tmux-specific workflow is required.
+These are top-level alternatives. Plain `herdr` starts or reattaches the daily
+TUI workspace on macOS or Linux. On macOS, `herdr-app` opens the experimental
+desktop workspace. Tmux remains independently available for tmux-specific
+workflows.
 
 ## Shared agent instructions
 
@@ -140,9 +159,10 @@ tool environment, legacy hooks, and guidance before completing migration. Keep h
 application; historical records alone do not establish current review approval.
 
 The [agent development workflow](docs/agents/development-workflow.md) owns the
-complete WIP, review, approval, and landing procedure. It uses Herdr, Neovim,
-and Hunk for local and external reviews. These rules apply only to coding
-agents; human Git and LazyGit operations remain unrestricted.
+complete WIP, review, approval, and landing procedure. Neovim and Hunk reviews
+open in the task's terminal environment: Herdr app, Herdr TUI, tmux, or an
+ordinary terminal. These rules apply only to coding agents; human Git and
+LazyGit operations remain unrestricted.
 
 ## Dependency ownership
 
@@ -179,9 +199,14 @@ layer:
 | `uv` | Python project and dependency management CLI; Mise continues to own Python runtimes |
 | `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
 
-On macOS, the configured UI also uses the `ghostty` and
-`font-jetbrains-mono` casks. Ghostty 1.3.0 or newer is required for the native
-glass background setting. Ghostty configuration is skipped on Linux.
+On macOS, the configured UI also uses the `ghostty`, `font-jetbrains-mono`,
+and `herdr-app` casks. The installer provisions casks separately from the
+Brewfile to preserve compatible manual installations. Ghostty 1.3.0 or newer
+is required for its native glass background; Herdr app 0.1.12 is the validated
+configuration baseline and newer versions are accepted. Its cask requires
+Apple Silicon. Both applications' configuration is skipped on Linux.
+Herdr app owns installation and updates of its Herdr core dependency; the
+existing `herdr` Homebrew formula remains the independent TUI.
 
 ### Mise runtimes
 
@@ -249,6 +274,9 @@ existing runtime. The following exceptions serve specific tools or tests:
   rename operation for safe restoration. Both use the platform toolchain.
 - The Hunk terminal regression uses Expect/Tcl to drive a real terminal. Expect
   is a test-only prerequisite; see [Neovim validation](nvim/AGENTS.md#headless-specs).
+- The Herdr app prefix mod and its focused behavior fixture use the app's native
+  JavaScript/GPUI API. Herdr app owns that runtime; the Neovim Lua test runner
+  invokes its native checker against temporary copies without requiring Node.js.
 - Language integration fixtures contain small programs in the language under
   test. In particular, Python environment checks need a real Python interpreter
   and its standard-library `venv` module. Mise owns Python, which is also needed
@@ -321,6 +349,16 @@ shared instruction ownership and migration conflicts, backup/link behavior,
 explicit runtime-skip setup, safe restoration,
 and a mutation-free second run without touching the network, sudo, package
 managers, or the caller's home directory.
+
+Herdr app configuration and prefix behavior can also be checked on a macOS
+desktop with:
+
+```sh
+nvim --clean --headless -l tests/herdr_app_test.lua
+```
+
+This uses Herdr's native mod checker with an isolated app home. See the
+[Herdr app guide](herdr-app/README.md#validation) for its requirements and limits.
 
 `nvim --clean --headless -l tests/shell_test.lua` exercises real Fish, Zsh,
 Homebrew shellenv, and available Ghostty integration scripts with isolated HOME

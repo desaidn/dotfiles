@@ -471,6 +471,14 @@ case "${0##*/}" in
             printf 'Ghostty 1.3.0\n'
         fi
         ;;
+    herdr-app|Herdr)
+        [[ "${1:-}" == --version ]] || exit 2
+        if [[ -f "$DOTFILES_TEST_STATE/herdr-app-version" ]]; then
+            printf 'herdr-app %s\n' "$(cat "$DOTFILES_TEST_STATE/herdr-app-version")"
+        else
+            printf 'herdr-app 0.1.12\n'
+        fi
+        ;;
     *)
         exit 0
         ;;
@@ -574,6 +582,13 @@ case "${1:-}" in
                         cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/ghostty"
                         chmod +x "$DOTFILES_TEST_FAKE_BIN/ghostty"
                         ;;
+                    herdr-app)
+                        mkdir -p "$DOTFILES_TEST_APPLICATION_DIR/Herdr.app/Contents/MacOS"
+                        cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_APPLICATION_DIR/Herdr.app/Contents/MacOS/Herdr"
+                        chmod +x "$DOTFILES_TEST_APPLICATION_DIR/Herdr.app/Contents/MacOS/Herdr"
+                        cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/herdr-app"
+                        chmod +x "$DOTFILES_TEST_FAKE_BIN/herdr-app"
+                        ;;
                     font-jetbrains-mono)
                         mkdir -p "$DOTFILES_TEST_FONT_DIR"
                         : >"$DOTFILES_TEST_FONT_DIR/JetBrainsMono-Regular.ttf"
@@ -629,6 +644,7 @@ new_fixture() {
     FIXTURE_OS="$os_name"
     FIXTURE_CODEX_DIRECTORY="$FIXTURE_HOME/.codex"
     FIXTURE_PI_DIRECTORY="$FIXTURE_HOME/.pi/agent"
+    FIXTURE_HERDR_APP_DIRECTORY="$FIXTURE_HOME/.config/herdr-app"
     FIXTURE_REAL_NVIM="$(command -v nvim)"
     FIXTURE_REAL_CC="$(command -v cc)"
     if [[ -n "$package_manager" ]]; then
@@ -675,6 +691,7 @@ run_installer() {
             HOME="$run_home" \
             CODEX_HOME="$FIXTURE_CODEX_DIRECTORY" \
             PI_CODING_AGENT_DIR="$FIXTURE_PI_DIRECTORY" \
+            HERDR_APP_HOME="$FIXTURE_HERDR_APP_DIRECTORY" \
             PATH="$FIXTURE_FAKE_BIN${FIXTURE_SYSTEM_PATH:+:$FIXTURE_SYSTEM_PATH}" \
             DOTFILES_BREW_PATHS="$FIXTURE_FAKE_BIN/brew" \
             DOTFILES_APPLICATION_DIRS="$FIXTURE_APPLICATION_DIR" \
@@ -718,6 +735,7 @@ run_uninstaller() {
         TMPDIR="$FIXTURE_ROOT/tmp" \
         CODEX_HOME="$FIXTURE_CODEX_DIRECTORY" \
         PI_CODING_AGENT_DIR="$FIXTURE_PI_DIRECTORY" \
+        HERDR_APP_HOME="$FIXTURE_HERDR_APP_DIRECTORY" \
         PATH="$FIXTURE_FAKE_BIN${FIXTURE_SYSTEM_PATH:+:$FIXTURE_SYSTEM_PATH}" \
         DOTFILES_TEST_FAKE_BIN="$FIXTURE_FAKE_BIN" \
         DOTFILES_TEST_GENERIC_TEMPLATE="$FIXTURE_GENERIC_TEMPLATE" \
@@ -751,8 +769,28 @@ assert_workflow_links() {
     assert_symlink "$FIXTURE_HOME/.claude/rules/development-workflow.md" "$REPO_ROOT/docs/agents/development-workflow.md"
 }
 
+assert_herdr_app_links() {
+    local file
+    for file in keys.json settings.json themes/terminal.json \
+        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    do
+        assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/$file" "$REPO_ROOT/herdr-app/$file"
+    done
+    [[ -d "$FIXTURE_HERDR_APP_DIRECTORY/themes" && ! -L "$FIXTURE_HERDR_APP_DIRECTORY/themes" ]] ||
+        fail "Herdr app theme container must remain a real directory"
+    [[ -d "$FIXTURE_HERDR_APP_DIRECTORY/mods" && ! -L "$FIXTURE_HERDR_APP_DIRECTORY/mods" ]] ||
+        fail "Herdr app mod container must remain a real directory"
+    [[ -f "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" && ! -L "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" ]] ||
+        fail "Herdr app shared state must remain a local file"
+}
+
 assert_non_mise_links() {
     assert_workflow_links
+    if [[ "$FIXTURE_OS" == Darwin ]]; then
+        assert_herdr_app_links
+    else
+        assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY"
+    fi
     assert_symlink "$FIXTURE_HOME/.config/fish" "$REPO_ROOT/fish"
     assert_symlink "$FIXTURE_HOME/.config/herdr/config.toml" "$REPO_ROOT/herdr/config.toml"
     assert_symlink "$FIXTURE_HOME/.config/hunk/config.toml" "$REPO_ROOT/hunk/config.toml"
@@ -770,6 +808,12 @@ assert_common_links() {
 }
 
 assert_common_links_removed() {
+    local file
+    for file in keys.json settings.json themes/terminal.json \
+        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    do
+        assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/$file"
+    done
     assert_not_exists "$FIXTURE_CODEX_DIRECTORY/AGENTS.md"
     assert_not_exists "$FIXTURE_PI_DIRECTORY/AGENTS.md"
     assert_not_exists "$FIXTURE_HOME/.claude/rules/development-workflow.md"
@@ -798,6 +842,7 @@ test_macos_fresh_and_second_run() {
     assert_log_count 1 "brew bootstrap" "$FIXTURE_LOG"
     assert_log_count 1 "brew bundle install" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install ghostty" "$FIXTURE_LOG"
+    assert_log_count 1 "brew cask install herdr-app" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
     assert_log_count 0 "apt-get update" "$FIXTURE_LOG"
@@ -807,6 +852,7 @@ test_macos_fresh_and_second_run() {
     assert_log_count 1 "brew bootstrap" "$FIXTURE_LOG"
     assert_log_count 1 "brew bundle install" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install ghostty" "$FIXTURE_LOG"
+    assert_log_count 1 "brew cask install herdr-app" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
     assert_log_prefix_count 0 "apt-get " "$FIXTURE_LOG"
@@ -847,6 +893,165 @@ test_ghostty_compatibility_precedes_configuration_links() {
         assert_log_count 0 'brew cask install ghostty' "$FIXTURE_LOG"
     done
     pass "Ghostty compatibility is checked before linking and newer versions are accepted"
+}
+
+test_herdr_app_installation_preserves_existing_applications() {
+    local version
+    for version in 0.1.11 0.1.12 0.2.0 invalid; do
+        new_fixture "herdr-app-$version" Darwin
+        mkdir -p "$FIXTURE_APPLICATION_DIR/Herdr.app/Contents/MacOS"
+        cp "$FIXTURE_FORMULA_TEMPLATE" "$FIXTURE_APPLICATION_DIR/Herdr.app/Contents/MacOS/Herdr"
+        chmod +x "$FIXTURE_APPLICATION_DIR/Herdr.app/Contents/MacOS/Herdr"
+        printf '%s\n' "$version" >"$FIXTURE_STATE/herdr-app-version"
+        if [[ "$version" == 0.1.11 || "$version" == invalid ]]; then
+            run_installer failure
+            grep -Fq 'Herdr app 0.1.12+ is required' "$FIXTURE_OUTPUT" ||
+                fail "incompatible Herdr app did not explain its required version"
+            assert_not_exists "$FIXTURE_HOME/.config"
+        else
+            run_installer
+            run_installer
+            assert_common_links
+        fi
+        assert_log_count 0 "brew cask install herdr-app" "$FIXTURE_LOG"
+    done
+
+    new_fixture missing-herdr-app-cask Darwin
+    : >"$FIXTURE_STATE/cask-herdr-app"
+    run_installer failure
+    grep -Fq 'Herdr.app is missing; repair the cask' "$FIXTURE_OUTPUT" ||
+        fail "missing Herdr app cask files did not explain repair"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    assert_log_count 0 "brew cask install herdr-app" "$FIXTURE_LOG"
+
+    new_fixture incomplete-herdr-app Darwin
+    mkdir -p "$FIXTURE_APPLICATION_DIR/Herdr.app"
+    printf 'personal bundle content\n' >"$FIXTURE_APPLICATION_DIR/Herdr.app/personal"
+    run_installer failure
+    grep -Fxq 'personal bundle content' "$FIXTURE_APPLICATION_DIR/Herdr.app/personal" ||
+        fail "incomplete app bundle was replaced"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    assert_log_count 0 "brew cask install herdr-app" "$FIXTURE_LOG"
+    pass "Herdr app cask installation preserves compatible manual apps and diagnoses incomplete installations"
+}
+
+test_herdr_app_links_preserve_state_and_restore_personal_files() {
+    local file backup count
+    new_fixture herdr-app-state Darwin
+    for file in keys.json settings.json themes/terminal.json \
+        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    do
+        mkdir -p "$(dirname "$FIXTURE_HERDR_APP_DIRECTORY/$file")"
+        printf 'original %s\n' "$file" >"$FIXTURE_HERDR_APP_DIRECTORY/$file"
+    done
+    printf '{"agents.sort":"recent","layout":"main","personal":true}\n' >"$FIXTURE_HERDR_APP_DIRECTORY/shared.json"
+    printf 'personal view\n' >"$FIXTURE_HERDR_APP_DIRECTORY/view.json"
+    printf 'generated guide\n' >"$FIXTURE_HERDR_APP_DIRECTORY/AGENTS.md"
+    mkdir -p "$FIXTURE_HERDR_APP_DIRECTORY/mods/shipped"
+    printf 'shipped mod\n' >"$FIXTURE_HERDR_APP_DIRECTORY/mods/shipped/main.js"
+
+    run_installer
+    run_installer
+    assert_herdr_app_links
+    grep -Fxq '{"agents.sort":"recent","layout":"main","personal":true}' "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" ||
+        fail "installer overwrote existing Herdr app preferences"
+    for file in keys.json settings.json themes/terminal.json \
+        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    do
+        count=0
+        for backup in "$FIXTURE_HERDR_APP_DIRECTORY/$file".bak.*; do
+            [[ -f "$backup" ]] || continue
+            count=$((count + 1))
+            grep -Fxq "original $file" "$backup" || fail "Herdr app backup lost original content: $file"
+        done
+        assert_eq 1 "$count" "repeat installation should preserve exactly one original backup for $file"
+    done
+
+    run_uninstaller 0 --restore
+    run_uninstaller 0 --restore
+    for file in keys.json settings.json themes/terminal.json \
+        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    do
+        grep -Fxq "original $file" "$FIXTURE_HERDR_APP_DIRECTORY/$file" ||
+            fail "uninstall did not restore Herdr app file: $file"
+    done
+    grep -Fxq 'personal view' "$FIXTURE_HERDR_APP_DIRECTORY/view.json" || fail "Herdr app view was changed"
+    grep -Fxq 'generated guide' "$FIXTURE_HERDR_APP_DIRECTORY/AGENTS.md" || fail "generated app guide was changed"
+    grep -Fxq 'shipped mod' "$FIXTURE_HERDR_APP_DIRECTORY/mods/shipped/main.js" || fail "shipped mod was changed"
+    pass "Herdr app personal files are backed up once and restored without touching generated or runtime state"
+}
+
+test_herdr_app_home_preflight_and_uninstall_are_safe() {
+    local blocked source_name fixture_repo
+    for blocked in '' / relative "$REPO_ROOT/herdr-app" .config/nvim/app; do
+        new_fixture "herdr-app-unsafe-${blocked//\//-}" Darwin
+        case "$blocked" in
+            .config/*) FIXTURE_HERDR_APP_DIRECTORY="$FIXTURE_HOME/$blocked" ;;
+            *) FIXTURE_HERDR_APP_DIRECTORY="$blocked" ;;
+        esac
+        run_installer failure
+        assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+        assert_not_exists "$FIXTURE_HOME/.zshrc"
+    done
+    for blocked in themes mods/legacy-prefix; do
+        new_fixture "herdr-app-blocked-${blocked//\//-}" Darwin
+        mkdir -p "$(dirname "$FIXTURE_HERDR_APP_DIRECTORY/$blocked")"
+        printf 'personal parent\n' >"$FIXTURE_HERDR_APP_DIRECTORY/$blocked"
+        run_installer failure
+        grep -Fxq 'personal parent' "$FIXTURE_HERDR_APP_DIRECTORY/$blocked" ||
+            fail "blocked Herdr app parent was changed"
+        assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    done
+
+    new_fixture herdr-app-custom Darwin
+    FIXTURE_HERDR_APP_DIRECTORY="$FIXTURE_HOME/custom app"
+    run_installer
+    assert_herdr_app_links
+    cmp "$REPO_ROOT/herdr-app/templates/shared.json" "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" ||
+        fail "fresh Herdr app state did not receive migrated defaults"
+    run_uninstaller 0
+    assert_common_links_removed
+    assert_exists "$FIXTURE_HERDR_APP_DIRECTORY/shared.json"
+
+    new_fixture herdr-app-redirect Darwin
+    mkdir -p "$FIXTURE_HOME/other-profile"
+    ln -s "$FIXTURE_HOME/other-profile" "$FIXTURE_HOME/redirect"
+    FIXTURE_HERDR_APP_DIRECTORY="$FIXTURE_HOME/redirect/app"
+    run_installer failure
+    assert_not_exists "$FIXTURE_HOME/other-profile/app"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+
+    new_fixture herdr-app-uninstall-redirect Darwin
+    run_installer
+    mv "$FIXTURE_HERDR_APP_DIRECTORY/mods" "$FIXTURE_HOME/redirected-mods"
+    ln -s "$FIXTURE_HOME/redirected-mods" "$FIXTURE_HERDR_APP_DIRECTORY/mods"
+    run_uninstaller 0
+    assert_symlink "$FIXTURE_HOME/redirected-mods/legacy-prefix/main.js" "$REPO_ROOT/herdr-app/mods/legacy-prefix/main.js"
+    assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/settings.json" "$REPO_ROOT/herdr-app/settings.json"
+
+    new_fixture herdr-app-ambiguous-restore Darwin
+    run_installer
+    mkdir -p "$FIXTURE_HERDR_APP_DIRECTORY.bak.1"
+    printf 'old settings\n' >"$FIXTURE_HERDR_APP_DIRECTORY/settings.json.bak.2"
+    run_uninstaller 1 --restore
+    assert_herdr_app_links
+    assert_exists "$FIXTURE_HERDR_APP_DIRECTORY.bak.1"
+    assert_exists "$FIXTURE_HERDR_APP_DIRECTORY/settings.json.bak.2"
+
+    new_fixture herdr-app-missing-source Darwin
+    fixture_repo="$FIXTURE_ROOT/repo"
+    mkdir -p "$fixture_repo"
+    cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
+    for source_name in fish ghostty herdr hunk lazygit mise nvim tmux docs templates zsh; do
+        ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
+    done
+    FIXTURE_INSTALL_REPO_ROOT="$fixture_repo"
+    run_installer failure
+    grep -Fq 'missing or invalid tracked configuration file:' "$FIXTURE_OUTPUT" ||
+        fail "missing Herdr app sources were not preflighted"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    pass "Herdr app homes, source preflight, redirects, and backup scopes remain safe"
 }
 
 test_concurrent_installers_preserve_original_backup() {
@@ -958,6 +1163,7 @@ test_linux_manager_fresh_and_second_run() {
     assert_log_count 1 "brew bundle install" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install ghostty" "$FIXTURE_LOG"
+    assert_log_count 0 "brew cask install herdr-app" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
     assert_exists "$FIXTURE_FAKE_BIN/wl-copy"
     assert_exists "$FIXTURE_FAKE_BIN/xclip"
@@ -975,6 +1181,7 @@ test_linux_manager_fresh_and_second_run() {
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
     assert_log_count 1 "fish login environment ready" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install ghostty" "$FIXTURE_LOG"
+    assert_log_count 0 "brew cask install herdr-app" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
     assert_common_links
     pass "fresh Linux/$manager provisioning and second-run no-op"
@@ -1145,7 +1352,7 @@ test_neovim_check_failures_precede_configuration_links() {
         fixture_repo="$FIXTURE_ROOT/repo"
         mkdir -p "$fixture_repo/nvim/lua/custom/lib"
         cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
-        for source_name in fish ghostty herdr hunk lazygit mise templates tmux docs zsh; do
+        for source_name in fish ghostty herdr herdr-app hunk lazygit mise templates tmux docs zsh; do
             ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
         done
         FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
@@ -1707,7 +1914,7 @@ test_link_preflight_prevents_partial_configuration() {
     cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
     cp "$REPO_ROOT/templates/local.fish" "$REPO_ROOT/templates/local.zsh" \
         "$fixture_repo/templates/"
-    for source_name in fish ghostty herdr hunk lazygit nvim tmux docs zsh; do
+    for source_name in fish ghostty herdr herdr-app hunk lazygit nvim tmux docs zsh; do
         ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
     done
     FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
@@ -1749,7 +1956,7 @@ test_link_preflight_prevents_partial_configuration() {
     fixture_repo="$FIXTURE_ROOT/repo"
     mkdir -p "$fixture_repo"
     cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
-    for source_name in fish ghostty herdr hunk lazygit mise nvim tmux templates zsh; do
+    for source_name in fish ghostty herdr herdr-app hunk lazygit mise nvim tmux templates zsh; do
         ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
     done
     FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
@@ -1772,7 +1979,7 @@ test_checkout_overlap_is_rejected_before_provisioning() {
         fixture_repo="$FIXTURE_HOME/$placement"
         mkdir -p "$fixture_repo"
         cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
-        for source_name in fish ghostty herdr hunk lazygit mise nvim tmux docs templates zsh; do
+        for source_name in fish ghostty herdr herdr-app hunk lazygit mise nvim tmux docs templates zsh; do
             cp -R "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
         done
         FIXTURE_INSTALL_REPO_ROOT="$(cd -P "$fixture_repo" && pwd -P)"
@@ -2171,6 +2378,9 @@ test_skip_mise_runtimes_retains_existing_manifest
 test_macos_fresh_and_second_run
 test_installer_requests_bash_shellenv
 test_ghostty_compatibility_precedes_configuration_links
+test_herdr_app_installation_preserves_existing_applications
+test_herdr_app_links_preserve_state_and_restore_personal_files
+test_herdr_app_home_preflight_and_uninstall_are_safe
 test_concurrent_installers_preserve_original_backup
 test_broken_font_links_do_not_count_as_installed
 test_local_templates_are_published_complete_without_overwriting

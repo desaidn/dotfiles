@@ -35,8 +35,9 @@ latest stable releases without adding network checks or update warnings to
 startup. Neovim installer, startup, and health checks must share
 [`nvim/lua/custom/lib/neovim.lua`](nvim/lua/custom/lib/neovim.lua).
 
-Ghostty and JetBrains Mono are macOS-only Homebrew casks. Linux needs a
-session-appropriate clipboard provider when a display is present; remote
+Ghostty, JetBrains Mono, and Herdr app are macOS-only Homebrew casks. Herdr app's
+cask requires Apple Silicon; the app owns Herdr core installation and updates.
+Linux needs a session-appropriate clipboard provider when a display is present; remote
 sessions fall back to OSC 52 copy inside Neovim. Native development tools provide
 `make`, although Neovim uses it only for optional plugin enhancements. Expect
 is test-only. Do not turn gated per-machine paths for Bun, LM Studio, Claude,
@@ -81,9 +82,13 @@ Python the repository's automation language.
 
 ## Workflow constraints
 
-Herdr and tmux are top-level alternatives. Do not nest the tmux fallback inside
-Herdr for normal agent work. Usage is documented in the
-[Herdr](herdr/README.md) and [tmux](tmux/README.md) guides.
+Ghostty with Herdr TUI remains the daily setup. Herdr app and Rex are personal
+experiments.
+
+Herdr app, Herdr TUI, and tmux are top-level alternatives. Use the task's
+running environment for editor and review tabs; do not nest tmux inside either
+Herdr environment. Usage is documented in the [Herdr app](herdr-app/README.md),
+[Herdr](herdr/README.md), and [tmux](tmux/README.md) guides.
 
 ### Git Operations
 
@@ -102,8 +107,9 @@ Herdr for normal agent work. Usage is documented in the
 
 Read and follow [the development workflow](docs/agents/development-workflow.md)
 before branch, review, or landing operations. Carry out its checks directly with
-Git, Herdr, Neovim, and Hunk; no workflow executable or skill is required. This
-same complete document is installed as global guidance for all three harnesses.
+Git, Neovim, Hunk, and the task's terminal environment; no workflow executable
+or skill is required. This same complete document is installed as global
+guidance for all three harnesses.
 
 - These rules govern coding agents only. Never block, intercept, or reinterpret
   human Git and LazyGit operations as Workflow Exceptions.
@@ -134,9 +140,10 @@ same complete document is installed as global guidance for all three harnesses.
 
 ### File Organization
 
-- Each configured application maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked
+- Each configured application maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked. Herdr app links only its personal files, keeping generated files and runtime state local.
 - The complete portable agent workflow lives in `docs/agents/development-workflow.md`; harness-global instruction paths link directly to it. Keep dotfiles-specific constraints here.
 - Follow tool-specific guidance where present: [Herdr](herdr/AGENTS.md),
+  [Herdr app](herdr-app/AGENTS.md),
   [Neovim](nvim/AGENTS.md), and [tmux](tmux/AGENTS.md).
 - Long-lived architecture review reports that the user chooses to retain live under `docs/`; generated reports should not remain at the repository root
 - Configurations are environment-specific and not intended for multi-user scenarios
@@ -155,7 +162,7 @@ same complete document is installed as global guidance for all three harnesses.
 - **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent Tool Tab per selected tool instance, singleton by default and keyed by canonical Git checkout root for Hunk, with flatten.nvim for Editor Handoff and host tmux prefix and pane navigation kept upstream when using the fallback
 - **Shell ↔ Workspace manager**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; invoke Herdr for the daily workspace or tmux directly for fallback/compatibility
 - **Runtime Management**: Mise owns language runtimes; Mason owns editor tooling
-- **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty)
+- **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty). Herdr app keeps its native macOS keymap, including Option combinations.
 
 Keep the macOS-first setup Linux-compatible where practical. Update the
 [root dependency inventory](README.md#dependency-ownership) when ownership or

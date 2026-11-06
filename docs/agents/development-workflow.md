@@ -6,7 +6,8 @@ Read the project's instructions before acting. The user and project supply the
 scope, checkout, feature, review base, target, validation, and delivery
 requirements. These are agent instructions, not executable guards. Human Git
 and LazyGit remain unrestricted. For repository changes, use native Git,
-Herdr, Neovim, and Hunk; do not require a workflow CLI or skill.
+Neovim, Hunk, and the task's terminal environment; do not require a workflow
+CLI or skill.
 
 ## Stay within the agreed task
 
@@ -127,52 +128,76 @@ review. A Review Branch is a snapshot marker, never a second working branch.
 
 ## Open Neovim and Hunk
 
-Use `herdr` from `PATH`. Use a host-specific binary override only when the
-selected session requires it and the executable has been verified; an inherited
-`HERDR_BIN_PATH` alone is not a reason to use it. Inspect `herdr workspace list`
-and the intended workspace's tabs and panes, then retain their actual IDs.
-Target the session, workspace, tab, and pane explicitly instead of assuming the
-focused workspace is correct. Apply the same `--session NAME` selector to every
-call when selecting a named server. Do not nest tmux in Herdr. Resolve the
-destination from the task's agreed workspace or the calling pane's verified
-workspace, independently of the UI-focused workspace.
+Use the environment where the task is running: Herdr app, Herdr TUI, tmux,
+or an ordinary terminal. Resolve the destination from the agreed task context
+or the calling terminal's verified identity, independently of UI focus. Do not
+ask the user to choose again when that context already identifies it.
 
-Preserve the user's workspace, tab, and pane focus by default. Create tabs
-with `--no-focus`, then prepare them using the returned pane IDs. Opening a
-file, creating a tab, preparing a review, and revisiting a review do not
-request a focus change. Use `--focus` or explicit workspace, tab, or pane
-focus commands only when the user asks to see or switch to that destination;
-a requested walkthrough authorizes that switch. Do not infer permission from
-an earlier focus snapshot or restore an earlier selection after launch,
-because the user may navigate while the agent works.
+- In Herdr app, read `herdr-app --skill`, inspect `herdr-app ls`, `status`,
+  and `commands`, and map `$HC_TERMINAL_ID` to its space, tab, and pane.
+  A core terminal ID is not an app pane ID.
+- In Herdr TUI, read `herdr --skill`, inspect `herdr workspace list` and the
+  intended workspace's tabs and panes, and retain the actual IDs. Apply the
+  same `--session NAME` selector to every call when selecting a named server.
+- In tmux, inspect the task's running server and map `$TMUX_PANE` to its
+  session, window, and pane. Use that server's native window and pane commands.
+- In an ordinary terminal, use a known Neovim host or the terminal destination
+  supplied by the task. Ask only if a new destination cannot be established.
 
-When a new tab is ready, report its workspace, label, and tab ID and send one
-Herdr notification without selecting it. For a review, complete the Hunk
-verification below before announcing readiness:
+Use the relevant executable from `PATH` and target native IDs explicitly.
+Use a host-specific binary override only when the selected session requires
+it and the executable has been verified; an inherited `HERDR_BIN_PATH` alone
+is not a reason to use it. Herdr app, Herdr TUI, and tmux are top-level
+alternatives; do not nest tmux inside either Herdr environment.
 
-```sh
-herdr notification show "Tab ready: $tab_label" \
-  --body "Workspace $workspace_id, tab $tab_id" --sound done
-```
+Preserve focus when the native API supports background preparation. In Herdr
+TUI, create tabs with `--no-focus` and prepare them using the returned pane IDs;
+in tmux, create a detached window. Herdr app shows new tabs immediately, so
+create one when the user requests it. A requested new app tab authorizes that
+tab being shown. Explicit focus commands for an existing destination require
+a request to see or switch to it; a walkthrough supplies that request. Do not
+restore an earlier selection after launch, because the user may navigate
+while the agent works.
 
 For an ordinary file request, reuse a suitable Neovim host when its identity
-and command route are known. A request for a "new tab" means a new Herdr tab
-running Neovim unless the user specifies a Neovim tab. Open it in the relevant
-project directory and prepare the tab in the background. Use a known editor
-connection or verified pane input to operate an existing host; flatten.nvim
+and command route are known. A request for a "new tab" means a native terminal
+tab running Neovim (a window in tmux), unless the user specifies a Neovim tab.
+Open it in the relevant project directory. Use a known editor connection or
+verified native terminal input to operate an existing host; flatten.nvim
 handles editor handoff from its terminal tools, not discovery of arbitrary
-editors elsewhere in Herdr. Opening a file does not start a formal review.
+editors in other tabs or panes. Opening a file does not start a formal review.
 
 For a review, use a Neovim host rooted in the selected checkout. Inspect
 `hunk session list --json` before changing a checkout with an existing review
 and again before launching Hunk. Keep one Hunk process per checkout. Revisit
 the same snapshot by verifying its checkout and revisions and showing the
-existing Hunk Tool Tab in that host. Preserve Herdr focus unless the user
+existing Hunk Tool Tab in that host. Preserve native focus unless the user
 requested a switch. Do not silently replace an unrelated or pending review;
 resolve that conflict before editing or opening another one.
 
 In an identified existing host, run `:HunkReview BASE HEAD` with the full resolved
-commit IDs. When a new review tab is requested or no suitable host exists:
+commit IDs. For a requested new Herdr app tab, create its terminal in the
+verified space and selected checkout:
+
+```sh
+herdr-app do tab.new --space "$space_id" --name "review/$review_name" \
+  --folder "$checkout"
+```
+
+Read the returned tab and terminal IDs, then obtain the pane ID and confirm
+the destination with `herdr-app ls`. Read `hc --skill`, then use `hc` to verify
+the terminal's checkout and ready shell before sending the launch command:
+
+```sh
+hc get "$terminal_id"
+hc read --lines 0 "$terminal_id"
+hc send "$terminal_id" "nvim -c \"HunkReview $base_oid $head_oid\""
+```
+
+This works with a login shell that hands off to another shell during startup.
+A successful creation or send reply does not establish Hunk readiness.
+
+In Herdr TUI, when a new review tab is requested or no suitable host exists:
 
 ```sh
 herdr tab create --workspace "$workspace_id" --cwd "$checkout" \
@@ -197,8 +222,9 @@ defaults to working-tree changes when none is running. Argument-free
 staged changes.
 Changing any review input ends the old review; preserve its notes first and
 verify the new snapshot. Hunk's `e` returns to this host Neovim with project
-language tooling. In a separately authorized terminal or tmux fallback, run
-`nvim -c "HunkReview $base_oid $head_oid"` from the checkout.
+language tooling. In tmux or an ordinary terminal, use that environment's
+native window or pane and run `nvim -c "HunkReview $base_oid $head_oid"` from
+the checkout.
 
 A launched pane does not prove the review is ready. Inspect the live Hunk list
 until the intended session registers (use a bounded wait, normally ten seconds).
@@ -221,20 +247,32 @@ points there. Only then publish `refs/heads/review/$review_name` using
 `git update-ref <ref> <head_oid> <previous_oid>`; use an empty previous-ID argument
 for an absent ref. This compare-and-update must fail if the ref changed during
 launch. Do not force it through a concurrent change. Record the verified Hunk
-session ID and Herdr tab/pane IDs alongside the snapshot in the conversation.
+session ID and the native destination IDs alongside the snapshot in the
+conversation.
 
-For a requested walkthrough, first focus the review's Herdr tab and editor pane,
-then navigate inside that exact Hunk session:
+When ready, report the review's space or workspace, tab or window label, and
+native IDs. Complete the Hunk verification above before announcing readiness.
+If the native environment provides notifications, send one without changing
+focus. In Herdr TUI:
 
 ```sh
-herdr tab focus "$tab_id"
+herdr notification show "Tab ready: $tab_label" \
+  --body "Workspace $workspace_id, tab $tab_id" --sound done
+```
+
+For a requested walkthrough, first show the review's native tab or window and
+focus its editor pane. In Herdr app, use `tab.select` and `pane.focus` with the
+verified IDs; in Herdr TUI, use `herdr tab focus`; in tmux, select the verified
+window and pane. Then navigate inside that exact Hunk session:
+
+```sh
 hunk session navigate "$session_id" --file "$path" --new-line "$line" --json
 ```
 
-Herdr selects the visible editor; Hunk selects the file and hunk within it.
-Honor the requested comparison layout. Explain the behavior before and after
-each important change, show the relevant validation evidence and its limits,
-and give the user time to inspect before moving on. Use Hunk's `e` when source
+The terminal environment selects the visible editor; Hunk selects the file
+and hunk within it. Honor the requested comparison layout. Explain the behavior
+before and after each important change, show the relevant validation evidence
+and its limits, and give the user time to inspect before moving on. Use Hunk's `e` when source
 context helps. Keep findings on this same visible session; `comment add --focus`
 can bring a new finding into view.
 
@@ -312,8 +350,8 @@ after a failed operation; coordinate recovery, then return integration work to W
 
 After successful landing, preserve the review findings and outcome in the
 conversation and finish any remaining Hunk review owned by this task. Close its
-dedicated review host or Herdr tab only if it contains no unrelated work. This
-is routine review cleanup; leave unrelated and pending reviews open.
+dedicated review host or native tab/window only if it contains no unrelated
+work. This is routine review cleanup; leave unrelated and pending reviews open.
 
 Leave WIP, the Review Branch, and historical evidence intact. Pushing,
 submission, onward delivery, target creation, and branch/worktree cleanup

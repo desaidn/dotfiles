@@ -60,6 +60,7 @@ normalize_agent_directory() {
 CODEX_DIRECTORY="$(normalize_agent_directory "${CODEX_HOME-$HOME/.codex}")"
 PI_DIRECTORY="$(normalize_agent_directory "${PI_CODING_AGENT_DIR-$HOME/.pi/agent}")"
 WORKFLOW_HOME="$(normalize_agent_directory "$HOME")"
+HERDR_APP_DIRECTORY="$(normalize_agent_directory "${HERDR_APP_HOME-$HOME/.config/herdr-app}")"
 
 # HOME's own ancestry was validated above. Preserve redirects below it and
 # at custom locations; do not follow them to another profile's instructions.
@@ -92,6 +93,7 @@ validate_agent_directory() {
 }
 validate_agent_directory "$CODEX_DIRECTORY" CODEX_HOME
 validate_agent_directory "$PI_DIRECTORY" PI_CODING_AGENT_DIR
+validate_agent_directory "$HERDR_APP_DIRECTORY" HERDR_APP_HOME
 
 symlink_points_to() {
     [[ -L "$1" && "$1" -ef "$2" ]]
@@ -425,6 +427,35 @@ manage_workflow_link() {
     fi
 }
 
+manage_herdr_app_configs() {
+    local directory redirected file
+    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes" \
+        "$HERDR_APP_DIRECTORY/mods" "$HERDR_APP_DIRECTORY/mods/legacy-prefix"
+    do
+        redirected="$(redirected_agent_parent "$directory")"
+        if [[ -n "$redirected" ]]; then
+            echo "  parent is a symlink: $redirected (preserving Herdr app configuration)"
+            return
+        fi
+        if (( RESTORE_BACKUPS == 1 )); then
+            find_latest_backup "$directory"
+            if [[ -n "$LATEST_BACKUP" ]]; then
+                mark_restore_blocked "$directory has a container backup; reconcile Herdr app backup scopes explicitly"
+                return
+            fi
+        fi
+    done
+    for file in keys.json settings.json themes/terminal.json \
+        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    do
+        if (( RESTORE_BACKUPS == 1 )); then
+            restore_direct "herdr-app/$file" "$HERDR_APP_DIRECTORY/$file"
+        else
+            remove_owned "herdr-app/$file" "$HERDR_APP_DIRECTORY/$file" "$(dirname "$HERDR_APP_DIRECTORY/$file")"
+        fi
+    done
+}
+
 RESTORE_STATUS=0
 if (( RESTORE_BACKUPS == 1 )); then
     prepare_restore_helper || die "unable to prepare backup restoration; no managed links or backups were changed"
@@ -456,6 +487,7 @@ else
     remove_owned zsh/.zshrc .zshrc
 fi
 
+manage_herdr_app_configs
 manage_workflow_link "$CODEX_DIRECTORY/AGENTS.md" "$CODEX_DIRECTORY"
 manage_workflow_link "$PI_DIRECTORY/AGENTS.md" "$PI_DIRECTORY"
 manage_workflow_link "$HOME/.claude/rules/development-workflow.md" "$WORKFLOW_HOME/.claude/rules"
@@ -470,6 +502,11 @@ backups=(
     "$HOME"/.config/mise/conf.d.bak.*
     "$HOME"/.config/mise/conf.d/00-dotfiles.toml.bak.*
     "$HOME"/.zshrc.bak.*
+    "$HERDR_APP_DIRECTORY".bak.*
+    "$HERDR_APP_DIRECTORY"/*.bak.*
+    "$HERDR_APP_DIRECTORY"/themes/*.bak.*
+    "$HERDR_APP_DIRECTORY"/mods/*.bak.*
+    "$HERDR_APP_DIRECTORY"/mods/legacy-prefix/*.bak.*
     "$CODEX_DIRECTORY"/AGENTS.md.bak.*
     "$PI_DIRECTORY"/AGENTS.md.bak.*
     "$HOME"/.claude/rules/development-workflow.md.bak.*

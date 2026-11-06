@@ -2,7 +2,12 @@
 
 Part of [dotfiles](../README.md).
 
-Herdr is the primary daily workspace manager. Running `herdr` starts or
+Herdr TUI is the daily workspace manager, used with Ghostty on macOS. The
+[Herdr app guide](../herdr-app/README.md) covers the experimental macOS app,
+its Herdr core dependency, and migrated Ctrl+B bindings. The TUI has its own
+server and state.
+
+Running the Herdr TUI with `herdr` starts or
 attaches to the persistent workspace, and `Ctrl-b q` detaches without stopping
 the processes in its panes.
 

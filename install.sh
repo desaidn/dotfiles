@@ -8,6 +8,7 @@ MISE_MANIFEST="$MISE_BOOTSTRAP_CONFIG_DIR/conf.d/00-dotfiles.toml"
 HOMEBREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 BREW_BIN=""
 GHOSTTY_BIN=""
+HERDR_APP_BIN=""
 LINUX_PACKAGE_MANAGER=""
 LINUX_FISH_PATH=""
 SKIP_MISE_RUNTIMES=0
@@ -84,6 +85,14 @@ normalize_agent_directory() {
 CODEX_DIRECTORY="$(normalize_agent_directory "${CODEX_HOME-$HOME/.codex}")"
 PI_DIRECTORY="$(normalize_agent_directory "${PI_CODING_AGENT_DIR-$HOME/.pi/agent}")"
 WORKFLOW_HOME="$(normalize_agent_directory "$HOME")"
+HERDR_APP_DIRECTORY="$(normalize_agent_directory "${HERDR_APP_HOME-$HOME/.config/herdr-app}")"
+HERDR_APP_FILES=(
+    keys.json
+    settings.json
+    themes/terminal.json
+    mods/legacy-prefix/mod.json
+    mods/legacy-prefix/main.js
+)
 
 # Resolve existing directory ancestors, including HOME aliases, without needing
 # the final path to exist. Call with the parent when a symlink itself is replaced.
@@ -143,16 +152,23 @@ preflight_workflow_links() {
         .local/share/dotfiles/local.fish .local/share/dotfiles/local.zsh
         .claude/rules/development-workflow.md
     )
+    if [[ "$OS_NAME" == "Darwin" ]]; then
+        for target in "${HERDR_APP_FILES[@]}"; do
+            managed_targets+=("$HERDR_APP_DIRECTORY/$target")
+        done
+        managed_targets+=("$HERDR_APP_DIRECTORY/shared.json")
+    fi
     validate_agent_directory "$CODEX_DIRECTORY" CODEX_HOME
     validate_agent_directory "$PI_DIRECTORY" PI_CODING_AGENT_DIR
     # Never place a harness root inside a link that installation will create.
     for directory in "$CODEX_DIRECTORY" "$PI_DIRECTORY"; do
         physical_directory="$(physical_path "$directory")"
         for target in "${managed_targets[@]}"; do
-            physical_target="$(physical_path "$(dirname "$HOME/$target")")/${target##*/}"
+            [[ "$target" == /* ]] || target="$HOME/$target"
+            physical_target="$(physical_path "$(dirname "$target")")/${target##*/}"
             case "$physical_directory/" in
                 "$physical_target/"*)
-                    die "agent configuration directory overlaps a managed link: $directory ($WORKFLOW_HOME/$target)"
+                    die "agent configuration directory overlaps a managed link: $directory ($target)"
                     ;;
             esac
         done
@@ -398,6 +414,27 @@ has_ghostty() {
     return 1
 }
 
+has_herdr_app() {
+    local application_dirs candidate old_ifs
+    HERDR_APP_BIN="$(command -v herdr-app || true)"
+    [[ -z "$HERDR_APP_BIN" ]] || return 0
+    application_dirs="${DOTFILES_APPLICATION_DIRS:-/Applications:$HOME/Applications}"
+    old_ifs="$IFS"
+    IFS=:
+    for candidate in $application_dirs; do
+        if [[ -x "$candidate/Herdr.app/Contents/MacOS/Herdr" ]]; then
+            HERDR_APP_BIN="$candidate/Herdr.app/Contents/MacOS/Herdr"
+            IFS="$old_ifs"
+            return 0
+        fi
+        if [[ -e "$candidate/Herdr.app" || -L "$candidate/Herdr.app" ]]; then
+            die "Herdr.app exists but its executable is missing; preserve or repair the application and rerun: $candidate/Herdr.app"
+        fi
+    done
+    IFS="$old_ifs"
+    return 1
+}
+
 has_jetbrains_mono_file() {
     local font_dirs candidate font old_ifs
     font_dirs="${DOTFILES_FONT_DIRS:-/Library/Fonts:$HOME/Library/Fonts}"
@@ -448,6 +485,20 @@ install_macos_casks() {
     fi
     has_jetbrains_mono_file ||
         die "JetBrains Mono installation completed but the font could not be found"
+
+    if ! has_herdr_app; then
+        if brew_cask_installed herdr-app; then
+            die "Homebrew records the Herdr app cask, but Herdr.app is missing; repair the cask and rerun"
+        fi
+        "$BREW_BIN" install --cask herdr-app
+    fi
+    has_herdr_app || die "Herdr app installation completed but Herdr.app could not be found"
+    output="$("$HERDR_APP_BIN" --version 2>/dev/null)" ||
+        die "Herdr app at '$HERDR_APP_BIN' could not report its version; repair the application and rerun"
+    version="${output%%$'\n'*}"
+    version="${version#herdr-app }"
+    version_at_least "$version" "0.1.12" ||
+        die "Herdr app 0.1.12+ is required for this configuration (found '${version:-unknown}'); update Herdr app and rerun"
 }
 
 numeric_prefix() {
@@ -762,6 +813,12 @@ preflight_links() {
         templates/local.fish
         templates/local.zsh
     )
+    if [[ "$OS_NAME" == "Darwin" ]]; then
+        file_sources+=(herdr-app/templates/shared.json)
+        for source in "${HERDR_APP_FILES[@]}"; do
+            file_sources+=("herdr-app/$source")
+        done
+    fi
 
     for source in "${directory_sources[@]}"; do
         [[ -d "$REPO_ROOT/$source" ]] ||
@@ -781,6 +838,12 @@ preflight_links() {
         preflight_link_location mise/conf.d/00-dotfiles.toml .config/mise/conf.d/00-dotfiles.toml .config/mise/conf.d
     fi
     preflight_link_location zsh/.zshrc .zshrc
+    if [[ "$OS_NAME" == "Darwin" ]]; then
+        preflight_herdr_app_directory
+        for source in "${HERDR_APP_FILES[@]}"; do
+            preflight_link_location "herdr-app/$source" "$HERDR_APP_DIRECTORY/$source"
+        done
+    fi
 
     required_directories=(
         "$HOME/.config"
@@ -805,19 +868,60 @@ preflight_links() {
     preflight_workflow_links
 }
 
-initialize_local_template() (
-    local template="$1" target="$LOCAL_DIR/$1" staging
+preflight_herdr_app_directory() {
+    local directory redirected protected physical_directory physical_protected
+    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes" \
+        "$HERDR_APP_DIRECTORY/mods" "$HERDR_APP_DIRECTORY/mods/legacy-prefix"
+    do
+        validate_agent_directory "$directory" HERDR_APP_HOME
+        redirected="$(redirected_agent_parent "$directory")"
+        [[ -z "$redirected" ]] ||
+            die "Herdr app configuration container is a symlink; preserve it and reconcile the personal files explicitly: $redirected"
+    done
+    physical_directory="$(physical_path "$HERDR_APP_DIRECTORY")"
+    for protected in "$REPO_ROOT" "$CODEX_DIRECTORY" "$PI_DIRECTORY" \
+        "$HOME/.claude" "$LOCAL_DIR" "$HOME/.config/fish" "$HOME/.config/ghostty" \
+        "$HOME/.config/herdr" "$HOME/.config/hunk" "$HOME/.config/lazygit" \
+        "$HOME/.config/mise" "$HOME/.config/nvim" "$HOME/.config/tmux"
+    do
+        physical_protected="$(physical_path "$protected")"
+        case "$physical_directory/" in
+            "$physical_protected/"*) die "HERDR_APP_HOME overlaps the checkout or another managed configuration: $HERDR_APP_DIRECTORY" ;;
+        esac
+        case "$physical_protected/" in
+            "$physical_directory/"*) die "HERDR_APP_HOME overlaps the checkout or another managed configuration: $HERDR_APP_DIRECTORY" ;;
+        esac
+    done
+}
+
+initialize_template() (
+    local source="$REPO_ROOT/$1" target="$2" parent name staging
     [[ ! -e "$target" && ! -L "$target" ]] || return 0
-    staging="$(mktemp -d "$LOCAL_DIR/.template.XXXXXX")"
+    parent="$(dirname "$target")"
+    name="${target##*/}"
+    staging="$(mktemp -d "$parent/.template.XXXXXX")"
     # Only this invocation's private staging file is removed. User destinations
     # are never overwritten, including a file created concurrently with copying.
-    trap '[[ ! -f "$staging/$template" ]] || unlink "$staging/$template"; rmdir "$staging"' EXIT
+    trap '[[ ! -f "$staging/$name" ]] || unlink "$staging/$name"; rmdir "$staging"' EXIT
     trap 'exit 1' HUP INT TERM
-    cp "$REPO_ROOT/templates/$template" "$staging/$template"
-    if ! ln "$staging/$template" "$LOCAL_DIR/" 2>/dev/null; then
+    cp "$source" "$staging/$name"
+    if ! ln "$staging/$name" "$parent/" 2>/dev/null; then
         [[ -e "$target" || -L "$target" ]] || die "could not initialize local template: $target"
     fi
 )
+
+initialize_local_template() {
+    initialize_template "templates/$1" "$LOCAL_DIR/$1"
+}
+
+link_herdr_app_configs() {
+    local file
+    mkdir -p "$HERDR_APP_DIRECTORY/themes" "$HERDR_APP_DIRECTORY/mods/legacy-prefix"
+    for file in "${HERDR_APP_FILES[@]}"; do
+        link "herdr-app/$file" "$HERDR_APP_DIRECTORY/$file"
+    done
+    initialize_template herdr-app/templates/shared.json "$HERDR_APP_DIRECTORY/shared.json"
+}
 
 link_configs() (
     local lock_directory="$LOCAL_DIR/.install-lock"
@@ -834,8 +938,10 @@ link_configs() (
     link fish        .config/fish
     if [[ "$OS_NAME" == "Darwin" ]]; then
         link ghostty     .config/ghostty
+        link_herdr_app_configs
     else
         echo "  skipped:        $HOME/.config/ghostty (macOS-only)"
+        echo "  skipped:        $HERDR_APP_DIRECTORY (macOS-only)"
     fi
     link_nested herdr/config.toml .config/herdr/config.toml .config/herdr
     link_nested hunk/config.toml .config/hunk/config.toml .config/hunk
