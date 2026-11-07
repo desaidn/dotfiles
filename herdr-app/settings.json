@@ -1,9 +1,7 @@
 {
-  "zoom": 1.0,
-  "sounds": {
-    "enabled": true
-  },
-  "minimum_contrast": 1.0,
   "theme": "terminal",
-  "appearance": "dark"
+  "appearance": "dark",
+  "font": "JetBrains Mono",
+  "font_size": 14,
+  "ui_font": "JetBrains Mono"
 }

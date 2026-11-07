@@ -771,17 +771,12 @@ assert_workflow_links() {
 
 assert_herdr_app_links() {
     local file
-    for file in keys.json settings.json themes/terminal.json \
-        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    for file in settings.json themes/terminal.json
     do
         assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/$file" "$REPO_ROOT/herdr-app/$file"
     done
     [[ -d "$FIXTURE_HERDR_APP_DIRECTORY/themes" && ! -L "$FIXTURE_HERDR_APP_DIRECTORY/themes" ]] ||
         fail "Herdr app theme container must remain a real directory"
-    [[ -d "$FIXTURE_HERDR_APP_DIRECTORY/mods" && ! -L "$FIXTURE_HERDR_APP_DIRECTORY/mods" ]] ||
-        fail "Herdr app mod container must remain a real directory"
-    [[ -f "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" && ! -L "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" ]] ||
-        fail "Herdr app shared state must remain a local file"
 }
 
 assert_non_mise_links() {
@@ -809,8 +804,7 @@ assert_common_links() {
 
 assert_common_links_removed() {
     local file
-    for file in keys.json settings.json themes/terminal.json \
-        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    for file in settings.json themes/terminal.json
     do
         assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/$file"
     done
@@ -938,7 +932,7 @@ test_herdr_app_installation_preserves_existing_applications() {
 test_herdr_app_links_preserve_state_and_restore_personal_files() {
     local file backup count
     new_fixture herdr-app-state Darwin
-    for file in keys.json settings.json themes/terminal.json \
+    for file in settings.json themes/terminal.json keys.json \
         mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
     do
         mkdir -p "$(dirname "$FIXTURE_HERDR_APP_DIRECTORY/$file")"
@@ -955,8 +949,7 @@ test_herdr_app_links_preserve_state_and_restore_personal_files() {
     assert_herdr_app_links
     grep -Fxq '{"agents.sort":"recent","layout":"main","personal":true}' "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" ||
         fail "installer overwrote existing Herdr app preferences"
-    for file in keys.json settings.json themes/terminal.json \
-        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    for file in settings.json themes/terminal.json
     do
         count=0
         for backup in "$FIXTURE_HERDR_APP_DIRECTORY/$file".bak.*; do
@@ -965,6 +958,11 @@ test_herdr_app_links_preserve_state_and_restore_personal_files() {
             grep -Fxq "original $file" "$backup" || fail "Herdr app backup lost original content: $file"
         done
         assert_eq 1 "$count" "repeat installation should preserve exactly one original backup for $file"
+    done
+    for file in keys.json mods/legacy-prefix/mod.json mods/legacy-prefix/main.js; do
+        grep -Fxq "original $file" "$FIXTURE_HERDR_APP_DIRECTORY/$file" ||
+            fail "installer changed an unmanaged Herdr app file: $file"
+        assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/$file.bak."*
     done
 
     run_uninstaller 0 --restore
@@ -993,7 +991,7 @@ test_herdr_app_home_preflight_and_uninstall_are_safe() {
         assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
         assert_not_exists "$FIXTURE_HOME/.zshrc"
     done
-    for blocked in themes mods/legacy-prefix; do
+    for blocked in themes; do
         new_fixture "herdr-app-blocked-${blocked//\//-}" Darwin
         mkdir -p "$(dirname "$FIXTURE_HERDR_APP_DIRECTORY/$blocked")"
         printf 'personal parent\n' >"$FIXTURE_HERDR_APP_DIRECTORY/$blocked"
@@ -1007,11 +1005,12 @@ test_herdr_app_home_preflight_and_uninstall_are_safe() {
     FIXTURE_HERDR_APP_DIRECTORY="$FIXTURE_HOME/custom app"
     run_installer
     assert_herdr_app_links
-    cmp "$REPO_ROOT/herdr-app/templates/shared.json" "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" ||
-        fail "fresh Herdr app state did not receive migrated defaults"
+    assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/keys.json"
+    assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/shared.json"
+    assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/mods"
     run_uninstaller 0
     assert_common_links_removed
-    assert_exists "$FIXTURE_HERDR_APP_DIRECTORY/shared.json"
+    assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/shared.json"
 
     new_fixture herdr-app-redirect Darwin
     mkdir -p "$FIXTURE_HOME/other-profile"
@@ -1022,12 +1021,18 @@ test_herdr_app_home_preflight_and_uninstall_are_safe() {
     assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
 
     new_fixture herdr-app-uninstall-redirect Darwin
-    run_installer
-    mv "$FIXTURE_HERDR_APP_DIRECTORY/mods" "$FIXTURE_HOME/redirected-mods"
+    mkdir -p "$FIXTURE_HERDR_APP_DIRECTORY" "$FIXTURE_HOME/redirected-mods/legacy-prefix"
+    printf 'custom keymap\n' >"$FIXTURE_HOME/custom-keys.json"
+    ln -s "$FIXTURE_HOME/custom-keys.json" "$FIXTURE_HERDR_APP_DIRECTORY/keys.json"
+    ln -s "$REPO_ROOT/herdr-app/mods/legacy-prefix/main.js" "$FIXTURE_HOME/redirected-mods/legacy-prefix/main.js"
     ln -s "$FIXTURE_HOME/redirected-mods" "$FIXTURE_HERDR_APP_DIRECTORY/mods"
-    run_uninstaller 0
+    run_installer
+    assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/keys.json" "$FIXTURE_HOME/custom-keys.json"
     assert_symlink "$FIXTURE_HOME/redirected-mods/legacy-prefix/main.js" "$REPO_ROOT/herdr-app/mods/legacy-prefix/main.js"
-    assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/settings.json" "$REPO_ROOT/herdr-app/settings.json"
+    run_uninstaller 0
+    assert_common_links_removed
+    assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/keys.json" "$FIXTURE_HOME/custom-keys.json"
+    assert_symlink "$FIXTURE_HOME/redirected-mods/legacy-prefix/main.js" "$REPO_ROOT/herdr-app/mods/legacy-prefix/main.js"
 
     new_fixture herdr-app-ambiguous-restore Darwin
     run_installer

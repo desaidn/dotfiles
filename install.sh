@@ -87,11 +87,8 @@ PI_DIRECTORY="$(normalize_agent_directory "${PI_CODING_AGENT_DIR-$HOME/.pi/agent
 WORKFLOW_HOME="$(normalize_agent_directory "$HOME")"
 HERDR_APP_DIRECTORY="$(normalize_agent_directory "${HERDR_APP_HOME-$HOME/.config/herdr-app}")"
 HERDR_APP_FILES=(
-    keys.json
     settings.json
     themes/terminal.json
-    mods/legacy-prefix/mod.json
-    mods/legacy-prefix/main.js
 )
 
 # Resolve existing directory ancestors, including HOME aliases, without needing
@@ -156,7 +153,6 @@ preflight_workflow_links() {
         for target in "${HERDR_APP_FILES[@]}"; do
             managed_targets+=("$HERDR_APP_DIRECTORY/$target")
         done
-        managed_targets+=("$HERDR_APP_DIRECTORY/shared.json")
     fi
     validate_agent_directory "$CODEX_DIRECTORY" CODEX_HOME
     validate_agent_directory "$PI_DIRECTORY" PI_CODING_AGENT_DIR
@@ -814,7 +810,6 @@ preflight_links() {
         templates/local.zsh
     )
     if [[ "$OS_NAME" == "Darwin" ]]; then
-        file_sources+=(herdr-app/templates/shared.json)
         for source in "${HERDR_APP_FILES[@]}"; do
             file_sources+=("herdr-app/$source")
         done
@@ -870,8 +865,7 @@ preflight_links() {
 
 preflight_herdr_app_directory() {
     local directory redirected protected physical_directory physical_protected
-    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes" \
-        "$HERDR_APP_DIRECTORY/mods" "$HERDR_APP_DIRECTORY/mods/legacy-prefix"
+    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes"
     do
         validate_agent_directory "$directory" HERDR_APP_HOME
         redirected="$(redirected_agent_parent "$directory")"
@@ -916,11 +910,10 @@ initialize_local_template() {
 
 link_herdr_app_configs() {
     local file
-    mkdir -p "$HERDR_APP_DIRECTORY/themes" "$HERDR_APP_DIRECTORY/mods/legacy-prefix"
+    mkdir -p "$HERDR_APP_DIRECTORY/themes"
     for file in "${HERDR_APP_FILES[@]}"; do
         link "herdr-app/$file" "$HERDR_APP_DIRECTORY/$file"
     done
-    initialize_template herdr-app/templates/shared.json "$HERDR_APP_DIRECTORY/shared.json"
 }
 
 link_configs() (

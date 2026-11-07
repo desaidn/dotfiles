@@ -429,8 +429,7 @@ manage_workflow_link() {
 
 manage_herdr_app_configs() {
     local directory redirected file
-    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes" \
-        "$HERDR_APP_DIRECTORY/mods" "$HERDR_APP_DIRECTORY/mods/legacy-prefix"
+    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes"
     do
         redirected="$(redirected_agent_parent "$directory")"
         if [[ -n "$redirected" ]]; then
@@ -445,8 +444,7 @@ manage_herdr_app_configs() {
             fi
         fi
     done
-    for file in keys.json settings.json themes/terminal.json \
-        mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
+    for file in settings.json themes/terminal.json
     do
         if (( RESTORE_BACKUPS == 1 )); then
             restore_direct "herdr-app/$file" "$HERDR_APP_DIRECTORY/$file"
@@ -505,8 +503,6 @@ backups=(
     "$HERDR_APP_DIRECTORY".bak.*
     "$HERDR_APP_DIRECTORY"/*.bak.*
     "$HERDR_APP_DIRECTORY"/themes/*.bak.*
-    "$HERDR_APP_DIRECTORY"/mods/*.bak.*
-    "$HERDR_APP_DIRECTORY"/mods/legacy-prefix/*.bak.*
     "$CODEX_DIRECTORY"/AGENTS.md.bak.*
     "$PI_DIRECTORY"/AGENTS.md.bak.*
     "$HOME"/.claude/rules/development-workflow.md.bak.*
