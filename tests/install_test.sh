@@ -767,6 +767,8 @@ assert_workflow_links() {
     assert_symlink "$FIXTURE_CODEX_DIRECTORY/AGENTS.md" "$REPO_ROOT/docs/agents/development-workflow.md"
     assert_symlink "$FIXTURE_PI_DIRECTORY/AGENTS.md" "$REPO_ROOT/docs/agents/development-workflow.md"
     assert_symlink "$FIXTURE_HOME/.claude/rules/development-workflow.md" "$REPO_ROOT/docs/agents/development-workflow.md"
+    assert_symlink "$FIXTURE_HOME/.agents/skills/herdr-app" "$REPO_ROOT/docs/agents/skills/herdr-app"
+    assert_symlink "$FIXTURE_HOME/.claude/skills/herdr-app" "$REPO_ROOT/docs/agents/skills/herdr-app"
 }
 
 assert_herdr_app_links() {
@@ -811,6 +813,8 @@ assert_common_links_removed() {
     assert_not_exists "$FIXTURE_CODEX_DIRECTORY/AGENTS.md"
     assert_not_exists "$FIXTURE_PI_DIRECTORY/AGENTS.md"
     assert_not_exists "$FIXTURE_HOME/.claude/rules/development-workflow.md"
+    assert_not_exists "$FIXTURE_HOME/.agents/skills/herdr-app"
+    assert_not_exists "$FIXTURE_HOME/.claude/skills/herdr-app"
     assert_not_exists "$FIXTURE_HOME/.config/fish"
     assert_not_exists "$FIXTURE_HOME/.config/herdr/config.toml"
     assert_not_exists "$FIXTURE_HOME/.config/hunk/config.toml"
@@ -1974,6 +1978,26 @@ test_link_preflight_prevents_partial_configuration() {
         fail "installer did not preflight the shared workflow source"
     assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
     assert_not_exists "$FIXTURE_HOME/.config"
+
+    new_fixture missing-skill Darwin
+    fixture_repo="$FIXTURE_ROOT/repo"
+    mkdir -p "$fixture_repo/docs/agents"
+    cp "$REPO_ROOT/install.sh" "$REPO_ROOT/Brewfile" "$fixture_repo/"
+    cp "$REPO_ROOT/docs/agents/development-workflow.md" "$fixture_repo/docs/agents/"
+    for source_name in fish ghostty herdr herdr-app hunk lazygit mise nvim tmux templates zsh; do
+        ln -s "$REPO_ROOT/$source_name" "$fixture_repo/$source_name"
+    done
+    FIXTURE_INSTALL_REPO_ROOT="$(cd "$fixture_repo" && pwd -P)"
+
+    run_installer failure --skip-mise-runtimes
+
+    grep -Fq \
+        "missing or invalid tracked skill: $FIXTURE_INSTALL_REPO_ROOT/docs/agents/skills/herdr-app/SKILL.md" \
+        "$FIXTURE_OUTPUT" ||
+        fail "installer did not preflight the shared skill source"
+    assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+    assert_not_exists "$FIXTURE_HOME/.config"
+    assert_not_exists "$FIXTURE_HOME/.agents"
     pass "link preflight fails before changing home configuration"
 }
 
@@ -2291,6 +2315,45 @@ test_workflow_uninstall_preserves_foreign_and_redirected_state() {
     pass "uninstall preserves foreign guidance and does not follow redirected harness containers"
 }
 
+test_skill_links_preserve_existing_and_redirected_skills() {
+    local container mode
+    for container in .agents/skills .claude/skills; do
+        new_fixture "skill-conflict-${container//\//-}" Darwin
+        mkdir -p "$FIXTURE_HOME/$container/herdr-app"
+        printf 'personal herdr skill\n' >"$FIXTURE_HOME/$container/herdr-app/SKILL.md"
+        run_installer failure --skip-mise-runtimes
+        grep -Fq 'an existing global skill uses this name' "$FIXTURE_OUTPUT" ||
+            fail "global skill conflict was not actionable"
+        grep -Fxq 'personal herdr skill' "$FIXTURE_HOME/$container/herdr-app/SKILL.md" ||
+            fail "existing global skill was changed"
+        assert_not_exists "$FIXTURE_HOME/.config"
+        assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+
+        new_fixture "skill-redirected-${container//\//-}" Darwin
+        mkdir -p "$FIXTURE_HOME/redirected" "$(dirname "$FIXTURE_HOME/$container")"
+        ln -s "$FIXTURE_HOME/redirected" "$FIXTURE_HOME/$container"
+        run_installer failure --skip-mise-runtimes
+        grep -Fq 'agent configuration directory is a symlink' "$FIXTURE_OUTPUT" ||
+            fail "redirected skill container was not rejected"
+        assert_not_exists "$FIXTURE_HOME/redirected/herdr-app"
+        assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+
+        for mode in remove restore; do
+            new_fixture "skill-uninstall-redirect-${container//\//-}-$mode" Darwin
+            run_installer success --skip-mise-runtimes
+            mv "$FIXTURE_HOME/$container" "$FIXTURE_HOME/redirected"
+            ln -s "$FIXTURE_HOME/redirected" "$FIXTURE_HOME/$container"
+            if [[ "$mode" == restore ]]; then
+                run_uninstaller 0 --restore
+            else
+                run_uninstaller 0
+            fi
+            assert_symlink "$FIXTURE_HOME/redirected/herdr-app" "$REPO_ROOT/docs/agents/skills/herdr-app"
+        done
+    done
+    pass "global skill links preserve existing skills and redirected skill containers"
+}
+
 test_workflow_restore_uses_only_latest_unambiguous_backups() {
     local target
     new_fixture workflow-restore Darwin
@@ -2371,6 +2434,7 @@ test_workflow_custom_roots_and_equivalent_links
 test_workflow_roots_are_validated_before_writes
 test_workflow_uninstall_preserves_foreign_and_redirected_state
 test_workflow_restore_uses_only_latest_unambiguous_backups
+test_skill_links_preserve_existing_and_redirected_skills
 test_user_mise_config_does_not_override_bootstrap_manifest
 test_mise_environment_cannot_override_bootstrap_manifest
 test_parent_mise_activation_does_not_override_bootstrap_environment

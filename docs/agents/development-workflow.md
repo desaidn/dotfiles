@@ -133,9 +133,12 @@ or an ordinary terminal. Resolve the destination from the agreed task context
 or the calling terminal's verified identity, independently of UI focus. Do not
 ask the user to choose again when that context already identifies it.
 
-- In Herdr app, read `herdr-app --skill`, inspect `herdr-app ls`, `status`,
-  and `commands`, and map `$HC_TERMINAL_ID` to its space, tab, and pane.
-  A core terminal ID is not an app pane ID.
+- In Herdr app (`$HC_TERMINAL_ID` is set), load the `herdr-app` skill and read
+  `hc --skill` in full. `hc get "$HC_TERMINAL_ID"` gives the space and tab
+  labels for the agent's own terminal. `herdr-app` (`--skill`, `ls`, `status`,
+  `commands`) exists only on the machine showing the window; on an
+  SSH-connected machine, use `hc` alone. A core terminal ID is not an app
+  pane ID.
 - In Herdr TUI, read `herdr --skill`, inspect `herdr workspace list` and the
   intended workspace's tabs and panes, and retain the actual IDs. Apply the
   same `--session NAME` selector to every call when selecting a named server.
@@ -176,26 +179,31 @@ requested a switch. Do not silently replace an unrelated or pending review;
 resolve that conflict before editing or opening another one.
 
 In an identified existing host, run `:HunkReview BASE HEAD` with the full resolved
-commit IDs. For a requested new Herdr app tab, create its terminal in the
-verified space and selected checkout:
+commit IDs. For a requested new Herdr app tab on the window's machine, create
+it in the verified space and selected checkout with Neovim as its program:
 
 ```sh
 herdr-app do tab.new --space "$space_id" --name "review/$review_name" \
-  --folder "$checkout"
+  --folder "$checkout" \
+  --argv "[\"zsh\", \"-ic\", \"exec nvim -c 'HunkReview $base_oid $head_oid'\"]"
 ```
 
-Read the returned tab and terminal IDs, then obtain the pane ID and confirm
-the destination with `herdr-app ls`. Read `hc --skill`, then use `hc` to verify
-the terminal's checkout and ready shell before sending the launch command:
+Read the returned IDs and confirm the destination with `herdr-app ls`. On an
+SSH-connected machine, start the review with `hc` and label it with the agent's
+own space; the app gives it a new tab there:
 
 ```sh
-hc get "$terminal_id"
-hc read --lines 0 "$terminal_id"
-hc send "$terminal_id" "nvim -c \"HunkReview $base_oid $head_oid\""
+hc run --bg --name "review-$review_name" --outlive-parent --no-notify \
+  --cwd "$checkout" --label "herdr.space=$space_id" \
+  -- zsh -ic "exec nvim -c 'HunkReview $base_oid $head_oid'"
 ```
 
-This works with a login shell that hands off to another shell during startup.
-A successful creation or send reply does not establish Hunk readiness.
+The interactive zsh supplies the dotfiles `PATH`, which programs started by
+the core do not inherit. Do not type the launch command into a shell with
+`hc send`: it wraps text in an `<hc from=…>` tag. `hc` names allow 1–32
+characters from `a-z`, `0-9`, `-`, and `_`. Confirm the terminal with
+`hc get` and `hc read --lines 0`. A successful creation reply does not
+establish Hunk readiness.
 
 In Herdr TUI, when a new review tab is requested or no suitable host exists:
 

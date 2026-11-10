@@ -90,6 +90,14 @@ HERDR_APP_FILES=(
     settings.json
     themes/terminal.json
 )
+# Global skills shared by Codex and pi (~/.agents/skills) and Claude Code.
+SKILL_SOURCES=(
+    docs/agents/skills/herdr-app
+)
+SKILL_CONTAINERS=(
+    .agents/skills
+    .claude/skills
+)
 
 # Resolve existing directory ancestors, including HOME aliases, without needing
 # the final path to exist. Call with the parent when a symlink itself is replaced.
@@ -142,6 +150,7 @@ validate_agent_directory() {
 
 preflight_workflow_links() {
     local directory target line redirected protected physical_directory physical_target
+    local container source
     local managed_targets=(
         .config/fish .config/ghostty .config/herdr/config.toml
         .config/hunk/config.toml .config/lazygit .config/mise/conf.d/00-dotfiles.toml
@@ -149,6 +158,11 @@ preflight_workflow_links() {
         .local/share/dotfiles/local.fish .local/share/dotfiles/local.zsh
         .claude/rules/development-workflow.md
     )
+    for container in "${SKILL_CONTAINERS[@]}"; do
+        for source in "${SKILL_SOURCES[@]}"; do
+            managed_targets+=("$container/${source##*/}")
+        done
+    done
     if [[ "$OS_NAME" == "Darwin" ]]; then
         for target in "${HERDR_APP_FILES[@]}"; do
             managed_targets+=("$HERDR_APP_DIRECTORY/$target")
@@ -176,7 +190,9 @@ preflight_workflow_links() {
         done
     done
     # These containers can hold unrelated agent state and are never replaced.
-    for directory in "$CODEX_DIRECTORY" "$PI_DIRECTORY" "$WORKFLOW_HOME/.claude/rules"; do
+    for directory in "$CODEX_DIRECTORY" "$PI_DIRECTORY" "$WORKFLOW_HOME/.claude/rules" \
+        "${SKILL_CONTAINERS[@]/#/$WORKFLOW_HOME/}"
+    do
         validate_agent_directory "$directory" "agent configuration directory"
         redirected="$(redirected_agent_parent "$directory")"
         [[ -z "$redirected" ]] ||
@@ -190,6 +206,16 @@ preflight_workflow_links() {
         then
             die "existing global instructions must remain active; reconcile their content with the shared workflow before linking: $target"
         fi
+    done
+    for container in "${SKILL_CONTAINERS[@]}"; do
+        for source in "${SKILL_SOURCES[@]}"; do
+            target="$HOME/$container/${source##*/}"
+            if [[ -e "$target" || -L "$target" ]] &&
+                ! symlink_points_to "$target" "$REPO_ROOT/$source"
+            then
+                die "an existing global skill uses this name; preserve or rename it before linking: $target"
+            fi
+        done
     done
     if [[ -e "$CODEX_DIRECTORY/AGENTS.override.md" ||
         -L "$CODEX_DIRECTORY/AGENTS.override.md" ]]
@@ -823,6 +849,11 @@ preflight_links() {
         [[ -f "$REPO_ROOT/$source" ]] ||
             die "missing or invalid tracked configuration file: $REPO_ROOT/$source"
     done
+    for source in "${SKILL_SOURCES[@]}"; do
+        [[ -d "$REPO_ROOT/$source" && ! -L "$REPO_ROOT/$source" &&
+            -f "$REPO_ROOT/$source/SKILL.md" ]] ||
+            die "missing or invalid tracked skill: $REPO_ROOT/$source/SKILL.md"
+    done
 
     for source in "${directory_sources[@]}"; do
         preflight_link_location "$source" ".config/$source"
@@ -874,7 +905,7 @@ preflight_herdr_app_directory() {
     done
     physical_directory="$(physical_path "$HERDR_APP_DIRECTORY")"
     for protected in "$REPO_ROOT" "$CODEX_DIRECTORY" "$PI_DIRECTORY" \
-        "$HOME/.claude" "$LOCAL_DIR" "$HOME/.config/fish" "$HOME/.config/ghostty" \
+        "$HOME/.agents" "$HOME/.claude" "$LOCAL_DIR" "$HOME/.config/fish" "$HOME/.config/ghostty" \
         "$HOME/.config/herdr" "$HOME/.config/hunk" "$HOME/.config/lazygit" \
         "$HOME/.config/mise" "$HOME/.config/nvim" "$HOME/.config/tmux"
     do
@@ -917,7 +948,7 @@ link_herdr_app_configs() {
 }
 
 link_configs() (
-    local lock_directory="$LOCAL_DIR/.install-lock"
+    local lock_directory="$LOCAL_DIR/.install-lock" container source
     mkdir -p "$LOCAL_DIR"
     mkdir "$lock_directory" 2>/dev/null ||
         die "another installer may be linking configuration; if none is running, remove the empty lock directory and retry: $lock_directory"
@@ -954,6 +985,11 @@ link_configs() (
     link docs/agents/development-workflow.md "$CODEX_DIRECTORY/AGENTS.md"
     link docs/agents/development-workflow.md "$PI_DIRECTORY/AGENTS.md"
     link docs/agents/development-workflow.md "$HOME/.claude/rules/development-workflow.md"
+    for container in "${SKILL_CONTAINERS[@]}"; do
+        for source in "${SKILL_SOURCES[@]}"; do
+            link "$source" "$HOME/$container/${source##*/}"
+        done
+    done
 
     mkdir -p "$LOCAL_DIR"
     for template in local.fish local.zsh; do

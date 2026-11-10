@@ -2,12 +2,14 @@
 
 Personal config monorepo. Clone into a directory such as `~/dotfiles`, run `./install.sh`, and your system is wired up via symlinks into `~/.config/` and `~/`. Keep the checkout outside the configuration paths the installer replaces; overlapping paths are rejected before provisioning.
 
-The setup is designed around one uniform code interface: Herdr TUI is the daily workspace manager, Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. Tmux remains available as a deliberate fallback and compatibility multiplexer. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
+The setup is designed around one uniform code interface: Herdr app is the daily terminal and workspace, Neovim is the development surface, terminal tools provide supporting workflows, and agent harnesses such as Codex or Claude Code are interchangeable drivers rather than separate ways of working. Tmux remains available as a deliberate fallback and compatibility multiplexer. The dependency posture is native-first and locally-owned: use Neovim's built-in APIs and standard terminal capabilities before adding plugin frameworks, and prefer small purpose-built tools with clear CLI boundaries over broad external layers.
 
-Ghostty with Herdr TUI remains the daily terminal and workspace setup.
-[Herdr app](herdr-app/README.md) and [Rex](rex/README.md) are personal
-experiments that could replace both. Herdr app currently looks more promising
-and uses its native shortcuts with a personal dark terminal theme.
+[Herdr app](herdr-app/README.md) is the daily terminal and workspace setup. It
+uses its native shortcuts with a personal dark terminal theme, and reaches
+Linux machines such as a cloud desktop over SSH. Ghostty with
+[Herdr TUI](herdr/README.md) and [Rex](rex/README.md) stay installed and
+configured on the shelf: they keep working when chosen, but are not the
+default.
 
 ## Layout
 
@@ -15,12 +17,13 @@ and uses its native shortcuts with a personal dark terminal theme.
 | ------------------- | ---------------------------- | --------------------------------------------------------- |
 | `fish/`             | `~/.config/fish/`            | Prompt + `nvim-reset` alias. Platform-agnostic.           |
 | `ghostty/`          | `~/.config/ghostty/`         | macOS Ghostty terminal config.                            |
-| `herdr/config.toml` | `~/.config/herdr/config.toml` | Daily workspace config; mutable runtime state is local.   |
-| `herdr-app/` | Personal files under `~/.config/herdr-app/` | macOS app appearance settings and theme; file-level links only. |
+| `herdr/config.toml` | `~/.config/herdr/config.toml` | Shelved Herdr TUI config; mutable runtime state is local. |
+| `herdr-app/` | Personal files under `~/.config/herdr-app/` | Daily macOS app appearance settings and theme; file-level links only. |
 | `hunk/config.toml`  | `~/.config/hunk/config.toml`  | Review preferences; mutable runtime state remains local.  |
 | `lazygit/`          | `~/.config/lazygit/`         | Git Transaction Surface with Hunk as its Diffing Solution. |
 | `mise/conf.d/00-dotfiles.toml` | `~/.config/mise/conf.d/00-dotfiles.toml` | Global runtime defaults; user config can override them. |
 | `docs/agents/development-workflow.md` | Harness-global instruction files | Shared workflow, automatically loaded by Codex, Pi, and Claude Code; paths below. |
+| `docs/agents/skills/<name>/` | `~/.agents/skills/<name>`, `~/.claude/skills/<name>` | Shared global skills for Codex, Pi, and Claude Code; see below. |
 | `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack`.           |
 | `rex/macos.sh`      | macOS `com.superlogical.rex` preferences | Manually applied appearance settings; personal experiment. |
 | `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer with 1-indexed windows and panes.    |
@@ -108,22 +111,24 @@ setup explicitly in degraded mode:
 
 ## Daily workspace
 
-On macOS, open Ghostty and run `herdr` from its shell for the daily workspace.
+On macOS, open Herdr app for the daily workspace. Work on a Linux machine,
+such as a cloud desktop, happens in spaces on that machine after adding it
+under Settings → Machines; see the [Herdr app guide](herdr-app/README.md#work-on-another-machine).
 
 ```bash
-# Current daily workspace on macOS or Linux
-herdr
-
-# Personal experiment on macOS
+# Daily workspace on macOS
 herdr-app
+
+# Shelved alternative: Herdr TUI, from Ghostty or an SSH shell
+herdr
 
 # Deliberate fallback/compatibility session
 tmux new-session -A -s dev
 ```
 
-These are top-level alternatives. Plain `herdr` starts or reattaches the daily
-TUI workspace on macOS or Linux. On macOS, `herdr-app` opens the experimental
-desktop workspace. Tmux remains independently available for tmux-specific
+These are top-level alternatives. Herdr TUI keeps its own server and state,
+separate from Herdr app's core; plain `herdr` still starts or reattaches it on
+macOS or Linux. Tmux remains independently available for tmux-specific
 workflows.
 
 ## Shared agent instructions
@@ -142,6 +147,24 @@ The harnesses load these instructions automatically. All links share one
 source, so editing the workflow updates the installed instructions. No workflow
 skill, Herdr plugin, or separate workflow executable is required. Harness
 binaries remain optional and are installed separately.
+
+`install.sh` also links each shared skill under `docs/agents/skills/` into the
+global skill directories. Skills follow the open
+[Agent Skills](https://agentskills.io) format, so one directory serves every
+harness, and agents load a skill only when its description matches the task:
+
+| Harness | Global skill directory |
+| --- | --- |
+| Codex and Pi | `~/.agents/skills/<name>` |
+| Claude Code | `~/.claude/skills/<name>` |
+
+| Skill | Purpose |
+| --- | --- |
+| [`herdr-app`](docs/agents/skills/herdr-app/SKILL.md) | Driving Herdr app and `hc`: finding the agent's machine and tab, showing a tab when asked, starting and messaging agents, and harness-specific pitfalls |
+
+An existing skill with the same name, or a redirected skill directory, stops
+installation so that personal skills stay active. Repository-scoped skills
+under `.agents/skills/` remain local to this checkout.
 
 Existing unmanaged instruction files and legacy devflow guidance blocks stop
 installation with an actionable migration message. Preserve unrelated personal
@@ -185,7 +208,7 @@ layer:
 | `fish` | Primary shell; version 3.2 or newer |
 | `zsh` | Secondary/login-shell handoff |
 | `neovim` | `nvim`; version 0.12.5 or newer |
-| `herdr` | Daily workspace manager |
+| `herdr` | Herdr TUI, the shelved alternative workspace manager |
 | `tmux` | Fallback multiplexer; version 3.5 or newer for `extended-keys-format` |
 | `lazygit` | Git Transaction Surface; version 0.64.0 or newer for `git.diffRenderers` |
 | `hunk` | Diffing Solution and stacked working-tree and staged Review Surface; version 0.18.1 or newer for efficient concurrent watch sessions (0.12 introduced LazyGit rendering) |
@@ -347,7 +370,8 @@ explicit runtime-skip setup, safe restoration,
 and a mutation-free second run without touching the network, sudo, package
 managers, or the caller's home directory.
 
-The same suite covers Herdr app provisioning and configuration linking.
+The same suite covers Herdr app provisioning, configuration linking, and the
+global skill links.
 See the [Herdr app guide](herdr-app/README.md#validation) for running-window checks.
 
 `nvim --clean --headless -l tests/shell_test.lua` exercises real Fish, Zsh,

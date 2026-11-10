@@ -178,8 +178,8 @@ To add a new language server:
 
 ### Terminal Integration
 
-Herdr owns the daily workspace and tmux remains the top-level fallback. Do not
-duplicate either manager's navigation in Neovim. `terminal_tool.lua` privately
+Herdr app owns the daily workspace; Herdr TUI and tmux remain top-level
+alternatives. Do not duplicate any manager's navigation in Neovim. `terminal_tool.lua` privately
 owns the source marker and opaque Editor Handoff payload used by flatten.nvim;
 declarations must not set handoff environment variables or override `EDITOR`.
 See [terminal navigation](README.md#terminal-navigation) for usage.
@@ -290,7 +290,7 @@ This configuration prioritizes:
 - **Minimal external dependencies**: Add plugins only for clear, durable capabilities; avoid wrapping native behavior in extra layers
 - **Local performant tools**: For workflows outside Neovim's core job, prefer thin integrations with self-made or locally-owned CLI tools over large in-editor plugin surfaces
 - **Readability and documentation**: Lean init.lua plus one file per plugin under `lua/kickstart/plugins/` and `lua/custom/plugins/`
-- **Integration with ecosystem**: Works inside the Herdr daily workspace while preserving tmux-specific host routing when tmux is chosen as the fallback
+- **Integration with ecosystem**: Works inside the Herdr app daily workspace while preserving tmux-specific host routing when tmux is chosen as the fallback
 
 ## Coding Guidelines
 

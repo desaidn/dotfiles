@@ -4,8 +4,8 @@ Guidance for coding agents working on the tmux config. See [`../AGENTS.md`](../A
 
 ## Configuration Purpose
 
-Tmux is the retained top-level fallback and compatibility multiplexer; Herdr is
-the normal daily workspace manager. Start tmux directly when its compatibility
+Tmux is the retained top-level fallback and compatibility multiplexer; Herdr app
+is the normal daily workspace manager. Start tmux directly when its compatibility
 surface is needed rather than nesting it inside Herdr for agent panes.
 
 A single `tmux.conf` file provides:

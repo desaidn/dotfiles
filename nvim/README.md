@@ -2,7 +2,7 @@
 
 A lean Neovim configuration based on kickstart.nvim. Part of [dotfiles](../README.md).
 
-**Philosophy**: Text editing focused, native Neovim first, minimal external dependencies, and workspace-manager neutral. Herdr is the normal daily workspace; tmux remains a compatible fallback. Prefer built-in Neovim APIs and small locally-owned tools over broad plugin layers when the native surface is enough.
+**Philosophy**: Text editing focused, native Neovim first, minimal external dependencies, and workspace-manager neutral. Herdr app is the normal daily workspace; Herdr TUI and tmux remain compatible alternatives. Prefer built-in Neovim APIs and small locally-owned tools over broad plugin layers when the native surface is enough.
 
 ## Features
 
@@ -356,7 +356,7 @@ variables, and stepping are not yet verified on this host. See the
 - `<Esc><Esc>` - Exit terminal mode before using normal-mode tool keys
 - `<C-h/j/k/l>` - Move between Neovim windows
 
-Herdr manages the daily workspace and tmux remains a separate fallback. When
+Herdr app manages the daily workspace and tmux remains a separate fallback. When
 using tmux, its prefix, session picker, and pane navigation remain available
 inside Neovim-owned Tool Tabs.
 

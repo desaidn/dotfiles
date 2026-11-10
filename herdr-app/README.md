@@ -1,8 +1,10 @@
 # Herdr app
 
-Part of [dotfiles](../README.md). Herdr app is a promising personal experiment
-that combines the terminal window and workspace manager on macOS. Ghostty with
-Herdr TUI remains the daily setup.
+Part of [dotfiles](../README.md). Herdr app is the daily terminal window and
+workspace manager on macOS. Its window shows spaces, tabs, and panes;
+herdr-core, driven with `hc`, runs the terminals and keeps them alive when the
+window closes. Ghostty with [Herdr TUI](../herdr/README.md) stays installed on
+the shelf as an alternative.
 
 ## Installation
 
@@ -27,6 +29,37 @@ mods/layouts, and runtime state. Fresh installs use the app's normal welcome
 flow and agent sorting; existing `shared.json` preferences are preserved.
 Uninstall removes only the two owned links; `--restore` can restore their
 original files and leaves app state and installed packages.
+
+## Work on another machine
+
+Add a Linux machine, such as a cloud desktop, from Settings → Machines or the
+sidebar's Add machine action. Any Host from `~/.ssh/config` works. Spaces on
+that machine run their terminals there, and keep running when the laptop
+sleeps or the window closes.
+
+Adding the machine offers to copy `hc` there when it is missing or too old, so
+dotfiles does not install herdr-core on Linux. `herdr-app` itself runs only on the Mac.
+From the Mac, remote terminals have addresses such as `box/t7`. If SSH needs a
+password or code again, run `hc machine login <name>` in a terminal;
+`hc machine ls` shows each connection's state.
+
+The connection carries a byte protocol, so the remote login must not print
+anything to standard output. The zsh handoff to Fish happens only in
+interactive shells and stays out of that path.
+
+Programs that `hc run` starts by name inherit the core's environment rather
+than the dotfiles shell setup, so Homebrew tools may be missing from `PATH`.
+Run them through `zsh -ic 'exec …'`, as the agent skill below describes.
+
+## Agents
+
+Agents in Codex, Claude Code, and pi load the shared
+[`herdr-app` skill](../docs/agents/skills/herdr-app/SKILL.md) when they work in
+Herdr app or with `hc`. It starts from the installed upstream guides,
+`hc --skill` and `herdr-app --skill`, and adds this setup's layout, how to show
+a tab from a remote machine, and pitfalls seen in earlier sessions. The
+[root README](../README.md#shared-agent-instructions) lists where it is
+installed.
 
 ## Appearance
 

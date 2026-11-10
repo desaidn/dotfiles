@@ -2,10 +2,9 @@
 
 Part of [dotfiles](../README.md).
 
-Rex is a personal experiment as a terminal and multiplexer. It could eventually
-replace both Ghostty and Herdr for personal use; this is an early impression
-while testing. Work continues to use Ghostty as the terminal and Herdr as the
-multiplexer.
+Rex is a personal experiment as a terminal and multiplexer, kept on the shelf
+alongside Ghostty with Herdr TUI. Daily work uses
+[Herdr app](../herdr-app/README.md).
 
 See the [Rex documentation](https://www.superlogical.com/rex/docs) for upstream
 setup and usage.

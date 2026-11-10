@@ -82,13 +82,17 @@ Python the repository's automation language.
 
 ## Workflow constraints
 
-Ghostty with Herdr TUI remains the daily setup. Herdr app and Rex are personal
-experiments.
+Herdr app is the daily setup, on macOS and in spaces on SSH-connected Linux
+machines. Ghostty with Herdr TUI and Rex stay installed and configured on the
+shelf: keep their configuration working, but do not describe or design for them
+as the default.
 
 Herdr app, Herdr TUI, and tmux are top-level alternatives. Use the task's
 running environment for editor and review tabs; do not nest tmux inside either
 Herdr environment. Usage is documented in the [Herdr app](herdr-app/README.md),
-[Herdr](herdr/README.md), and [tmux](tmux/README.md) guides.
+[Herdr](herdr/README.md), and [tmux](tmux/README.md) guides. Agents operating
+Herdr app or `hc` use the shared
+[`herdr-app` skill](docs/agents/skills/herdr-app/SKILL.md).
 
 ### Git Operations
 
@@ -142,6 +146,7 @@ guidance for all three harnesses.
 
 - Each configured application maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked. Herdr app links only its personal files, keeping generated files and runtime state local.
 - The complete portable agent workflow lives in `docs/agents/development-workflow.md`; harness-global instruction paths link directly to it. Keep dotfiles-specific constraints here.
+- Global skills live in `docs/agents/skills/<name>/SKILL.md` using the Agent Skills format and are linked into `~/.agents/skills/` (Codex and pi) and `~/.claude/skills/` (Claude Code). Keep each skill harness-neutral, with harness differences as short notes inside it. Point to installed upstream guides such as `hc --skill` instead of copying them. Repository-scoped skills stay in `.agents/skills/`; do not put a global skill there, because Codex would list it twice inside this checkout.
 - Follow tool-specific guidance where present: [Herdr](herdr/AGENTS.md),
   [Herdr app](herdr-app/AGENTS.md),
   [Neovim](nvim/AGENTS.md), and [tmux](tmux/AGENTS.md).
@@ -160,7 +165,7 @@ guidance for all three harnesses.
 - **Shell ↔ Editor**: Fish and zsh own the global editor contract (`EDITOR`, `VISUAL`, and `GIT_EDITOR` all point to `nvim`)
 - **Terminal tool ↔ Editor**: flatten.nvim handles editor handoff from nested `nvim` calls back into the host Neovim; the shared terminal-tool module owns the opaque source marker and post-handoff policy while preserving the shell-owned `EDITOR` contract
 - **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent Tool Tab per selected tool instance, singleton by default and keyed by canonical Git checkout root for Hunk, with flatten.nvim for Editor Handoff and host tmux prefix and pane navigation kept upstream when using the fallback
-- **Shell ↔ Workspace manager**: Ghostty launches the system shell; interactive zsh hands off to Fish with `exec fish`; invoke Herdr for the daily workspace or tmux directly for fallback/compatibility
+- **Shell ↔ Workspace manager**: Herdr app (and shelved Ghostty) launch the system shell; interactive zsh hands off to Fish with `exec fish`; Herdr app is the daily workspace, with Herdr TUI or tmux started directly when chosen
 - **Runtime Management**: Mise owns language runtimes; Mason owns editor tooling
 - **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead (e.g., Cmd+Arrow for word navigation in Ghostty). Herdr app keeps its native macOS keymap, including Option combinations.
 
@@ -231,6 +236,11 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 - Link the complete shared workflow into Codex and pi global `AGENTS.md` files
   and Claude's global `rules/development-workflow.md`, including in degraded
   mode. Honor validated `CODEX_HOME` and `PI_CODING_AGENT_DIR` overrides.
+- Link each shared skill directory under `docs/agents/skills/` into
+  `~/.agents/skills/` and `~/.claude/skills/`, including in degraded mode. These
+  user skill locations do not follow `CODEX_HOME` or `PI_CODING_AGENT_DIR`.
+  Treat them like instruction files: reject an existing skill of the same name
+  or a redirected skill container instead of backing it up.
 - Preserve unrelated global instructions and skills. Reject conflicting global
   overrides, unmanaged destinations, legacy devflow guidance, and blocked parent
   paths during preflight; migration is explicit, not a hidden installer rewrite.
@@ -260,8 +270,8 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
 - Leave older backups, foreign links, installed packages and runtimes,
   per-machine activation files, and unrelated state under
   `~/.local/share/dotfiles/` untouched. A successful second run is a no-op.
-- Remove only owned global instruction links, preserving personal guidance,
-  other rules/skills, custom profile contents, and historical review records.
+- Remove only owned global instruction and skill links, preserving personal
+  guidance, other rules/skills, custom profile contents, and historical review records.
   Do not follow redirected harness containers to remove another profile's files.
 - Retired executable installations require an explicit ownership-checked migration;
   generic uninstall leaves installed packages and legacy records untouched.

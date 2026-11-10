@@ -413,19 +413,32 @@ restore_nested() {
 }
 
 # Do not follow a harness container redirected after installation.
-manage_workflow_link() {
-    local target="$1" container="$2" redirected
+manage_agent_link() {
+    local source="$1" target="$2" container="$3" redirected
     redirected="$(redirected_agent_parent "$container")"
     if [[ -n "$redirected" ]]; then
         echo "  parent is a symlink: $redirected (skipping)"
         return
     fi
     if (( RESTORE_BACKUPS == 1 )); then
-        restore_direct docs/agents/development-workflow.md "$target"
+        restore_direct "$source" "$target"
     else
-        remove_owned docs/agents/development-workflow.md "$target" "$container"
+        remove_owned "$source" "$target" "$container"
     fi
 }
+
+manage_workflow_link() {
+    manage_agent_link docs/agents/development-workflow.md "$@"
+}
+
+# Global skills shared by Codex and pi (~/.agents/skills) and Claude Code.
+SKILL_SOURCES=(
+    docs/agents/skills/herdr-app
+)
+SKILL_CONTAINERS=(
+    .agents/skills
+    .claude/skills
+)
 
 manage_herdr_app_configs() {
     local directory redirected file
@@ -489,6 +502,12 @@ manage_herdr_app_configs
 manage_workflow_link "$CODEX_DIRECTORY/AGENTS.md" "$CODEX_DIRECTORY"
 manage_workflow_link "$PI_DIRECTORY/AGENTS.md" "$PI_DIRECTORY"
 manage_workflow_link "$HOME/.claude/rules/development-workflow.md" "$WORKFLOW_HOME/.claude/rules"
+for skill_container in "${SKILL_CONTAINERS[@]}"; do
+    for skill_source in "${SKILL_SOURCES[@]}"; do
+        manage_agent_link "$skill_source" "$HOME/$skill_container/${skill_source##*/}" \
+            "$WORKFLOW_HOME/$skill_container"
+    done
+done
 
 echo
 echo "Backups (if any) remain at:"
@@ -506,6 +525,8 @@ backups=(
     "$CODEX_DIRECTORY"/AGENTS.md.bak.*
     "$PI_DIRECTORY"/AGENTS.md.bak.*
     "$HOME"/.claude/rules/development-workflow.md.bak.*
+    "$HOME"/.agents/skills/herdr-app.bak.*
+    "$HOME"/.claude/skills/herdr-app.bak.*
 )
 shopt -u nullglob
 if (( ${#backups[@]} > 0 )); then

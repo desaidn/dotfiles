@@ -1,7 +1,9 @@
 # AGENTS.md
 
-Guidance for coding agents working on the Herdr configuration. See
-[`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions.
+Guidance for coding agents working on the Herdr TUI configuration. See
+[`../AGENTS.md`](../AGENTS.md) for monorepo-level conventions. Herdr TUI is a
+shelved alternative to the daily [Herdr app](../herdr-app/AGENTS.md); keep its
+configuration working without making it the default again.
 
 ## Configuration boundary
 
@@ -43,5 +45,5 @@ Preserve upstream defaults unless a setting directly supports the shared
 terminal workflow. Keep tmux as a separate top-level fallback; generally do
 not nest it inside Herdr for agent panes because nesting hides the foreground
 agent process from Herdr. Do not auto-start Herdr from Ghostty or shell rc
-files; plain `herdr` from the normal shell is the daily entry point and keeps
-the tmux fallback independently reachable.
+files; plain `herdr` from the normal shell is its entry point and keeps the
+tmux fallback independently reachable.

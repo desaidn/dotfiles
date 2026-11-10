@@ -39,7 +39,8 @@ Before changing files or installed packages:
 
 - Inspect `git status --short --branch` and `git worktree list --porcelain`.
   Record the canonical checkout, branch, and explicit starting commit.
-- Inspect `hunk session list --json` and the intended Herdr workspace with real
+- Inspect `hunk session list --json` and the intended Herdr app space (or Herdr
+  TUI workspace, when that is the running environment) with real
   access to their sockets. A sandboxed empty list is not reliable evidence that
   no review exists if socket access is restricted. Resolve access first; use the
   harness's permission mechanism when needed. An existing different review must
