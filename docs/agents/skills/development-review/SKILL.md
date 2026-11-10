@@ -91,10 +91,10 @@ In an identified existing host, run `:HunkReview BASE HEAD` with the full
 resolved commit IDs. For a new destination, launch
 `nvim -c "HunkReview $base_oid $head_oid"` in the checkout:
 
-- **Herdr app.** Use the `herdr-app` skill's recipe with that command. Run it
-  through `zsh -ic 'exec …'`, because programs started by the core do not
-  inherit the dotfiles `PATH`. Never type the command into a shell with
-  `hc send`.
+- **Herdr app.** Use the `herdr-app` skill's recipe with that command. It
+  passes your `PATH` with `env "PATH=$PATH"`, because programs started by the
+  core do not inherit your shell's environment. Never type the command into a
+  shell with `hc send`.
 - **Herdr TUI.** Create the tab without focus, then run Neovim in its pane:
 
   ```sh

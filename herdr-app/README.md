@@ -48,8 +48,12 @@ anything to standard output. The zsh handoff to Fish happens only in
 interactive shells and stays out of that path.
 
 Programs that `hc run` starts by name inherit the core's environment rather
-than the dotfiles shell setup, so Homebrew tools may be missing from `PATH`.
-Run them through `zsh -ic 'exec …'`, as the agent skill below describes.
+than the dotfiles shell setup. A core started over SSH reads only
+`~/.zshenv`, so Homebrew tools may be missing from its `PATH`. Agents pass
+their own with `env "PATH=$PATH" <program>`, as the agent skill below
+describes. To fix it at the source, add Homebrew to `PATH` in `~/.zshenv` and
+restart the core once with `hc server restart --fresh`, run from an SSH shell
+outside Herdr so it picks up that environment; running terminals keep running.
 
 ## Agents
 

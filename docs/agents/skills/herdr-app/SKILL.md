@@ -64,7 +64,8 @@ Do not switch the visible tab or focus unless asked.
 
 ```sh
 herdr-app do tab.new --space "$space" --name "review/feature" \
-  --folder "$checkout" --argv '["zsh", "-ic", "exec nvim -c \"HunkReview BASE HEAD\""]'
+  --folder "$checkout" \
+  --argv "[\"env\", \"PATH=$PATH\", \"nvim\", \"-c\", \"HunkReview BASE HEAD\"]"
 herdr-app ls                      # confirm the new tab and its terminal
 ```
 
@@ -75,7 +76,7 @@ own space. Without `herdr.tab`, the app gives it a new tab in that space:
 space=$(hc get "$HC_TERMINAL_ID" --json | jq -r '.labels["herdr.space"]')
 hc run --bg --name review-feature --outlive-parent --no-notify \
   --cwd "$checkout" --label "herdr.space=$space" \
-  -- zsh -ic 'exec nvim -c "HunkReview BASE HEAD"'
+  -- env "PATH=$PATH" nvim -c "HunkReview BASE HEAD"
 ```
 
 `--outlive-parent` keeps the tab open after your session ends. Names allow
@@ -96,12 +97,18 @@ your shell's startup files. Homebrew and Mise tools such as `nvim`, `hunk`, and
 language runtimes may then be missing. Symptoms are `spawn_failed: cannot
 start "nvim"` or Neovim reporting `'hunk' is not executable`.
 
-Run such programs through an interactive zsh, which loads the dotfiles PATH
-without handing off to Fish:
+Pass your own `PATH` with `env`. Your shell expands `$PATH` before `hc`
+runs, and `env` sets it for the program without running any shell startup
+files:
 
 ```sh
-hc run --bg --name tests --cwd "$checkout" -- zsh -ic 'exec make test'
+hc run --bg --name tests --cwd "$checkout" -- env "PATH=$PATH" make test
 ```
+
+`env` passes only what you name. Add any other variable the program needs
+the same way, as in `env "PATH=$PATH" "FOO=$FOO" program`. Do not wrap
+commands in `zsh -ic '…'` or another nested shell: it hides what will run,
+and Claude Code's worktree check refuses it.
 
 `hc run` with no program already starts the machine's own shell.
 
@@ -131,5 +138,10 @@ Follow `hc --skill` for delegation, waiting, and reports. In this setup:
   those commands with a short justification.
 - **Claude Code.** Background or resumed sessions can inherit another pane's
   `HERDR_*` variables; locate yourself from `hc get "$HC_TERMINAL_ID"`.
+  Sessions working in a worktree refuse any command whose text does not show
+  that its Git stays inside the worktree, and that check cannot be turned off.
+  Keep each launch one plain command, as in the recipes above. If a launch is
+  still refused, ask the person to run it with `!` instead of leaving the
+  worktree.
 - **pi.** Loads this skill from `~/.agents/skills`, the same location Codex
   uses.
