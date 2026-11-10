@@ -20,7 +20,8 @@ materially change the investigation.
 
 Read the project's instructions and current workflow sources. In this
 repository, start with [AGENTS.md](../../../AGENTS.md) and the
-[development workflow](../../../docs/agents/development-workflow.md); consult
+[development workflow](../../../docs/agents/development-workflow.md) with the
+global skills under `docs/agents/skills/`; consult
 the tool guides and implementation for the area under review. For example,
 a Neovim, Herdr, and Hunk review covers editor handoff, visible tabs, command
 routing, review identity, and lifecycle. It does not automatically expand into

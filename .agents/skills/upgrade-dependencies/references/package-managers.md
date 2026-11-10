@@ -4,7 +4,9 @@ Use the repository root as the working directory. Read the current root
 `README.md` dependency inventory, `Brewfile`, and the dependency sections of
 `install.sh`; they own the inventory. The
 [shared development workflow](../../../../docs/agents/development-workflow.md)
-owns checkout, review, and landing.
+owns checkout rules, and the
+[development-review skill](../../../../docs/agents/skills/development-review/SKILL.md)
+owns review and landing.
 
 ## Homebrew: select and account for every package
 

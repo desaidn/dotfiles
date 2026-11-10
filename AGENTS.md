@@ -110,10 +110,16 @@ Herdr app or `hc` use the shared
 ### Agent Development Workflow
 
 Read and follow [the development workflow](docs/agents/development-workflow.md)
-before branch, review, or landing operations. Carry out its checks directly with
-Git, Neovim, Hunk, and the task's terminal environment; no workflow executable
-or skill is required. This same complete document is installed as global
-guidance for all three harnesses.
+before branch, review, or landing operations. It holds the always-loaded rules
+and points to the [`development-review` skill](docs/agents/skills/development-review/SKILL.md)
+for the review, landing, and delivery procedure, and to the
+[`herdr-app` skill](docs/agents/skills/herdr-app/SKILL.md) for Herdr app. Carry
+out their checks directly with Git, Neovim, Hunk, and the task's terminal
+environment; no workflow executable is required. Both are installed as global
+guidance for all three harnesses; see
+[ADR 0016](docs/adr/0016-split-the-agent-workflow-into-rules-and-skills.md).
+Keep the shared workflow and global skills free of employer-internal tool,
+service, and host names: machine-installed instructions supply those.
 
 - These rules govern coding agents only. Never block, intercept, or reinterpret
   human Git and LazyGit operations as Workflow Exceptions.
@@ -145,7 +151,7 @@ guidance for all three harnesses.
 ### File Organization
 
 - Each configured application maintains its own subdirectory under the repo root, mirroring the XDG layout under `~/.config/`; Herdr and Hunk link only `config.toml` so mutable state stays untracked. Herdr app links only its personal files, keeping generated files and runtime state local.
-- The complete portable agent workflow lives in `docs/agents/development-workflow.md`; harness-global instruction paths link directly to it. Keep dotfiles-specific constraints here.
+- The always-loaded portable agent rules live in `docs/agents/development-workflow.md`; harness-global instruction paths link directly to it. Procedures that are needed only at certain steps belong in global skills. Keep dotfiles-specific constraints here.
 - Global skills live in `docs/agents/skills/<name>/SKILL.md` using the Agent Skills format and are linked into `~/.agents/skills/` (Codex and pi) and `~/.claude/skills/` (Claude Code). Keep each skill harness-neutral, with harness differences as short notes inside it. Point to installed upstream guides such as `hc --skill` instead of copying them. Repository-scoped skills stay in `.agents/skills/`; do not put a global skill there, because Codex would list it twice inside this checkout.
 - Follow tool-specific guidance where present: [Herdr](herdr/AGENTS.md),
   [Herdr app](herdr-app/AGENTS.md),
@@ -155,7 +161,8 @@ guidance for all three harnesses.
 - Keep documentation ownership explicit: the root README owns installation and
   dependency inventory; tool READMEs own usage, commands, keybindings, and
   troubleshooting; AGENTS files own constraints, ownership, and validation.
-  Keep workflow details in [the development workflow](docs/agents/development-workflow.md),
+  Keep workflow rules in [the development workflow](docs/agents/development-workflow.md)
+  and its procedures in [the global skills](docs/agents/skills/),
   decisions in ADRs, and domain definitions in `CONTEXT.md`. Link to each owner
   instead of duplicating its explanations.
 
@@ -245,8 +252,9 @@ This repo uses a single-context domain docs layout. See `docs/agents/domain.md`.
   overrides, unmanaged destinations, legacy devflow guidance, and blocked parent
   paths during preflight; migration is explicit, not a hidden installer rewrite.
 - Do not provision a workflow executable, private Python environment, harness
-  plugin, hooks, or new review-state storage. The shared document is the only
-  maintained workflow policy; native harness loaders supply its full contents.
+  plugin, hooks, or new review-state storage. The shared document and the global
+  skills under `docs/agents/skills/` are the only maintained workflow policy;
+  native harness loaders supply their contents.
 - Run `tests/install_test.sh` after installer, Brewfile, Mise manifest, or
   per-machine activation-template changes. It needs Neovim to execute the shared
   compatibility helper against simulated versions.

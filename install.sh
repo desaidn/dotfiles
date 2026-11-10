@@ -92,6 +92,7 @@ HERDR_APP_FILES=(
 )
 # Global skills shared by Codex and pi (~/.agents/skills) and Claude Code.
 SKILL_SOURCES=(
+    docs/agents/skills/development-review
     docs/agents/skills/herdr-app
 )
 SKILL_CONTAINERS=(

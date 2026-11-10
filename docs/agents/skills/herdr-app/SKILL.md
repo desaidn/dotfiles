@@ -1,6 +1,6 @@
 ---
 name: herdr-app
-description: Use when running inside Herdr app or herdr-core terminals (HC_TERMINAL_ID is set), or when asked to open, show, place, or focus a tab, pane, space, review, or agent in Herdr app, or to start, message, wait on, or clean up terminals and agents with hc. Covers the macOS window and remote machines such as a Linux cloud desktop.
+description: Use when running inside Herdr app or herdr-core terminals (HC_TERMINAL_ID is set), or when asked to open, show, place, or focus a tab, pane, space, review, or agent in Herdr app, or to start, message, wait on, or clean up terminals and agents with hc. Covers the macOS window and remote Linux machines connected over SSH.
 ---
 
 # Herdr app and hc
@@ -41,7 +41,7 @@ command -v herdr-app              # present only where the window runs
   inspect the window with `herdr-app ls` and `herdr-app status` and change it
   with `herdr-app do`. Remote terminals appear as `machine/t7`; use that full
   address with `hc`.
-- **A remote machine (the Linux cloud desktop).** `herdr-app` is not
+- **A remote machine (for example, a Linux development host).** `herdr-app` is not
   installed, and that is expected. The Mac's app reaches this machine over
   SSH, and its core runs the terminals here. Use `hc` only. Your own labels
   still name the space and tab the person sees you in.
@@ -86,8 +86,8 @@ the app's "keep" action on the terminal (`terminal.keep` on the Mac).
 
 A successful reply only means the terminal was created. Confirm the program
 started with `hc get <t>` and `hc read <t> --lines 0` before reporting it.
-For reviews, the [development workflow](../../development-workflow.md) still
-owns Hunk verification, findings, and approval.
+For reviews, the [`development-review` skill](../development-review/SKILL.md)
+still owns Hunk verification, findings, and approval.
 
 ## 4. Start programs with the right environment
 

@@ -767,8 +767,12 @@ assert_workflow_links() {
     assert_symlink "$FIXTURE_CODEX_DIRECTORY/AGENTS.md" "$REPO_ROOT/docs/agents/development-workflow.md"
     assert_symlink "$FIXTURE_PI_DIRECTORY/AGENTS.md" "$REPO_ROOT/docs/agents/development-workflow.md"
     assert_symlink "$FIXTURE_HOME/.claude/rules/development-workflow.md" "$REPO_ROOT/docs/agents/development-workflow.md"
-    assert_symlink "$FIXTURE_HOME/.agents/skills/herdr-app" "$REPO_ROOT/docs/agents/skills/herdr-app"
-    assert_symlink "$FIXTURE_HOME/.claude/skills/herdr-app" "$REPO_ROOT/docs/agents/skills/herdr-app"
+    local container skill
+    for container in .agents/skills .claude/skills; do
+        for skill in development-review herdr-app; do
+            assert_symlink "$FIXTURE_HOME/$container/$skill" "$REPO_ROOT/docs/agents/skills/$skill"
+        done
+    done
 }
 
 assert_herdr_app_links() {
@@ -813,7 +817,9 @@ assert_common_links_removed() {
     assert_not_exists "$FIXTURE_CODEX_DIRECTORY/AGENTS.md"
     assert_not_exists "$FIXTURE_PI_DIRECTORY/AGENTS.md"
     assert_not_exists "$FIXTURE_HOME/.claude/rules/development-workflow.md"
+    assert_not_exists "$FIXTURE_HOME/.agents/skills/development-review"
     assert_not_exists "$FIXTURE_HOME/.agents/skills/herdr-app"
+    assert_not_exists "$FIXTURE_HOME/.claude/skills/development-review"
     assert_not_exists "$FIXTURE_HOME/.claude/skills/herdr-app"
     assert_not_exists "$FIXTURE_HOME/.config/fish"
     assert_not_exists "$FIXTURE_HOME/.config/herdr/config.toml"
@@ -1992,7 +1998,7 @@ test_link_preflight_prevents_partial_configuration() {
     run_installer failure --skip-mise-runtimes
 
     grep -Fq \
-        "missing or invalid tracked skill: $FIXTURE_INSTALL_REPO_ROOT/docs/agents/skills/herdr-app/SKILL.md" \
+        "missing or invalid tracked skill: $FIXTURE_INSTALL_REPO_ROOT/docs/agents/skills/development-review/SKILL.md" \
         "$FIXTURE_OUTPUT" ||
         fail "installer did not preflight the shared skill source"
     assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
@@ -2336,6 +2342,7 @@ test_skill_links_preserve_existing_and_redirected_skills() {
         grep -Fq 'agent configuration directory is a symlink' "$FIXTURE_OUTPUT" ||
             fail "redirected skill container was not rejected"
         assert_not_exists "$FIXTURE_HOME/redirected/herdr-app"
+        assert_not_exists "$FIXTURE_HOME/redirected/development-review"
         assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
 
         for mode in remove restore; do
@@ -2349,6 +2356,8 @@ test_skill_links_preserve_existing_and_redirected_skills() {
                 run_uninstaller 0
             fi
             assert_symlink "$FIXTURE_HOME/redirected/herdr-app" "$REPO_ROOT/docs/agents/skills/herdr-app"
+            assert_symlink "$FIXTURE_HOME/redirected/development-review" \
+                "$REPO_ROOT/docs/agents/skills/development-review"
         done
     done
     pass "global skill links preserve existing skills and redirected skill containers"

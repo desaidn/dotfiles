@@ -6,7 +6,7 @@ The setup is designed around one uniform code interface: Herdr app is the daily 
 
 [Herdr app](herdr-app/README.md) is the daily terminal and workspace setup. It
 uses its native shortcuts with a personal dark terminal theme, and reaches
-Linux machines such as a cloud desktop over SSH. Ghostty with
+remote Linux machines over SSH. Ghostty with
 [Herdr TUI](herdr/README.md) and [Rex](rex/README.md) stay installed and
 configured on the shelf: they keep working when chosen, but are not the
 default.
@@ -112,7 +112,7 @@ setup explicitly in degraded mode:
 ## Daily workspace
 
 On macOS, open Herdr app for the daily workspace. Work on a Linux machine,
-such as a cloud desktop, happens in spaces on that machine after adding it
+such as a remote development host, happens in spaces on that machine after adding it
 under Settings → Machines; see the [Herdr app guide](herdr-app/README.md#work-on-another-machine).
 
 ```bash
@@ -144,8 +144,8 @@ global instruction locations:
 | Claude Code | `~/.claude/rules/development-workflow.md` | Fixed global rules location |
 
 The harnesses load these instructions automatically. All links share one
-source, so editing the workflow updates the installed instructions. No workflow
-skill, Herdr plugin, or separate workflow executable is required. Harness
+source, so editing the workflow updates the installed instructions. No Herdr
+plugin or separate workflow executable is required. Harness
 binaries remain optional and are installed separately.
 
 `install.sh` also links each shared skill under `docs/agents/skills/` into the
@@ -160,6 +160,7 @@ harness, and agents load a skill only when its description matches the task:
 
 | Skill | Purpose |
 | --- | --- |
+| [`development-review`](docs/agents/skills/development-review/SKILL.md) | Review, findings, adversarial review on request, approval, landing, and delivery, with one procedure on every machine |
 | [`herdr-app`](docs/agents/skills/herdr-app/SKILL.md) | Driving Herdr app and `hc`: finding the agent's machine and tab, showing a tab when asked, starting and messaging agents, and harness-specific pitfalls |
 
 An existing skill with the same name, or a redirected skill directory, stops
@@ -182,7 +183,10 @@ tool environment, legacy hooks, and guidance before completing migration. Keep h
 application; historical records alone do not establish current review approval.
 
 The [agent development workflow](docs/agents/development-workflow.md) owns the
-complete WIP, review, approval, and landing procedure. Neovim and Hunk reviews
+always-loaded WIP, review, approval, and landing rules; the
+[`development-review` skill](docs/agents/skills/development-review/SKILL.md)
+owns their procedure, including optional delivery as a code review submission
+or GitHub pull request. Neovim and Hunk reviews
 open in the task's terminal environment: Herdr app, Herdr TUI, tmux, or an
 ordinary terminal. These rules apply only to coding agents; human Git and
 LazyGit operations remain unrestricted.

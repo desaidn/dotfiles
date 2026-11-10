@@ -32,7 +32,7 @@ original files and leaves app state and installed packages.
 
 ## Work on another machine
 
-Add a Linux machine, such as a cloud desktop, from Settings → Machines or the
+Add a Linux machine, such as a remote development host, from Settings → Machines or the
 sidebar's Add machine action. Any Host from `~/.ssh/config` works. Spaces on
 that machine run their terminals there, and keep running when the laptop
 sleeps or the window closes.

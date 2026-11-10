@@ -433,6 +433,7 @@ manage_workflow_link() {
 
 # Global skills shared by Codex and pi (~/.agents/skills) and Claude Code.
 SKILL_SOURCES=(
+    docs/agents/skills/development-review
     docs/agents/skills/herdr-app
 )
 SKILL_CONTAINERS=(
@@ -525,8 +526,8 @@ backups=(
     "$CODEX_DIRECTORY"/AGENTS.md.bak.*
     "$PI_DIRECTORY"/AGENTS.md.bak.*
     "$HOME"/.claude/rules/development-workflow.md.bak.*
-    "$HOME"/.agents/skills/herdr-app.bak.*
-    "$HOME"/.claude/skills/herdr-app.bak.*
+    "$HOME"/.agents/skills/*.bak.*
+    "$HOME"/.claude/skills/*.bak.*
 )
 shopt -u nullglob
 if (( ${#backups[@]} > 0 )); then

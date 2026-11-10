@@ -7,7 +7,11 @@ scope, checkout, feature, review base, target, validation, and delivery
 requirements. These are agent instructions, not executable guards. Human Git
 and LazyGit remain unrestricted. For repository changes, use native Git,
 Neovim, Hunk, and the task's terminal environment; do not require a workflow
-CLI or skill.
+CLI.
+
+This file holds the rules that always apply. Step-by-step procedures live in
+skills, loaded when the task reaches them; see
+[Load the matching skill](#load-the-matching-skill).
 
 ## Stay within the agreed task
 
@@ -63,327 +67,53 @@ checkouts and branches, validation, and the next unresolved step. Include the
 exact review snapshot and approval evidence when they matter, with links to
 existing sources.
 
-## Use the development steps that apply
+## Rules for repository changes
 
-For repository edits, work on `wip/<feature>`, validate and commit the changes,
-then review that exact commit with Hunk and mark it as `review/<feature>`.
-After the user approves that snapshot, squash it into the agreed existing
-local branch, usually `main` or `mainline`. Ask for the target only if it has
-not already been selected. A CR (a submitted code review) is an optional
-delivery step that happens only when the user explicitly asks to create one.
-Questions and read-only discussion do not need branches or a formal review.
+Questions and read-only discussion need none of the following.
 
-## Choose the checkout and start work
+- **Checkout.** Inspect `git status --short --branch` and
+  `git worktree list --porcelain` first. State the checkout and branch you are
+  using. Use the checkout the user or project authorized, and ask before any
+  other branch or worktree action. Never stash, discard, or move someone
+  else's changes to make a command succeed.
+- **Work in progress.** Work on `wip/<feature>`, created from a clean checkout
+  at the intended starting commit. Keep it append-only: ordinary commits and
+  merges are allowed; never amend, rebase, reset, delete, or force-update it.
+  Commit subjects are short, imperative plain-language summaries without
+  Conventional Commit prefixes. Validate and commit before review.
+- **Review.** Review the exact committed snapshot in Hunk, marked by
+  `review/<feature>`, and put every actionable finding in that live session
+  before asking for a decision. Keep the commit, index, and files unchanged
+  while the review is open.
+- **Approval.** Approval is the user's explicit authorization of one exact
+  local snapshot, recorded in the conversation with its base, head, and tree
+  IDs and its Review Branch. Opening a review, an agent's review result, a Git
+  ref, or an old record is not approval. Any change to WIP or the Review Branch
+  invalidates it. Create no on-disk approval record.
+- **Landing.** Only after approval, squash the snapshot onto the existing local
+  branch the user selected, usually `main` or `mainline`. Ask for the target
+  only if it has not been selected.
+- **Delivery.** Submitting the landed change for code review or as a pull
+  request happens only when the user explicitly asks. Pushing, cleanup of
+  branches and worktrees, and other onward steps need their own authorization.
+- **Adversarial review.** Run an independent adversarial review only when the
+  user asks for one.
+- **Concurrent humans.** Recheck Git state after concurrent human operations.
+  No ref or checkout is reserved against human use.
 
-- Inspect `git status --short --branch` and `git worktree list --porcelain`.
-  Respect unfinished work and concurrent human activity. Never stash, discard,
-  or move someone else's changes to make a command succeed.
-- State the actual checkout and branch at the start of repository work and
-  after switching either. Identify a nested package directory separately when
-  its commands run somewhere other than the repository root.
-- Use the checkout authorized by the user/project. Ask before an otherwise
-  unauthorized branch or worktree action. Worktree creation and cleanup belong
-  to the project workflow; do not silently create a review copy.
-- From a clean checkout at the intended starting commit, validate the chosen
-  name with `git check-ref-format --branch "wip/$feature"`. Create it with
-  `git switch --no-overwrite-ignore -c "wip/$feature"`, or resume it with
-  `git switch --no-overwrite-ignore "wip/$feature"`. If it is checked out
-  elsewhere, use that checkout. Never force a switch or rewrite an existing ref.
-- Keep agent-authored WIP append-only: ordinary commits and merges are allowed;
-  never amend, rebase, reset, delete, or force-update it. Commit subjects are
-  short, imperative plain-language summaries without Conventional Commit prefixes.
-- Run project validation and commit the intended changes before formal review.
-  Recheck Git state after concurrent human operations; no ref or checkout is
-  reserved against human use by these instructions.
+## Load the matching skill
 
-## Identify the exact review
+These skills are installed globally for Codex, Claude Code, and pi. Load the
+one that matches the step and follow it in full. If a required skill is not
+available, say so and stop rather than improvising its procedure.
 
-The examples below use POSIX-shell variables. Set each input deliberately and
-check every command's exit status before continuing; do not paste placeholders
-or continue after a failed check. Run Git commands in the selected checkout.
-
-For local work, the source must be the current `wip/<feature>` head and the
-review name is the feature name. For externally authored code, choose a unique
-review name and record the kind as **external**; do not create WIP or land it.
-Both use the same read-only review procedure.
-
-Require no staged, unstaged, or untracked changes and no merge, rebase,
-cherry-pick, or revert in progress. Choose an explicit ancestor base; never infer
-it from a default branch. Capture full object IDs and the canonical checkout:
-
-```sh
-checkout=$(git rev-parse --show-toplevel)
-base_oid=$(git rev-parse --verify "$review_base^{commit}")
-head_oid=$(git rev-parse --verify 'HEAD^{commit}')
-tree_oid=$(git rev-parse --verify 'HEAD^{tree}')
-git merge-base --is-ancestor "$base_oid" "$head_oid"
-git check-ref-format "refs/heads/review/$review_name"
-```
-
-Record the repository/checkout, local or external kind, source branch (if any),
-review name, base/head/tree IDs, and validation results in the conversation.
-Inspect any existing `review/<name>` ref and record its old ID before changing
-it. Do not move a Review Branch checked out in any worktree or used by an open
-review. A Review Branch is a snapshot marker, never a second working branch.
-
-## Open Neovim and Hunk
-
-Use the environment where the task is running: Herdr app, Herdr TUI, tmux,
-or an ordinary terminal. Resolve the destination from the agreed task context
-or the calling terminal's verified identity, independently of UI focus. Do not
-ask the user to choose again when that context already identifies it.
-
-- In Herdr app (`$HC_TERMINAL_ID` is set), load the `herdr-app` skill and read
-  `hc --skill` in full. `hc get "$HC_TERMINAL_ID"` gives the space and tab
-  labels for the agent's own terminal. `herdr-app` (`--skill`, `ls`, `status`,
-  `commands`) exists only on the machine showing the window; on an
-  SSH-connected machine, use `hc` alone. A core terminal ID is not an app
-  pane ID.
-- In Herdr TUI, read `herdr --skill`, inspect `herdr workspace list` and the
-  intended workspace's tabs and panes, and retain the actual IDs. Apply the
-  same `--session NAME` selector to every call when selecting a named server.
-- In tmux, inspect the task's running server and map `$TMUX_PANE` to its
-  session, window, and pane. Use that server's native window and pane commands.
-- In an ordinary terminal, use a known Neovim host or the terminal destination
-  supplied by the task. Ask only if a new destination cannot be established.
-
-Use the relevant executable from `PATH` and target native IDs explicitly.
-Use a host-specific binary override only when the selected session requires
-it and the executable has been verified; an inherited `HERDR_BIN_PATH` alone
-is not a reason to use it. Herdr app, Herdr TUI, and tmux are top-level
-alternatives; do not nest tmux inside either Herdr environment.
-
-Preserve focus when the native API supports background preparation. In Herdr
-TUI, create tabs with `--no-focus` and prepare them using the returned pane IDs;
-in tmux, create a detached window. Herdr app shows new tabs immediately, so
-create one when the user requests it. A requested new app tab authorizes that
-tab being shown. Explicit focus commands for an existing destination require
-a request to see or switch to it; a walkthrough supplies that request. Do not
-restore an earlier selection after launch, because the user may navigate
-while the agent works.
-
-For an ordinary file request, reuse a suitable Neovim host when its identity
-and command route are known. A request for a "new tab" means a native terminal
-tab running Neovim (a window in tmux), unless the user specifies a Neovim tab.
-Open it in the relevant project directory. Use a known editor connection or
-verified native terminal input to operate an existing host; flatten.nvim
-handles editor handoff from its terminal tools, not discovery of arbitrary
-editors in other tabs or panes. Opening a file does not start a formal review.
-
-For a review, use a Neovim host rooted in the selected checkout. Inspect
-`hunk session list --json` before changing a checkout with an existing review
-and again before launching Hunk. Keep one Hunk process per checkout. Revisit
-the same snapshot by verifying its checkout and revisions and showing the
-existing Hunk Tool Tab in that host. Preserve native focus unless the user
-requested a switch. Do not silently replace an unrelated or pending review;
-resolve that conflict before editing or opening another one.
-
-In an identified existing host, run `:HunkReview BASE HEAD` with the full resolved
-commit IDs. For a requested new Herdr app tab on the window's machine, create
-it in the verified space and selected checkout with Neovim as its program:
-
-```sh
-herdr-app do tab.new --space "$space_id" --name "review/$review_name" \
-  --folder "$checkout" \
-  --argv "[\"zsh\", \"-ic\", \"exec nvim -c 'HunkReview $base_oid $head_oid'\"]"
-```
-
-Read the returned IDs and confirm the destination with `herdr-app ls`. On an
-SSH-connected machine, start the review with `hc` and label it with the agent's
-own space; the app gives it a new tab there:
-
-```sh
-hc run --bg --name "review-$review_name" --outlive-parent --no-notify \
-  --cwd "$checkout" --label "herdr.space=$space_id" \
-  -- zsh -ic "exec nvim -c 'HunkReview $base_oid $head_oid'"
-```
-
-The interactive zsh supplies the dotfiles `PATH`, which programs started by
-the core do not inherit. Do not type the launch command into a shell with
-`hc send`: it wraps text in an `<hc from=…>` tag. `hc` names allow 1–32
-characters from `a-z`, `0-9`, `-`, and `_`. Confirm the terminal with
-`hc get` and `hc read --lines 0`. A successful creation reply does not
-establish Hunk readiness.
-
-In Herdr TUI, when a new review tab is requested or no suitable host exists:
-
-```sh
-herdr tab create --workspace "$workspace_id" --cwd "$checkout" \
-  --label "review/$review_name" --no-focus
-```
-
-Read `result.tab.tab_id`, `result.tab.label`, and `result.root_pane.pane_id` from
-the returned JSON, then launch in that pane. Preserve the quotes around
-Neovim's `-c` argument inside the shell command sent to Herdr:
-
-```sh
-herdr pane run "$pane_id" "nvim -c \"HunkReview $base_oid $head_oid\""
-```
-
-The configured Neovim adapter opens `hunk diff BASE...HEAD --watch --mode stack`.
-It validates two full lowercase, same-length commit IDs, not Git state or
-approval. Repeating the range reuses its toggle; changing it replaces the job
-in the same Tool Tab. Invalid arguments leave the current review intact.
-`<leader>gd` resumes the checkout's current review after Editor Handoff and
-defaults to working-tree changes when none is running. Argument-free
-`:HunkReview` explicitly selects working-tree changes; `<leader>gD` selects
-staged changes.
-Changing any review input ends the old review; preserve its notes first and
-verify the new snapshot. Hunk's `e` returns to this host Neovim with project
-language tooling. In tmux or an ordinary terminal, use that environment's
-native window or pane and run `nvim -c "HunkReview $base_oid $head_oid"` from
-the checkout.
-
-A launched pane does not prove the review is ready. Inspect the live Hunk list
-until the intended session registers (use a bounded wait, normally ten seconds).
-Verify `cwd`, `repoRoot`, and `sourceLabel` identify the selected checkout,
-`inputKind` is `vcs`, and structured `review.base` and `review.head` equal the
-resolved full commit IDs. The title may abbreviate revisions; it is a display
-label, not proof of snapshot identity. Stop if the structured revision fields
-are missing, or on mismatch, ambiguity, unavailable presentation, or timeout;
-close only a tab created by this failed attempt. Do not report a successful
-review yet.
-
-```sh
-hunk session get "$session_id" --json
-hunk session review "$session_id" --include-patch --include-notes --json
-```
-
-Check that the actual patch covers the intended full change set. Recheck the
-checkout is clean at `head_oid`, its tree is `tree_oid`, and local WIP still
-points there. Only then publish `refs/heads/review/$review_name` using
-`git update-ref <ref> <head_oid> <previous_oid>`; use an empty previous-ID argument
-for an absent ref. This compare-and-update must fail if the ref changed during
-launch. Do not force it through a concurrent change. Record the verified Hunk
-session ID and the native destination IDs alongside the snapshot in the
-conversation.
-
-When ready, report the review's space or workspace, tab or window label, and
-native IDs. Complete the Hunk verification above before announcing readiness.
-If the native environment provides notifications, send one without changing
-focus. In Herdr TUI:
-
-```sh
-herdr notification show "Tab ready: $tab_label" \
-  --body "Workspace $workspace_id, tab $tab_id" --sound done
-```
-
-For a requested walkthrough, first show the review's native tab or window and
-focus its editor pane. In Herdr app, use `tab.select` and `pane.focus` with the
-verified IDs; in Herdr TUI, use `herdr tab focus`; in tmux, select the verified
-window and pane. Then navigate inside that exact Hunk session:
-
-```sh
-hunk session navigate "$session_id" --file "$path" --new-line "$line" --json
-```
-
-The terminal environment selects the visible editor; Hunk selects the file
-and hunk within it. Honor the requested comparison layout. Explain the behavior
-before and after each important change, show the relevant validation evidence
-and its limits, and give the user time to inspect before moving on. Use Hunk's `e` when source
-context helps. Keep findings on this same visible session; `comment add --focus`
-can bring a new finding into view.
-
-## Findings and approval
-
-Review the whole change set. Add every actionable finding to that exact live
-session before asking the user for a decision:
-
-```sh
-hunk session comment add "$session_id" --file "$path" --new-line "$line" \
-  --summary "$summary" --rationale "$rationale" --author "$author" --json
-```
-
-Use `--old-line` for removed code. Keep HEAD, index, and files unchanged while
-review is open. Hunk notes belong to its live process; conversation summaries
-must capture the findings and decision needed for continuity, not assume notes
-survive process exit. Hiding a Tool Tab, including with Neovim's `:tabclose`,
-leaves Hunk running. To finish a review, preserve its notes, quit that Hunk
-process, and verify its session is gone from `hunk session list --json`. Do not
-close a shared Neovim host containing unrelated buffers or work.
-
-A request to revise the current task authorizes ending its own review this way
-before editing. Apply the requested changes as new WIP commits, then open and
-verify the new snapshot for fresh approval. An unrelated or pending review
-still needs its owner's decision before it is replaced.
-
-Approval is the user's explicit authorization of one exact **local** snapshot,
-recorded in the conversation with its base/head/tree and Review Branch. Opening
-a review, an agent's review result, a Git ref, or an old record is not approval.
-Any WIP or Review Branch change invalidates it. Once approved, the task's review
-may finish and its checkout may be reused while the approved refs stay unchanged.
-If another session cannot establish the snapshot and approval from available
-conversation evidence, perform a fresh review and obtain fresh approval.
-Create no custom approval database or on-disk review-record format. Preserve
-historical records and refs; they do not independently authorize landing.
-
-## Land the approved change
-
-Only after explicit approval, land on the existing local branch the user
-selected. Ask for the target only if it has not already been selected; do not
-infer it from the default branch. The target cannot be `wip/*` or `review/*`.
-Use a clean checkout already on that target, with no Git operation in progress.
-Do not reuse an open review's checkout before approval. Derive one
-complete-feature imperative title from the feature name and complete WIP
-history, following project commit rules.
-
-Before changing the target, verify all of the following:
-
-- The approval evidence names this local feature, exact base/head/tree, and
-  Review Branch. External reviews cannot land.
-- `refs/heads/wip/<feature>` and `refs/heads/review/<feature>` still equal the
-  approved head, and that commit still has the approved tree. Any known movement
-  since approval requires fresh review even if a ref was later moved back.
-- The target contains the approved base (`git merge-base --is-ancestor`). Capture
-  its current full HEAD ID; refuse a feature already contained in that history.
-- `git merge-tree --write-tree "$target_oid" "$head_oid"` succeeds without
-  conflicts. Capture its resulting tree. A failed preflight must not mutate the
-  checkout; integrate the target into WIP, resolve and test there, then re-review.
-
-Recheck target branch/HEAD, clean state, source refs, and approval immediately
-before applying. In the target checkout, run:
-
-```sh
-git merge --squash --no-overwrite-ignore "$head_oid"
-```
-
-Require success, no unresolved files or unstaged changes, and `git write-tree`
-equal to the preflight tree. Refuse an empty/already-applied change. Recheck that
-HEAD is still `target_oid` and the reviewed refs/approval remain valid, then run
-`git commit -m "$title"`. Verify the resulting commit has exactly that target
-parent and expected tree and the checkout is clean. If concurrent changes or
-unexpected results appear, stop and inspect; never commit mixed state or discard
-human work. Do not solve conflicts in the landing checkout or automatically reset
-after a failed operation; coordinate recovery, then return integration work to WIP.
-
-After successful landing, preserve the review findings and outcome in the
-conversation and finish any remaining Hunk review owned by this task. Close its
-dedicated review host or native tab/window only if it contains no unrelated
-work. This is routine review cleanup; leave unrelated and pending reviews open.
-
-Leave WIP, the Review Branch, and historical evidence intact. Pushing,
-submission, onward delivery, target creation, and branch/worktree cleanup
-require their own project/user authorization. Carry forward authorization
-already given for those actions; local review approval alone does not supply it.
-
-## Create a CR only when requested
-
-Create a CR only when the user explicitly asks for one. Keep the submission
-method and destination in the project instructions or conversation.
-
-Use an authorized `cr/<feature>` branch based on the agreed current submission
-base. Verify that base and the intended change set; do not choose a base from
-an unrelated checkout or assume an old base is still suitable. Prepare the
-branch through the same approved-snapshot checks and squash procedure above.
-The result must be one commit containing the full feature above the submission
-base, with the expected parent, tree, and clean checkout. Follow the checkout
-and branch authorization rules above; do not silently replace or rewrite an
-existing submission branch. Resolve a changed base or a required fix in WIP,
-validate it, and review the new snapshot before preparing the submission.
-
-Submit from `cr/<feature>`. Before running a submission tool, check whether it
-can amend commits or change branches. Keep WIP and the Review Branch unchanged,
-including when a tool adds submission metadata, and recheck those refs
-afterward. Verify the submitted change set matches the prepared commit.
-Describe the concrete problem, resulting behavior, and relevant validation in
-plain language.
+- **`development-review`**, before identifying, opening, or revisiting a
+  review; adding findings; running an adversarial review; landing; or
+  delivering a change.
+- **`herdr-app`**, when running in Herdr app or herdr-core terminals
+  (`$HC_TERMINAL_ID` is set), and before opening any tab, pane, or agent
+  terminal there.
+- **Hunk's bundled skill**, read with `hunk skill show hunk-review`, before
+  driving a live Hunk session. It matches the installed Hunk version.
+- **Herdr TUI's bundled skill**, read with `herdr --skill`, when the task runs
+  in Herdr TUI.

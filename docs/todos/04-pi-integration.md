@@ -10,7 +10,7 @@ The repo defines the **Agent Review Loop** as a local agent inspecting and annot
 
 Pi is installed on the machine and reads repository `AGENTS.md` files. The tmux configuration includes the extended-key settings Pi recommends, and the generic AI dock does not assume a particular Agent Harness.
 
-The shared [development workflow](../agents/development-workflow.md) is now linked by `install.sh` to Pi's global `AGENTS.md`, using `PI_CODING_AGENT_DIR` when configured and `~/.pi/agent` otherwise. This supplies the same always-loaded instructions as the other harnesses, without a separate workflow skill. The remaining work is to verify that a fresh Pi session loads those instructions and can complete the Agent Review Loop against the visible Hunk session.
+The shared [development workflow](../agents/development-workflow.md) is now linked by `install.sh` to Pi's global `AGENTS.md`, using `PI_CODING_AGENT_DIR` when configured and `~/.pi/agent` otherwise. This supplies the same always-loaded rules as the other harnesses, and `install.sh` links the shared global skills, including `development-review`, into `~/.agents/skills`, which Pi reads. The remaining work is to verify that a fresh Pi session loads those instructions and can complete the Agent Review Loop against the visible Hunk session.
 
 ## Scope
 
@@ -25,7 +25,7 @@ The shared [development workflow](../agents/development-workflow.md) is now link
 
 - Do not add a Pi-specific Neovim launcher or a second Review Surface.
 - Do not make Pi a mandatory prerequisite for using these dotfiles.
-- Do not install a second copy of Hunk or add a separate workflow skill.
+- Do not install a second copy of Hunk or add a Pi-only workflow skill.
 - Do not commit or hardcode a versioned Homebrew Cellar path.
 - Do not copy bundled Hunk instructions into the repo in a way that silently drifts from the installed CLI.
 - Do not change Hunk session behavior or agent-authored review semantics for one harness.

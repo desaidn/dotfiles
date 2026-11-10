@@ -18,7 +18,8 @@ repository changes first.
 
 Paths named in prose are relative to the canonical repository root. Read
 [AGENTS.md](../../../AGENTS.md), the
-[development workflow](../../../docs/agents/development-workflow.md), and
+[development workflow](../../../docs/agents/development-workflow.md), the
+[development-review skill](../../../docs/agents/skills/development-review/SKILL.md), and
 [dependency ownership and version policy](../../../README.md#dependency-ownership)
 before acting. Those documents own policy; this skill owns upgrade mechanics.
 
@@ -131,7 +132,7 @@ activity that invalidates the earlier result.
 ## 5. Deliver the upgrade
 
 For tracked changes, complete the native Git/Herdr/Neovim/Hunk procedure in the
-development workflow: commit the validated WIP, inspect the entire exact live
+development-review skill: commit the validated WIP, inspect the entire exact live
 review, publish its snapshot marker, and request snapshot approval only when
 required and not already supplied for that same snapshot. Add actionable
 findings to that live review. A previous feature's approval is not approval of
