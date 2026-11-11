@@ -769,7 +769,7 @@ assert_workflow_links() {
     assert_symlink "$FIXTURE_HOME/.claude/rules/development-workflow.md" "$REPO_ROOT/docs/agents/development-workflow.md"
     local container skill
     for container in .agents/skills .claude/skills; do
-        for skill in development-review herdr-app; do
+        for skill in development-review herdr-app parallel-worktrees; do
             assert_symlink "$FIXTURE_HOME/$container/$skill" "$REPO_ROOT/docs/agents/skills/$skill"
         done
     done
@@ -821,6 +821,8 @@ assert_common_links_removed() {
     assert_not_exists "$FIXTURE_HOME/.agents/skills/herdr-app"
     assert_not_exists "$FIXTURE_HOME/.claude/skills/development-review"
     assert_not_exists "$FIXTURE_HOME/.claude/skills/herdr-app"
+    assert_not_exists "$FIXTURE_HOME/.agents/skills/parallel-worktrees"
+    assert_not_exists "$FIXTURE_HOME/.claude/skills/parallel-worktrees"
     assert_not_exists "$FIXTURE_HOME/.config/fish"
     assert_not_exists "$FIXTURE_HOME/.config/herdr/config.toml"
     assert_not_exists "$FIXTURE_HOME/.config/hunk/config.toml"

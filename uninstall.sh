@@ -435,6 +435,7 @@ manage_workflow_link() {
 SKILL_SOURCES=(
     docs/agents/skills/development-review
     docs/agents/skills/herdr-app
+    docs/agents/skills/parallel-worktrees
 )
 SKILL_CONTAINERS=(
     .agents/skills

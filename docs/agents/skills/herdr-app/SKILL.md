@@ -116,6 +116,11 @@ and Claude Code's worktree check refuses it.
 
 Follow `hc --skill` for delegation, waiting, and reports. In this setup:
 
+- For several agents in parallel worktrees, including a manager and its
+  workers, also follow the
+  [`parallel-worktrees` skill](../parallel-worktrees/SKILL.md). It covers
+  labels for finding a group, reporting to a manager by role, and recovery.
+
 - Start Codex as `codex --no-daemon`, including in templates. Otherwise its
   commands run outside hc.
 - Run pi and other agents interactively, never in one-shot print mode.

@@ -52,6 +52,22 @@ _Avoid_: Built-in team workflow, hard-coded convention
 An append-only merge of Landing Target changes into WIP when integration requires feature changes before landing. The resulting WIP must be reviewed again.
 _Avoid_: Rebase, landing-time conflict resolution, hidden integration fix
 
+**Canonical WIP Branch**:
+The manager-owned `wip/<feature>` branch that merges every Workstream Branch of a coordinated feature so the whole feature can be tested. It lives in its own integration worktree and is append-only.
+_Avoid_: Integration branch, release branch, shared working branch
+
+**Workstream Branch**:
+A `wip/<feature>-<area>` branch holding one worker's area of a coordinated feature, in that worker's worktree. It may also be a Review Piece, or its changes may be cut into several.
+_Avoid_: Sub-branch, child WIP, piece branch
+
+**Review Piece**:
+One slice of a coordinated feature that is reviewed and landed on its own: either a whole Workstream Branch, or a stacked `wip/<feature>-NN-<slug>` branch cut from the Canonical WIP Branch.
+_Avoid_: Partial landing, CR split, sub-review
+
+**Environment Overlay**:
+The minimal source changes that make code deploy to one environment, such as an allowlist entry or a hook that reads an environment value. It is combined with code only in a disposable deploy checkout and is never reviewed or landed.
+_Avoid_: Settings branch, dev branch, config patch
+
 **Change Set**:
 An immutable unit of code change identified by an explicit Review Base and source revision. It may originate from a WIP Branch or from externally authored code.
 _Avoid_: Diff, branch, working tree
@@ -89,7 +105,7 @@ A `review/<name>` branch that points to the exact source revision in a Review Sn
 _Avoid_: Staging branch, second WIP branch, review copy
 
 **Review Approval**:
-The user's explicit authorization that one exact local WIP Review Snapshot represents the complete feature and may land. It becomes stale when WIP or its Review Branch changes.
+The user's explicit authorization that one exact local WIP Review Snapshot represents one complete feature, or one Review Piece of a coordinated feature, and may land. It becomes stale when WIP or its Review Branch changes.
 _Avoid_: Base approval, branch approval, blanket approval, teammate approval
 
 **Mainline Branch**:

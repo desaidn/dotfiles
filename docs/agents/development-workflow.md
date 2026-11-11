@@ -113,6 +113,9 @@ available, say so and stop rather than improvising its procedure.
 - **`herdr-app`**, when running in Herdr app or herdr-core terminals
   (`$HC_TERMINAL_ID` is set), and before opening any tab, pane, or agent
   terminal there.
+- **`parallel-worktrees`**, before splitting work across worktrees, starting
+  or managing agents on separate ideas or coordinated pieces of a feature, or
+  working as a manager or worker in such a group.
 - **Hunk's bundled skill**, read with `hunk skill show hunk-review`, before
   driving a live Hunk session. It matches the installed Hunk version.
 - **Herdr TUI's bundled skill**, read with `herdr --skill`, when the task runs

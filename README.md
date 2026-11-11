@@ -162,6 +162,7 @@ harness, and agents load a skill only when its description matches the task:
 | --- | --- |
 | [`development-review`](docs/agents/skills/development-review/SKILL.md) | Review, findings, adversarial review on request, approval, landing, and delivery, with one procedure on every machine |
 | [`herdr-app`](docs/agents/skills/herdr-app/SKILL.md) | Driving Herdr app and `hc`: finding the agent's machine and tab, showing a tab when asked, starting and messaging agents, and harness-specific pitfalls |
+| [`parallel-worktrees`](docs/agents/skills/parallel-worktrees/SKILL.md) | Running parallel worktrees from a clean root checkout: independent ideas, or a manager and workers on a coordinated feature with a canonical WIP branch, review pieces, testing, recovery, handoff, and cleanup |
 
 An existing skill with the same name, or a redirected skill directory, stops
 installation so that personal skills stay active. Repository-scoped skills
