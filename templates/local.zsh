@@ -40,6 +40,10 @@ if [ -n "$_dotfiles_brew" ]; then
         _dotfiles_merged_path+=("${path[@]}")
         path=("${_dotfiles_merged_path[@]}")
     fi
+    # Homebrew owns Mise; its dedicated bin leaves inherited runtimes in place.
+    if [[ -x "$HOMEBREW_PREFIX/opt/mise/bin/mise" ]]; then
+        path=("$HOMEBREW_PREFIX/opt/mise/bin" "${(@)path:#"$HOMEBREW_PREFIX/opt/mise/bin"}")
+    fi
 fi
 unset _dotfiles_brew _dotfiles_brew_candidate _dotfiles_inherited_path _dotfiles_merged_path _dotfiles_dir
 
@@ -58,8 +62,8 @@ unset _dotfiles_bin
 if [[ -o interactive ]] && { [[ -v ZSH_EXECUTION_STRING ]] || ! command -v fish >/dev/null; }; then
     autoload -Uz compinit && compinit
     if command -v mise >/dev/null 2>&1; then
-        eval "$(mise activate zsh)"
-        eval "$(mise completion zsh)"
+        eval "$(command mise activate zsh)"
+        eval "$(command mise completion zsh)"
     fi
     if command -v atuin >/dev/null 2>&1; then
         eval "$(atuin init zsh)"

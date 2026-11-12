@@ -75,6 +75,8 @@ esac
   for _, command in ipairs { 'mise', 'atuin' } do
     executable(prefix .. '/bin/' .. command, '#!/bin/sh\nprintf "' .. command .. ' %s\\n" "$*" >> "$STARTUP_LOG"\n')
   end
+  mkdir(prefix .. '/opt/mise/bin')
+  symlink(prefix .. '/bin/mise', prefix .. '/opt/mise/bin/mise')
   local env = {
     HOME = home,
     PATH = prefix .. '/bin:/usr/bin:/bin',
@@ -128,6 +130,62 @@ local ok, err = xpcall(function()
 
   for _, entry in ipairs(shells) do
     local shell, binary = unpack(entry)
+    for _, initial_path in ipairs { 'shadowed', 'brew-first', 'discovery', 'stale-wrapper' } do
+      local directory, home, prefix, env = fixture(root, 'mise-selection-' .. shell .. '-' .. initial_path)
+      local runtime_bin = directory .. '/venv/bin'
+      executable(runtime_bin .. '/python3', '#!/bin/sh\nprintf "venv\\n"\n')
+      executable(home .. '/.local/bin/mise', '#!/bin/sh\nprintf "stale Mise cannot parse the runtime manifest\\n" >&2\nexit 1\n')
+      executable(prefix .. '/bin/mise', [[#!/bin/sh
+printf "mise %s\n" "$*" >> "$STARTUP_LOG"
+case "$1 $2" in
+    "activate fish") printf 'function mise; command "%s" $argv; end\n' "$0" ;;
+    "activate zsh") printf 'mise() { command "%s" "$@"; }\n' "$0" ;;
+    "current ") printf "homebrew\n" ;;
+esac
+]])
+      if initial_path == 'discovery' then
+        local lookup = directory .. '/lookup'
+        mkdir(lookup)
+        symlink(prefix .. '/bin/brew', lookup .. '/brew')
+        env.PATH = runtime_bin .. ':' .. home .. '/.local/bin:' .. lookup .. ':/usr/bin:/bin'
+      elseif initial_path == 'brew-first' then
+        env.PATH = prefix .. '/bin:' .. prefix .. '/sbin:' .. runtime_bin .. ':' .. home .. '/.local/bin:/usr/bin:/bin'
+        assert(run({ prefix .. '/bin/brew', 'shellenv', shell }, env) == '', 'fixture must exercise the shellenv no-op')
+      else
+        env.PATH = runtime_bin .. ':' .. home .. '/.local/bin:' .. prefix .. '/bin:/usr/bin:/bin'
+      end
+      env.VIRTUAL_ENV = vim.fs.dirname(runtime_bin)
+      local lookup = shell == 'fish' and 'command -s mise' or 'whence -p mise'
+      local command = 'source ' .. quote(rc_path(home, shell)) .. '; ' .. lookup .. '; mise current; python3; '
+        .. 'source ' .. quote(rc_path(home, shell)) .. '; ' .. lookup .. '; mise current; python3; printf "%s\\n" "$PATH"'
+      if initial_path == 'stale-wrapper' then
+        local wrapper = shell == 'fish'
+          and 'function mise; command "$HOME/.local/bin/mise" $argv; end; '
+          or 'mise() { "$HOME/.local/bin/mise" "$@"; }; '
+        command = wrapper .. command
+      end
+      local args = shell == 'fish' and { binary, '--no-config', '-i', '-c', command } or { binary, '-dfi', '-c', command }
+      local output = lines(run(args, env))
+      local final_path = table.remove(output)
+      equal(output, {
+        prefix .. '/opt/mise/bin/mise', 'homebrew', 'venv',
+        prefix .. '/opt/mise/bin/mise', 'homebrew', 'venv',
+      })
+      local mise_path_count = 0
+      for _, directory in ipairs(vim.split(final_path, ':', { plain = true })) do
+        if directory == prefix .. '/opt/mise/bin' then mise_path_count = mise_path_count + 1 end
+      end
+      equal(mise_path_count, 1)
+      equal(startup_calls(env), {
+        'mise activate ' .. shell, 'mise completion ' .. shell, 'atuin init ' .. shell, 'mise current',
+        'mise activate ' .. shell, 'mise completion ' .. shell, 'atuin init ' .. shell, 'mise current',
+      })
+    end
+  end
+  print 'PASS Fish and Zsh select Homebrew Mise over stale copies without displacing active runtimes'
+
+  for _, entry in ipairs(shells) do
+    local shell, binary = unpack(entry)
     local directory, home, prefix, env = fixture(root, 'discovery-' .. shell)
     local lookup = directory .. '/lookup'
     mkdir(lookup)
@@ -135,7 +193,7 @@ local ok, err = xpcall(function()
     symlink(vim.fn.exepath 'cat', prefix .. '/bin/cat')
     env.PATH = lookup .. ':/usr/bin:/bin'
     local command = 'source ' .. quote(rc_path(home, shell)) .. '; command -v mise; command -v cat'
-    equal(lines(run(shell_command(shell, binary, command), env)), { prefix .. '/bin/mise', prefix .. '/bin/cat' })
+    equal(lines(run(shell_command(shell, binary, command), env)), { prefix .. '/opt/mise/bin/mise', prefix .. '/bin/cat' })
   end
   print 'PASS Homebrew discovery adds missing executable paths ahead of system commands'
 
@@ -206,7 +264,7 @@ MACHINE_EDITORS="$EDITOR:$VISUAL:$GIT_EDITOR"
     end
     assert(run({ prefix .. '/bin/brew', 'shellenv', 'zsh' }, env) == '', "fixture must exercise Homebrew's Brew-first PATH no-op")
     local completion_output = lines(run({ zsh, '-d', '-i', '-c', 'print -rl -- "${_comps[dotfiles-brew-probe]}" "$PATH"; print -rl -- $fpath' }, env))
-    equal({ completion_output[1], completion_output[2] }, { '_dotfiles_brew_probe', env.PATH })
+    equal({ completion_output[1], completion_output[2] }, { '_dotfiles_brew_probe', prefix .. '/opt/mise/bin:' .. env.PATH })
     local occurrences = 0
     for index = 3, #completion_output do
       if completion_output[index] == completions then occurrences = occurrences + 1 end

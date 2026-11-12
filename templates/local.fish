@@ -6,6 +6,10 @@ begin
         if test -x $dotfiles_brew
             set -l inherited_path $PATH
             $dotfiles_brew shellenv fish | source
+            # shellenv can emit nothing when Brew's bin and sbin already lead PATH.
+            if test -z "$HOMEBREW_PREFIX"
+                set -gx HOMEBREW_PREFIX ($dotfiles_brew --prefix)
+            end
             if contains -- "$HOMEBREW_PREFIX/bin" $inherited_path
                 set -gx PATH $inherited_path
                 fish_add_path --path --append "$HOMEBREW_PREFIX/sbin"
@@ -22,6 +26,10 @@ begin
                 end
                 set -gx PATH $merged_path
             end
+            # Homebrew owns Mise; its dedicated bin leaves inherited runtimes in place.
+            if test -x "$HOMEBREW_PREFIX/opt/mise/bin/mise"
+                fish_add_path --path --move "$HOMEBREW_PREFIX/opt/mise/bin"
+            end
             break
         end
     end
@@ -35,8 +43,8 @@ fish_add_path --path --append \
 
 if status is-interactive
     if command -v mise >/dev/null
-        mise activate fish | source
-        mise completion fish | source
+        command mise activate fish | source
+        command mise completion fish | source
     end
     if command -v atuin >/dev/null
         atuin init fish | source

@@ -346,9 +346,12 @@ that do not already exist. Interrupted creation cannot expose a partial file,
 and existing user content is preserved. They contain `mise activate`, `mise completion`, `atuin init`, and
 Homebrew activation for all three standard prefixes, plus optional fallback
 paths for per-machine tools (`bun`, `ghcup`, `lmstudio`, `claude/local`).
-The templates preserve an inherited runtime's PATH priority; Zsh-only completion
-and history setup is skipped when handing off to Fish. Edit freely; these files
-live outside the repo.
+The templates preserve an inherited runtime's PATH priority while putting
+Homebrew's dedicated Mise executable directory ahead of older standalone
+installations. This keeps activation and later `mise` commands on the
+Homebrew-managed version without displacing active virtual environments.
+Zsh-only completion and history setup is skipped when handing off to Fish.
+Edit freely; these files live outside the repo.
 
 Template changes apply to new files only. For an existing installation, compare
 your `local.fish` and `local.zsh` with the tracked templates and merge the relevant
