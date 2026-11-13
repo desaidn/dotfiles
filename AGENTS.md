@@ -35,8 +35,10 @@ latest stable releases without adding network checks or update warnings to
 startup. Neovim installer, startup, and health checks must share
 [`nvim/lua/custom/lib/neovim.lua`](nvim/lua/custom/lib/neovim.lua).
 
-Ghostty, JetBrains Mono, and Herdr app are macOS-only Homebrew casks. Herdr app's
-cask requires Apple Silicon; the app owns Herdr core installation and updates.
+Ghostty, JetBrains Mono, Herdr app, Raycast, and FlashSpace are macOS-only
+Homebrew casks. Herdr app's cask requires Apple Silicon; the app owns Herdr core
+installation and updates.
+Raycast and FlashSpace settings remain local; only their installation is managed.
 Linux needs a session-appropriate clipboard provider when a display is present; remote
 sessions fall back to OSC 52 copy inside Neovim. Native development tools provide
 `make`, although Neovim uses it only for optional plugin enhancements. Expect

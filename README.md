@@ -84,9 +84,10 @@ setup explicitly in degraded mode:
 - On macOS, a missing Xcode Command Line Tools install may require completing
   Apple's system dialog and rerunning the script. On Linux, native bootstrap
   packages are supported through `apt-get`, `dnf`, `yum`, and `pacman`.
-- On macOS, it installs missing Ghostty, JetBrains Mono, and Herdr app casks,
-  preserving compatible manual installations. Herdr app's cask requires Apple
-  Silicon; the app handles Herdr core installation on first launch.
+- On macOS, it installs missing Ghostty, JetBrains Mono, Herdr app, Raycast,
+  and FlashSpace casks, preserving compatible manual installations. Herdr app's
+  cask requires Apple Silicon; the app handles Herdr core installation on first
+  launch.
 - Herdr app personal files are linked individually, with generated files and
   runtime state kept local. `HERDR_APP_HOME` may select another absolute home.
   Herdr manages its keymap, welcome flow, and shared preferences. Custom files
@@ -233,14 +234,25 @@ layer:
 | `uv` | Python project and dependency management CLI; Mise continues to own Python runtimes |
 | `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
 
-On macOS, the configured UI also uses the `ghostty`, `font-jetbrains-mono`,
-and `herdr-app` casks. The installer provisions casks separately from the
-Brewfile to preserve compatible manual installations. Ghostty 1.3.0 or newer
-is required for its native glass background; Herdr app 0.1.12 is the validated
+On macOS, the setup also uses the `ghostty`, `font-jetbrains-mono`,
+`herdr-app`, `raycast`, and `flashspace` casks. The installer provisions casks
+separately from the Brewfile to preserve compatible manual installations.
+Ghostty 1.3.0 or newer is required for its native glass background; Herdr app 0.1.12 is the validated
 configuration baseline and newer versions are accepted. Its cask requires
-Apple Silicon. Both applications' configuration is skipped on Linux.
+Apple Silicon. Ghostty and Herdr app configuration is skipped on Linux.
 Herdr app owns installation and updates of its Herdr core dependency; the
 existing `herdr` Homebrew formula remains the independent TUI.
+
+Raycast provides the application launcher, and FlashSpace manages virtual
+workspaces. Only their installation is managed; their settings remain local.
+[Homebrew documents Raycast](https://formulae.brew.sh/cask/raycast) as
+`brew install --cask raycast`.
+[FlashSpace documents](https://github.com/wojciech-kulik/FlashSpace#%EF%B8%8F-installation)
+`brew install flashspace`; it is also a
+[Homebrew cask](https://formulae.brew.sh/cask/flashspace), so the installer uses
+the explicit `brew install --cask flashspace` equivalent. FlashSpace requires
+macOS 14 or newer and "Displays have separate Spaces" enabled in Desktop & Dock
+settings. Both apps are skipped on Linux.
 
 ### Mise runtimes
 

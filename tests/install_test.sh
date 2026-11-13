@@ -589,6 +589,15 @@ case "${1:-}" in
                         cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/herdr-app"
                         chmod +x "$DOTFILES_TEST_FAKE_BIN/herdr-app"
                         ;;
+                    raycast|flashspace)
+                        case "$name" in
+                            raycast) app_name=Raycast ;;
+                            flashspace) app_name=FlashSpace ;;
+                        esac
+                        mkdir -p "$DOTFILES_TEST_APPLICATION_DIR/$app_name.app/Contents/MacOS"
+                        cp "$DOTFILES_TEST_GENERIC_TEMPLATE" "$DOTFILES_TEST_APPLICATION_DIR/$app_name.app/Contents/MacOS/$app_name"
+                        chmod +x "$DOTFILES_TEST_APPLICATION_DIR/$app_name.app/Contents/MacOS/$app_name"
+                        ;;
                     font-jetbrains-mono)
                         mkdir -p "$DOTFILES_TEST_FONT_DIR"
                         : >"$DOTFILES_TEST_FONT_DIR/JetBrainsMono-Regular.ttf"
@@ -850,6 +859,8 @@ test_macos_fresh_and_second_run() {
     assert_log_count 1 "brew cask install ghostty" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install herdr-app" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
+    assert_log_count 1 "brew cask install raycast" "$FIXTURE_LOG"
+    assert_log_count 1 "brew cask install flashspace" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
     assert_log_count 0 "apt-get update" "$FIXTURE_LOG"
 
@@ -860,11 +871,54 @@ test_macos_fresh_and_second_run() {
     assert_log_count 1 "brew cask install ghostty" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install herdr-app" "$FIXTURE_LOG"
     assert_log_count 1 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
+    assert_log_count 1 "brew cask install raycast" "$FIXTURE_LOG"
+    assert_log_count 1 "brew cask install flashspace" "$FIXTURE_LOG"
     assert_log_count 1 "mise install" "$FIXTURE_LOG"
     assert_log_prefix_count 0 "apt-get " "$FIXTURE_LOG"
     assert_eq "1" "$(count_zsh_backups)" "a second run should not create another zsh backup"
     assert_common_links
     pass "fresh macOS provisioning, non-destructive linking, and second-run no-op"
+}
+
+test_desktop_apps_preserve_existing_installations() {
+    local name cask executable
+    for name in Raycast FlashSpace; do
+        case "$name" in
+            Raycast) cask=raycast ;;
+            FlashSpace) cask=flashspace ;;
+        esac
+
+        new_fixture "manual-$cask" Darwin
+        executable="$FIXTURE_APPLICATION_DIR/$name.app/Contents/MacOS/$name"
+        mkdir -p "${executable%/*}"
+        cp "$FIXTURE_GENERIC_TEMPLATE" "$executable"
+        chmod +x "$executable"
+        printf 'personal application state\n' >"$FIXTURE_APPLICATION_DIR/$name.app/personal"
+        run_installer
+        assert_log_count 0 "brew cask install $cask" "$FIXTURE_LOG"
+        grep -Fxq 'personal application state' "$FIXTURE_APPLICATION_DIR/$name.app/personal" ||
+            fail "$name manual installation was changed"
+
+        new_fixture "incomplete-$cask" Darwin
+        mkdir -p "$FIXTURE_APPLICATION_DIR/$name.app"
+        printf 'personal application state\n' >"$FIXTURE_APPLICATION_DIR/$name.app/personal"
+        run_installer failure
+        grep -Fq "$name.app exists but its executable is missing" "$FIXTURE_OUTPUT" ||
+            fail "incomplete $name installation did not explain repair"
+        grep -Fxq 'personal application state' "$FIXTURE_APPLICATION_DIR/$name.app/personal" ||
+            fail "incomplete $name installation was changed"
+        assert_log_count 0 "brew cask install $cask" "$FIXTURE_LOG"
+        assert_not_exists "$FIXTURE_HOME/.config"
+
+        new_fixture "missing-$cask" Darwin
+        : >"$FIXTURE_STATE/cask-$cask"
+        run_installer failure
+        grep -Fq "$name.app is missing; repair the cask" "$FIXTURE_OUTPUT" ||
+            fail "missing $name cask files did not explain repair"
+        assert_log_count 0 "brew cask install $cask" "$FIXTURE_LOG"
+        assert_not_exists "$FIXTURE_HOME/.config"
+    done
+    pass "Raycast and FlashSpace preserve manual apps and reject damaged installations before linking"
 }
 
 test_installer_requests_bash_shellenv() {
@@ -1182,6 +1236,8 @@ test_linux_manager_fresh_and_second_run() {
     assert_log_count 0 "brew cask install ghostty" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install herdr-app" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
+    assert_log_count 0 "brew cask install raycast" "$FIXTURE_LOG"
+    assert_log_count 0 "brew cask install flashspace" "$FIXTURE_LOG"
     assert_exists "$FIXTURE_FAKE_BIN/wl-copy"
     assert_exists "$FIXTURE_FAKE_BIN/xclip"
     grep -Fq "exec \"$FIXTURE_FAKE_BIN/fish\" -l" "$FIXTURE_OUTPUT" ||
@@ -1200,6 +1256,8 @@ test_linux_manager_fresh_and_second_run() {
     assert_log_count 0 "brew cask install ghostty" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install herdr-app" "$FIXTURE_LOG"
     assert_log_count 0 "brew cask install font-jetbrains-mono" "$FIXTURE_LOG"
+    assert_log_count 0 "brew cask install raycast" "$FIXTURE_LOG"
+    assert_log_count 0 "brew cask install flashspace" "$FIXTURE_LOG"
     assert_common_links
     pass "fresh Linux/$manager provisioning and second-run no-op"
 }
@@ -2456,6 +2514,7 @@ test_install_cli_is_safe
 test_skip_mise_runtimes_completes_yum_setup
 test_skip_mise_runtimes_retains_existing_manifest
 test_macos_fresh_and_second_run
+test_desktop_apps_preserve_existing_installations
 test_installer_requests_bash_shellenv
 test_ghostty_compatibility_precedes_configuration_links
 test_herdr_app_installation_preserves_existing_applications

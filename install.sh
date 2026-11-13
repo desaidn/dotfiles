@@ -480,6 +480,36 @@ brew_cask_installed() {
     "$BREW_BIN" list --cask --versions "$1" >/dev/null 2>&1
 }
 
+has_macos_app() {
+    local name="$1" application_dirs candidate old_ifs
+    application_dirs="${DOTFILES_APPLICATION_DIRS:-/Applications:$HOME/Applications}"
+    old_ifs="$IFS"
+    IFS=:
+    for candidate in $application_dirs; do
+        if [[ -x "$candidate/$name.app/Contents/MacOS/$name" ]]; then
+            IFS="$old_ifs"
+            return 0
+        fi
+        if [[ -e "$candidate/$name.app" || -L "$candidate/$name.app" ]]; then
+            die "$name.app exists but its executable is missing; preserve or repair the application and rerun: $candidate/$name.app"
+        fi
+    done
+    IFS="$old_ifs"
+    return 1
+}
+
+install_macos_app() {
+    local name="$1" cask="$2"
+    if ! has_macos_app "$name"; then
+        if brew_cask_installed "$cask"; then
+            die "Homebrew records the $name cask, but $name.app is missing; repair the cask and rerun"
+        fi
+        "$BREW_BIN" install --cask "$cask"
+    fi
+    has_macos_app "$name" ||
+        die "$name installation completed but $name.app could not be found"
+}
+
 install_macos_casks() {
     local output version
     if [[ "$OS_NAME" != "Darwin" ]]; then
@@ -523,6 +553,9 @@ install_macos_casks() {
     version="${version#herdr-app }"
     version_at_least "$version" "0.1.12" ||
         die "Herdr app 0.1.12+ is required for this configuration (found '${version:-unknown}'); update Herdr app and rerun"
+
+    install_macos_app Raycast raycast
+    install_macos_app FlashSpace flashspace
 }
 
 numeric_prefix() {
