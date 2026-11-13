@@ -182,6 +182,11 @@ version requirements change.
 
 ## Agent skills
 
+For installation or reapplying the current setup, read
+[install](.agents/skills/install/SKILL.md). It runs the existing installer and
+assesses the setup before and after, handling verification and machine-specific
+decisions beyond the script.
+
 For dependency upgrades or upgrade inspection, read
 [upgrade-dependencies](.agents/skills/upgrade-dependencies/SKILL.md). It covers the
 managed stack or a requested subset and can be followed directly by any harness.

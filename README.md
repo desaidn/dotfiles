@@ -53,6 +53,12 @@ cd ~/dotfiles
 ./install.sh
 ```
 
+For agent-assisted installation, use the repository-local
+[install skill](.agents/skills/install/SKILL.md). It assesses the machine before
+and after running the installer, verifies the intended workflows, and handles
+configuration choices, preserved personal settings, and manual setup steps that
+the script cannot reasonably decide.
+
 Near the end on Linux, the script prints the absolute command that enters the
 configured Fish environment. Run that command after installation; at the
 standard Homebrew prefix it is:
