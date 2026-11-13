@@ -283,7 +283,7 @@ case "${1:-}" in
                 printf '1.99.1\n'
                 ;;
             "tools.core:java")
-                printf 'corretto-21.0.13.0.10\n'
+                printf 'corretto-25.0.5.0.10\n'
                 ;;
             *)
                 exit 2
@@ -307,7 +307,7 @@ case "${1:-}" in
                     printf '1.99.1\n'
                     ;;
                 java)
-                    printf 'corretto-21.0.13.0.10\n'
+                    printf 'corretto-25.0.5.0.10\n'
                     ;;
                 *)
                     exit 2
@@ -361,15 +361,15 @@ SCRIPT
 #!/usr/bin/env bash
 case "${0##*/}" in
     java)
-        java_version=21.0.13
+        java_version=25.0.5
         if [[ -f "$DOTFILES_TEST_STATE/java-version" ]]; then
             IFS= read -r java_version <"$DOTFILES_TEST_STATE/java-version"
         fi
         printf 'openjdk version "%s"\n' "$java_version" >&2
         if [[ -e "$DOTFILES_TEST_STATE/non-corretto-java" ]]; then
-            printf 'OpenJDK Runtime Environment Temurin-21.0.13+8\n' >&2
+            printf 'OpenJDK Runtime Environment Temurin-25.0.5+10\n' >&2
         else
-            printf 'OpenJDK Runtime Environment Corretto-21.0.13.0.10\n' >&2
+            printf 'OpenJDK Runtime Environment Corretto-25.0.5.0.10\n' >&2
         fi
         ;;
     node)
@@ -398,7 +398,7 @@ case "${0##*/}" in
         printf 'rustfmt 1.8.0-stable\n'
         ;;
     javac)
-        javac_version=21.0.13
+        javac_version=25.0.5
         if [[ -f "$DOTFILES_TEST_STATE/javac-version" ]]; then
             IFS= read -r javac_version <"$DOTFILES_TEST_STATE/javac-version"
         fi
@@ -2426,7 +2426,7 @@ test_dependency_manifests_match_the_install_contract() {
         '"core:node" = "24.22.1"'
         '"core:python" = "3.14.10"'
         '"core:rust" = { version = "1.99.1", profile = "minimal", components = ["clippy", "rustfmt", "rust-src"] }'
-        '"core:java" = "corretto-21.0.13.0.10"'
+        '"core:java" = "corretto-25.0.5.0.10"'
     )
     for expected_line in "${mise_lines[@]}"; do
         grep -Fxq "$expected_line" "$REPO_ROOT/mise/conf.d/00-dotfiles.toml" ||

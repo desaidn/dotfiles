@@ -255,8 +255,8 @@ for version routing and debugging setup.
 
 The installer uses the tracked global defaults fragment
 [`mise/conf.d/00-dotfiles.toml`](mise/conf.d/00-dotfiles.toml). It pins exact
-Node.js, Python, and Rust versions plus Amazon Corretto JDK 21 at
-`corretto-21.0.13.0.10`, so a successful second run does not silently resolve a
+Node.js, Python, and Rust versions plus Amazon Corretto JDK 25 at
+`corretto-25.0.5.0.10`, so a successful second run does not silently resolve a
 newer runtime. Runtime updates are deliberate manifest edits. Bootstrap
 evaluates only the tracked fragment, with global, system, and ancestor discovery
 bounded and the effective source list checked before installation. A user's normal
