@@ -609,7 +609,7 @@ validate_brew_dependencies() {
     errors=()
 
     for command_name in \
-        git fish zsh nvim herdr tmux lazygit hunk mise atuin gh rg \
+        git fish zsh nvim herdr tmux lazygit hunk mise atuin btop gh rg \
         tree-sitter cmake ctest ninja uv
     do
         command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")

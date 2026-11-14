@@ -489,7 +489,7 @@ SCRIPT
 #!/usr/bin/env bash
 install_formula_commands() {
     local command_name
-    for command_name in git fish zsh nvim herdr tmux lazygit atuin gh rg tree-sitter cmake ctest ninja hunk wl-copy wl-paste xclip; do
+    for command_name in git fish zsh nvim herdr tmux lazygit atuin btop gh rg tree-sitter cmake ctest ninja hunk wl-copy wl-paste xclip; do
         cp "$DOTFILES_TEST_FORMULA_TEMPLATE" "$DOTFILES_TEST_FAKE_BIN/$command_name"
         chmod +x "$DOTFILES_TEST_FAKE_BIN/$command_name"
     done
@@ -2463,6 +2463,7 @@ test_dependency_manifests_match_the_install_contract() {
         'brew "hunk"'
         'brew "mise"'
         'brew "atuin"'
+        'brew "btop"'
         'brew "gh"'
         'brew "ripgrep"'
         'brew "tree-sitter-cli"'

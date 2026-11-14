@@ -226,6 +226,7 @@ layer:
 | `hunk` | Diffing Solution and stacked working-tree and staged Review Surface; version 0.18.1 or newer for efficient concurrent watch sessions (0.12 introduced LazyGit rendering) |
 | `mise` | Language runtime manager |
 | `atuin` | Shell history integration |
+| `btop` | Interactive system resource monitor |
 | `gh` | GitHub issue workflows described under `docs/agents/` |
 | `ripgrep` | `rg`; Neovim Telescope grep |
 | `tree-sitter-cli` | `tree-sitter` 0.26.1 or newer; parser management |
