@@ -1,16 +1,19 @@
 # GitHub access and commit identity for this checkout
 
-During setup, verify this checkout's personal GitHub login through `gh` and set
-its commit email to `me@desaidn.dev`.
+During setup, verify through `gh` that this checkout uses the personal GitHub
+account `desaidn`, and set its commit email to `me@desaidn.dev`.
 Authentication is not permission to push, change remote branches, or publish.
-Keep account names, key paths, and device codes out of this skill.
+Keep credentials, key paths, and device codes out of this skill.
 
 ## Check the login and commit identity
 
 Use the existing GitHub CLI configuration for this checkout. When its local
 `git gh` alias selects a separate profile, use that alias for `gh` commands;
 otherwise use `gh` directly. Check `gh auth status` and `gh api user --jq .login`
-through the selected invocation and confirm the intended personal account.
+through the selected invocation. The returned login must be `desaidn`, the
+GitHub username; `me@desaidn.dev` is the separate Git commit email. Resolve an
+account mismatch within the agreed configuration scope before marking setup
+complete.
 Preserve working authentication; use the login procedure below only when needed.
 
 GitHub authentication and Git commit identity are separate settings. Set this
