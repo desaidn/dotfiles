@@ -21,5 +21,5 @@ Interactive sessions hand off to Fish with `exec fish` after local activation
 has loaded. Explicit `zsh -ic` commands, including an empty command, stay
 in Zsh. The template initializes Zsh completion, Mise, and Atuin only when
 remaining in Zsh; machine-specific exports still run before the handoff.
-See the [template update guidance](../README.md#per-machine-activation) for
+See the [template update guidance](../AGENTS.md#per-machine-activation) for
 existing installations.

@@ -58,4 +58,4 @@ failures, damaged bundles, failed provisioning, and unchanged second runs.
 - [`install.sh`](../../install.sh)
 - [`tests/install_test.sh`](../../tests/install_test.sh)
 - [`AGENTS.md`](../../AGENTS.md) — dependency ownership and Install Contract
-- [`README.md`](../../README.md#dependency-ownership) — managed applications
+- [`AGENTS.md`](../../AGENTS.md#dependency-ownership) — managed applications

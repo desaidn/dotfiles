@@ -31,12 +31,8 @@ Only [`config.toml`](config.toml) is tracked and linked to
 locks, and downloaded agent-detection state. Do not symlink either directory
 into this repository.
 
-Validate and reload configuration changes with:
-
-```bash
-herdr config check
-herdr server reload-config
-```
+Validate and reload configuration changes with the commands in
+[AGENTS.md](AGENTS.md#testing-configuration-changes).
 
 ## Agent integrations
 
@@ -52,10 +48,6 @@ it.
 
 ## tmux fallback
 
-tmux remains available as a separate top-level fallback. Generally avoid
-nesting tmux inside Herdr for agent panes because Herdr then sees tmux, rather
-than the agent process, in the foreground.
-
-```bash
-tmux new-session -A -s dev
-```
+tmux remains available as a separate top-level fallback; start it as the
+[tmux guide](../tmux/README.md) describes. The no-nesting constraint and its
+rationale live in [AGENTS.md](AGENTS.md#testing-configuration-changes).

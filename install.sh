@@ -529,7 +529,7 @@ install_macos_casks() {
     version="${output%%$'\n'*}"
     version="${version#Ghostty }"
     version_at_least "$version" "1.3.0" ||
-        die "Ghostty 1.3+ is required for native glass backgrounds (found '${version:-unknown}'); update Ghostty and rerun"
+        die "Ghostty 1.3+ is required as the validated configuration baseline (found '${version:-unknown}'); update Ghostty and rerun"
 
     if ! has_jetbrains_mono_file; then
         if brew_cask_installed font-jetbrains-mono; then

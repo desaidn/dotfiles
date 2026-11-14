@@ -2,7 +2,7 @@
 
 Use when installation replaces a shell startup file or preserves per-machine
 settings that need reconciliation. Read the
-[per-machine activation guidance](../../../../README.md#per-machine-activation)
+[per-machine activation guidance](../../../../AGENTS.md#per-machine-activation)
 and [templates](../../../../templates/).
 
 ## Recover selected settings from backups

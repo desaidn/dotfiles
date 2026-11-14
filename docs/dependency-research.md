@@ -35,7 +35,7 @@ This makes CLT/Xcode on macOS and distro development tools on Linux the correct 
 The installer validates Fish 3.2 or newer, tmux 3.5 or newer, LazyGit 0.64.0 or
 newer, Hunk 0.18.1 or newer, tree-sitter CLI 0.26.1 or newer, and Neovim 0.12.5
 or newer after applying the Brewfile. Latest stable is recommended; startup
-does not check online for updates. See the [version policy](../README.md#version-policy-and-updates).
+does not check online for updates. See the [version policy](../AGENTS.md#version-policy-and-updates).
 
 Neovim prereleases that meet the minimum are accepted with a health-check
 advisory. A newer version's lack of recorded test coverage does not by itself
@@ -48,7 +48,7 @@ The agent workflow now uses Git, Herdr, Neovim, and Hunk directly through shared
 instructions. `install.sh` links the complete workflow into Codex, Pi, and
 Claude Code's global instruction locations without installing a workflow
 package or a private Python environment. The same links are installed in
-`--skip-mise-runtimes` mode. See [shared agent instructions](../README.md#shared-agent-instructions)
+`--skip-mise-runtimes` mode. See [shared agent instructions](../AGENTS.md#shared-agent-instructions)
 for paths and migration behaviour. `uv` remains in the Brewfile as an independent
 Python development CLI; it does not own this workflow or the tracked Python
 runtime.
@@ -99,7 +99,7 @@ selection; the capability check does not duplicate its distribution policy.
 
 ## Installation-set implication
 
-The [root dependency inventory](../README.md#homebrew-applications) and
+The [root dependency inventory](../AGENTS.md#homebrew-applications) and
 [Brewfile](../Brewfile) own the complete Homebrew-managed application set.
 That set includes CMake and Ninja for project builds; they are distinct from
 the native compiler and SDK needed to bootstrap Homebrew.

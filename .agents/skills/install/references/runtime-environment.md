@@ -2,7 +2,7 @@
 
 Use during the effective-environment assessment. Read the current
 [runtime manifest](../../../../mise/conf.d/00-dotfiles.toml) and
-[dependency ownership](../../../../README.md#dependency-ownership); do not copy
+[dependency ownership](../../../../AGENTS.md#dependency-ownership); do not copy
 today's pins into this guide.
 
 ## Verify actual selection

@@ -98,7 +98,8 @@ Questions and read-only discussion need none of the following.
   branches and worktrees, and other onward steps need their own authorization.
 - **Adversarial review.** Run an independent adversarial review only when the
   user asks for one.
-- **Concurrent humans.** Recheck Git state after concurrent human operations.
+- **Concurrent humans.** Recheck Git state and rerun validation after
+  concurrent human operations.
   No ref or checkout is reserved against human use.
 
 ## Load the matching skill

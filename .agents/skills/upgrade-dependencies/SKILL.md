@@ -20,7 +20,7 @@ Paths named in prose are relative to the canonical repository root. Read
 [AGENTS.md](../../../AGENTS.md), the
 [development workflow](../../../docs/agents/development-workflow.md), the
 [development-review skill](../../../docs/agents/skills/development-review/SKILL.md), and
-[dependency ownership and version policy](../../../README.md#dependency-ownership)
+[dependency ownership and version policy](../../../AGENTS.md#dependency-ownership)
 before acting. Those documents own policy; this skill owns upgrade mechanics.
 
 ## 1. Establish scope and a usable checkout
@@ -144,6 +144,6 @@ failed items, validation results, and actual Git delivery state. Installed
 machine updates take effect before Git landing; say clearly if those succeeded
 while review or landing is still pending. Mention fresh shell/editor sessions
 when needed. When Mise pins change, include the
-[instructions for applying committed pins on another host](../../../README.md#mise-runtimes)
+[instructions for applying committed pins on another host](../../../AGENTS.md#mise-runtimes)
 in the result. Preserve WIP/review history and obtain separate authorization for
 any push, submission, or cleanup required beyond the agreed task.

@@ -261,7 +261,7 @@ shared virtualenv. Repeat inventory if multiple copies shadow each other.
 
 If the user also requested the replacement workflow, reconcile any personal
 instructions at its destinations, then follow the current
-[installation instructions](../../README.md#shared-agent-instructions). Run
+[installation instructions](../../AGENTS.md#shared-agent-instructions). Run
 `./install.sh` only from the updated checkout, with its documented dependency
 provisioning effects understood. It links the shared workflow for Codex, Claude,
 and pi; it does not uninstall old devflow. Verify the links and start fresh

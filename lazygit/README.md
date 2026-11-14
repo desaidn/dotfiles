@@ -4,8 +4,8 @@ Part of [dotfiles](../README.md).
 
 ## Dependencies
 
-- LazyGit 0.64.0 or newer — provides the configured `git.diffRenderers` interface
-- Git
-- Hunk 0.18.1 or newer — supplies the Diffing Solution through `hunk pager`
-  and the efficient watch loop used by concurrent Neovim review sessions
-- Neovim — used through the shell-owned `EDITOR`/`VISUAL` contract
+Version floors live in the
+[root dependency inventory](../AGENTS.md#homebrew-applications). This
+configuration uses LazyGit's `git.diffRenderers` interface with `hunk pager`
+as the Diffing Solution, Git, and Neovim through the shell-owned
+`EDITOR`/`VISUAL` contract.

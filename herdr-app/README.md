@@ -24,9 +24,9 @@ The default home is `~/.config/herdr-app`; `HERDR_APP_HOME` can select another
 absolute directory. Existing personal files are backed up before linking.
 Linux installation skips both the app and its configuration.
 
-Herdr manages its keymap, generated guides, type definitions, shipped
-mods/layouts, and runtime state. Fresh installs use the app's normal welcome
-flow and agent sorting; existing `shared.json` preferences are preserved.
+Fresh installs use the app's normal welcome flow and agent sorting; existing
+`shared.json` preferences are preserved. Herdr owns the rest of its app home;
+[AGENTS.md](AGENTS.md) records the ownership boundary.
 Uninstall removes only the two owned links; `--restore` can restore their
 original files and leaves app state and installed packages.
 
@@ -62,21 +62,18 @@ Agents in Codex, Claude Code, and pi load the shared
 Herdr app or with `hc`. It starts from the installed upstream guides,
 `hc --skill` and `herdr-app --skill`, and adds this setup's layout, how to show
 a tab from a remote machine, and pitfalls seen in earlier sessions. The
-[root README](../README.md#shared-agent-instructions) lists where it is
-installed.
+[shared agent instructions](../AGENTS.md#shared-agent-instructions) list where
+it is installed.
 
 ## Appearance
 
-The `terminal` palette matches Ghostty's effective background (`#0e0e0e`),
-white foreground and cursor, and 16 ANSI colors, with a teal app accent.
+The `terminal` palette uses a near-black background (`#0e0e0e`), white
+foreground and cursor, and 16 ANSI colors, with a teal app accent.
 Settings use JetBrains Mono at 14 for terminals, matching the
 [Ghostty configuration](../ghostty/config), and the same font family for app
 text so tabs and panels carry the TUI's monospace appearance. Zoom, sounds,
-and contrast use app defaults.
-
-Herdr app 0.1.13 cannot reproduce Ghostty's 90% background opacity and macOS
-glass blur. Its `terminal_opacity` controls blending within the app's window.
-Layout spacing and selection rendering use Herdr's defaults.
+and contrast use app defaults. `terminal_opacity` controls blending within the
+app's window; layout spacing and selection rendering use Herdr's defaults.
 
 ## Keys
 

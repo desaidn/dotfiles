@@ -13,7 +13,7 @@ setup and usage.
 
 Install Rex Beta manually when trying it. The root installer does not install
 Rex or apply these preferences. JetBrains Mono is supplied by the existing
-[macOS dependency setup](../README.md#homebrew-applications).
+[macOS dependency setup](../AGENTS.md#homebrew-applications).
 
 From the repository root, manually apply the tracked appearance preferences:
 

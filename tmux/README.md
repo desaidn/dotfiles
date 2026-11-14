@@ -2,9 +2,10 @@
 
 The retained fallback and compatibility multiplexer in [dotfiles](../README.md). Herdr app is the normal daily workspace manager; start tmux directly when a tmux-specific workflow is needed rather than nesting it inside Herdr.
 
-Requires tmux 3.5 or newer for `extended-keys-format`. The configuration has no
-plugin manager or additional runtime dependencies. Prefer the latest stable
-release; on older versions, optional prompt-cursor settings keep their defaults.
+The version floor lives in the
+[root dependency inventory](../AGENTS.md#homebrew-applications). The
+configuration has no plugin manager or additional runtime dependencies; on
+older versions, optional prompt-cursor settings keep their defaults.
 
 ## Usage
 

@@ -18,7 +18,7 @@ Paths below are relative to the dotfiles checkout.
 
 Read [AGENTS.md](../../../AGENTS.md), the
 [installation guide](../../../README.md#quick-start), and
-[dependency ownership](../../../README.md#dependency-ownership). Inspect
+[dependency ownership](../../../AGENTS.md#dependency-ownership). Inspect
 `install.sh` to distinguish its existing checks from work that needs assessment.
 
 Carry forward the selected machine, checkout, scope, and prior decisions.

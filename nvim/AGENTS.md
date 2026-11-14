@@ -274,7 +274,7 @@ independent of any workflow CLI or agent harness.
 
 ## Dependencies
 
-Follow the [root dependency inventory](../README.md#dependency-ownership),
+Follow the [root dependency inventory](../AGENTS.md#dependency-ownership),
 including its Neovim minimum and tool version floors. Neovim owns
 plugins and parsers; Mason owns `mason_tools`. Do not duplicate those tools as
 machine packages or move Mise-owned runtimes into Homebrew. Keep display-aware

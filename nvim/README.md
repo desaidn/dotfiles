@@ -18,7 +18,7 @@ A lean Neovim configuration based on kickstart.nvim. Part of [dotfiles](../READM
 ## Installation
 
 Follow the [repository quick start](../README.md#quick-start) to install the
-configuration, applications, and runtimes. The [dependency inventory](../README.md#dependency-ownership)
+configuration, applications, and runtimes. The [dependency inventory](../AGENTS.md#dependency-ownership)
 owns package requirements and versions.
 
 Use the latest stable Neovim release. Installation, startup, and
@@ -243,6 +243,12 @@ labels without requiring a Nerd Font.
 - `<leader>sg` - Live grep
 - `<leader>sw` - Search current word
 - `<leader>sh` / `<leader>sk` / `<leader>sd` - Search help, keymaps, or diagnostics
+- `<leader>sc` - Search commands
+- `<leader>ss` - Select a Telescope picker
+- `<leader>sr` - Resume the last search
+- `<leader>s.` - Recent files
+- `<leader>s/` - Live grep in open files
+- `<leader>sn` - Find files in the Neovim config
 - `<leader><leader>` - Find buffers
 - `<leader>/` - Fuzzy search in current buffer
 
@@ -275,12 +281,11 @@ It also works when launching this configuration from that checkout:
 nvim -c 'HunkReview <full-base-oid> <full-head-oid>'
 ```
 
-Replace both placeholders with lowercase hexadecimal IDs of the same length
-(40 for SHA-1 or 64 for SHA-256). The command is always available and requires
-either no arguments for working-tree changes or exactly two IDs for a commit
-range; invalid arguments leave any running review unchanged. This
-configuration validates their format; the caller owns commit resolution and
-review-base selection. The command runs
+Replace both placeholders with full lowercase hexadecimal IDs of the same
+length (40 for SHA-1 or 64 for SHA-256), resolved yourself (for example with
+`git rev-parse`); invalid arguments leave any running review unchanged. The
+exact argument contract lives in [AGENTS.md](AGENTS.md#git-integration). The
+command runs
 `hunk diff BASE...HEAD --watch --mode stack`. Repeating the same range toggles
 its existing review; changing the range replaces its job in the same Tool Tab.
 `<leader>gd` resumes the checkout's current review, including its commit range,
@@ -298,8 +303,8 @@ Window. Choosing another input while viewing a Hunk tab retargets that tab's
 checkout. Preserve review notes before changing inputs or quitting Hunk.
 Neovim's `:tabclose` only hides a live tool; its next invocation recreates the
 tab. Quit Hunk to finish the review, and use `hunk session list --json` to verify
-it has ended. Jobs also stop when Neovim exits. Ordinary unsaved splits are
-preserved if they prevent a finished tool's tab from closing safely.
+it has ended. Jobs also stop when Neovim exits. The full Tool Tab lifecycle
+contract lives in [AGENTS.md](AGENTS.md#neovim-owned-terminal-tools).
 
 ### File Explorer
 
@@ -319,9 +324,12 @@ no Nerd Font is required.
 
 ### LSP
 
-- `grd` - Go to definition
+- `grd` / `grD` - Go to definition / declaration
 - `grr` - References
+- `gri` - Go to implementation
+- `grt` - Go to type definition
 - `grn` - Rename
+- `gO` / `gW` - Document / workspace symbols
 - `K` - Hover documentation
 - `<leader>f` - Format buffer
 
@@ -369,19 +377,14 @@ inside Neovim-owned Tool Tabs.
 - `<leader>u` - Toggle undo tree
 - `<leader>th` - Toggle LSP inlay hints when supported
 - `<leader>ts` - Toggle spell check
-- `<leader>pa` / `<leader>pr` - Copy the current buffer or selected Neo-tree file/directory's absolute/relative path
+- `<leader>pa` / `<leader>pr` - Copy the current buffer's absolute/relative path (the same keys copy the selected entry's path inside the File Explorer)
 
 ## Snippets
 
 Blink uses Neovim's native snippet engine for language-server completions and
 personal VS Code snippets in `~/.config/nvim/snippets/` (for example,
 `lua.json`). `<Tab>` and `<S-Tab>` move between placeholders. The bundled
-friendly-snippets catalog and LuaSnip-specific features are no longer enabled.
-
-After updating an existing installation, remove the two old plugin copies once
-with `:lua vim.pack.del({ 'LuaSnip', 'friendly-snippets' })` in a fresh Neovim
-session. Otherwise native package synchronization can restore their lockfile
-entries from disk. This removes plugin copies, not personal snippet files.
+friendly-snippets catalog and LuaSnip-specific features are not enabled.
 
 ## Configuration
 
@@ -404,7 +407,7 @@ explicitly required by `lua/custom/plugins/init.lua`.
 
 ## Reset
 
-```sh
-# Full reset (all state, cache, and data)
-alias nvim-reset='rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim'
-```
+Run `nvim-reset` for a full reset: it removes `~/.local/share/nvim`,
+`~/.local/state/nvim`, and `~/.cache/nvim`, leaving personal snippet files and
+this configuration intact. The shared [Fish](../fish/README.md) and
+[Zsh](../zsh/README.md) configurations define it.

@@ -30,7 +30,8 @@ out of the repository.
 Herdr's upstream agent integration commands mutate harness-specific state such
 as `~/.codex`. Keep those commands explicit and per-machine; never add them to
 the generic dotfiles installer. Separately, `install.sh` owns the shared workflow
-instruction links documented in the [root README](../README.md#shared-agent-instructions).
+instruction links documented in the
+[shared agent instructions](../AGENTS.md#shared-agent-instructions).
 
 ## Testing configuration changes
 
