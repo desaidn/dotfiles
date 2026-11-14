@@ -96,7 +96,7 @@ Use these references when their conditions arise:
 | --- | --- |
 | Verify managed runtime selection, or diagnose competing binaries, overrides, or stale activation. | [Runtime environment](references/runtime-environment.md) |
 | Recover settings from shell backups or reconcile preserved per-machine startup files. | [Shell settings](references/shell-settings.md) |
-| The user requests repository authentication or push access. | [GitHub access](references/github-access.md) |
+| Assess this checkout's personal GitHub login and commit identity, or handle requested push access. | [GitHub access and commit identity](references/github-access.md) |
 
 These are known cases, not the limit of the assessment. Follow observed issues
 in other configured tools through their owning guides. Make focused repairs

@@ -1,8 +1,29 @@
-# GitHub access for this checkout
+# GitHub access and commit identity for this checkout
 
-Use this only when repository access is part of the user's setup request.
+During setup, verify this checkout's personal GitHub login through `gh` and set
+its commit email to `me@desaidn.dev`.
 Authentication is not permission to push, change remote branches, or publish.
 Keep account names, key paths, and device codes out of this skill.
+
+## Check the login and commit identity
+
+Use the existing GitHub CLI configuration for this checkout. When its local
+`git gh` alias selects a separate profile, use that alias for `gh` commands;
+otherwise use `gh` directly. Check `gh auth status` and `gh api user --jq .login`
+through the selected invocation and confirm the intended personal account.
+Preserve working authentication; use the login procedure below only when needed.
+
+GitHub authentication and Git commit identity are separate settings. Set this
+checkout's commit email without changing the global email or existing name:
+
+```sh
+git config --local user.email me@desaidn.dev
+```
+
+Check `git config --show-origin --get user.email`, `git var GIT_AUTHOR_IDENT`,
+and `git var GIT_COMMITTER_IDENT`. Both effective identities must use
+`me@desaidn.dev`. Preserve existing commits and report any environment override
+that prevents the local setting from taking effect.
 
 ## Establish the scope
 
@@ -28,6 +49,7 @@ they are outside the agreed host and repository scope.
 
 Check the installed `gh auth login --help` and
 [login documentation](https://cli.github.com/manual/gh_auth_login) before use.
+Use the selected invocation above for the `gh` commands in this procedure.
 When login is needed and authorized, run it interactively in a persistent
 terminal:
 
