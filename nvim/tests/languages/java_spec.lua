@@ -27,6 +27,7 @@ local started
 local starts = {}
 local trace = {}
 local fixture = vim.fn.tempname()
+local jdtls_prefix = fixture .. '/mason packages/jdtls'
 local debug_prefix = fixture .. '/java-debug-adapter'
 local test_prefix = fixture .. '/java-test'
 local gradle_root = fixture .. '/gradle'
@@ -85,6 +86,7 @@ package.loaded['mason-registry'] = {
   get_package = function(name)
     return {
       get_install_path = function()
+        if name == 'jdtls' then return jdtls_prefix end
         if name == 'java-debug-adapter' then return debug_prefix end
         assert(name == 'java-test')
         return test_prefix
@@ -183,6 +185,32 @@ check('starts JDTLS after DAP with isolated data and valid Mason bundles', funct
   started.config.on_attach(client)
   assert(client.server_capabilities.documentFormattingProvider == false)
   assert(client.server_capabilities.documentRangeFormattingProvider == false)
+end)
+
+check('loads the bundled Lombok agent without requiring environment configuration', function()
+  vim.env.JDTLS_JVM_ARGS = nil
+  java_autocmd.callback { buf = 42 }
+  assert(
+    started.config.cmd[4] == '--jvm-arg=-javaagent:' .. jdtls_prefix .. '/lombok.jar',
+    vim.inspect(started.config.cmd)
+  )
+  assert(#started.config.cmd == 4, vim.inspect(started.config.cmd))
+end)
+
+check('preserves extra JVM flags and other Java agents alongside bundled Lombok', function()
+  vim.env.JDTLS_JVM_ARGS = '-Xmx2G -javaagent:/tmp/coverage.jar'
+  java_autocmd.callback { buf = 42 }
+  assert(started.config.cmd[4] == '--jvm-arg=-Xmx2G')
+  assert(started.config.cmd[5] == '--jvm-arg=-javaagent:/tmp/coverage.jar')
+  assert(started.config.cmd[6] == '--jvm-arg=-javaagent:' .. jdtls_prefix .. '/lombok.jar')
+  assert(#started.config.cmd == 6, vim.inspect(started.config.cmd))
+end)
+
+check('uses an explicit versioned Lombok agent without loading another copy', function()
+  vim.env.JDTLS_JVM_ARGS = '-javaagent:/tmp/lombok-1.18.48.jar=example'
+  java_autocmd.callback { buf = 42 }
+  assert(started.config.cmd[4] == '--jvm-arg=-javaagent:/tmp/lombok-1.18.48.jar=example')
+  assert(#started.config.cmd == 4, vim.inspect(started.config.cmd))
 end)
 
 vim.pack.add = original_pack_add

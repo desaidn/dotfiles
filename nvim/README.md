@@ -46,6 +46,10 @@ the expected `$/typescriptVersion` report from `user-setting` and terminates
 bundled, workspace-fallback, or mismatched TypeScript. Missing, unparseable, and
 unowned workspaces receive neither client.
 
+Java starts JDTLS per project and loads Mason's bundled Lombok agent
+automatically. `JDTLS_JVM_ARGS` supplies additional JVM options; an explicit
+Lombok `-javaagent` takes precedence over the bundled agent.
+
 Python DAP uses Mason's debugpy adapter
 while debug targets use their project environments. Both `python` and `debugpy`
 project launch types are supported. Generated file launches and project launch

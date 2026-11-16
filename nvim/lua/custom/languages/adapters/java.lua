@@ -29,10 +29,19 @@ local root_profile = {
   resolve = java_root,
 }
 
+local function mason_path(package_name) return require('mason-registry').get_package(package_name):get_install_path() end
+
 local function jdtls_command(root)
   local command = { 'jdtls', '-data', context.workspace_data('jdtls', root) }
+  local has_lombok_agent = false
   for argument in (vim.env.JDTLS_JVM_ARGS or ''):gmatch '%S+' do
     command[#command + 1] = '--jvm-arg=' .. argument
+    local agent = argument:match '^%-javaagent:([^=]+)'
+    if agent and vim.fs.basename(agent):match '^lombok.*%.jar$' then has_lombok_agent = true end
+  end
+  if not has_lombok_agent then
+    local lombok = vim.fs.joinpath(mason_path 'jdtls', 'lombok.jar')
+    command[#command + 1] = '--jvm-arg=-javaagent:' .. lombok
   end
   return command
 end
@@ -41,8 +50,6 @@ local excluded_test_jars = {
   ['com.microsoft.java.test.runner-jar-with-dependencies.jar'] = true,
   ['jacocoagent.jar'] = true,
 }
-
-local function mason_path(package_name) return require('mason-registry').get_package(package_name):get_install_path() end
 
 local function bundles()
   local debug_pattern = vim.fs.joinpath(mason_path 'java-debug-adapter', 'extension', 'server', 'com.microsoft.java.debug.plugin*.jar')
