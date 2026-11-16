@@ -21,15 +21,15 @@ From the repository root, manually apply the tracked appearance preferences:
 sh rex/macos.sh
 ```
 
-| Preference | Value |
-| --- | --- |
-| Terminal font | JetBrains Mono, 14 pt; smoothing off |
-| Dark theme | Static Noir |
-| Light theme | Merino Light |
-| Interface style | `blendTheme` |
-| Pane glass | On |
-| Pane density | Comfortable |
-| Tabs fill available space | Off |
+| Preference                | Value                                |
+| ------------------------- | ------------------------------------ |
+| Terminal font             | JetBrains Mono, 14 pt; smoothing off |
+| Dark theme                | Static Noir                          |
+| Light theme               | Merino Light                         |
+| Interface style           | `blendTheme`                         |
+| Pane glass                | On                                   |
+| Pane density              | Comfortable                          |
+| Tabs fill available space | Off                                  |
 
 The script writes these values to the `com.superlogical.rex` macOS preferences
 domain and leaves other preferences local. Quit and reopen Rex if the running

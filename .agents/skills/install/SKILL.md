@@ -33,13 +33,13 @@ Build a concise checklist for before and after installation from the machine's
 role, the repository's setup, and the user's intended workflows. Cover each
 applicable area without testing every installed capability:
 
-| Area | What requires assessment |
-| --- | --- |
+| Area                             | What requires assessment                                                                                                                              |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Configuration and personal state | Existing links, overrides, customizations, and agent instructions; what installation will preserve or back up, and what may need selective migration. |
-| Effective tools and environment | What the user's shell and applications actually select, including stale processes or competing installations. |
-| Editor and development | Startup health, plugin and tool provisioning, and a representative workflow appropriate to the languages the user uses. |
-| Workspace and integrations | The current terminal/editor arrangement, clipboard and editor handoff, and platform-specific first-launch or permission steps. |
-| Access | Authentication and connections required for the requested work, with their intended account and configuration scope. |
+| Effective tools and environment  | What the user's shell and applications actually select, including stale processes or competing installations.                                         |
+| Editor and development           | Startup health, plugin and tool provisioning, and a representative workflow appropriate to the languages the user uses.                               |
+| Workspace and integrations       | The current terminal/editor arrangement, clipboard and editor handoff, and platform-specific first-launch or permission steps.                        |
+| Access                           | Authentication and connections required for the requested work, with their intended account and configuration scope.                                  |
 
 Record enough of the current state to identify existing issues and recognize
 changes afterward, including relevant configuration sources and backup paths.
@@ -92,10 +92,10 @@ access require the relevant user request.
 
 Use these references when their conditions arise:
 
-| Condition | Reference |
-| --- | --- |
-| Verify managed runtime selection, or diagnose competing binaries, overrides, or stale activation. | [Runtime environment](references/runtime-environment.md) |
-| Recover settings from shell backups or reconcile preserved per-machine startup files. | [Shell settings](references/shell-settings.md) |
+| Condition                                                                                          | Reference                                                        |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Verify managed runtime selection, or diagnose competing binaries, overrides, or stale activation.  | [Runtime environment](references/runtime-environment.md)         |
+| Recover settings from shell backups or reconcile preserved per-machine startup files.              | [Shell settings](references/shell-settings.md)                   |
 | Assess this checkout's personal GitHub login and commit identity, or handle requested push access. | [GitHub access and commit identity](references/github-access.md) |
 
 These are known cases, not the limit of the assessment. Follow observed issues

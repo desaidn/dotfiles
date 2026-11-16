@@ -54,12 +54,12 @@ the agreed task context or the calling terminal's verified identity,
 independently of UI focus. Do not ask the user to choose again when that
 context already identifies it.
 
-| Environment | How to find it | Where to open the review |
-| --- | --- | --- |
-| Herdr app | `$HC_TERMINAL_ID` is set | Follow the `herdr-app` skill's "Show something" section, on the Mac or a remote machine |
-| Herdr TUI | `herdr --skill` check passes | The Herdr TUI commands below |
-| tmux | `$TMUX_PANE` is set | A detached window in the task's running server |
-| Plain terminal | none of the above | A known Neovim host, or the destination the task supplies |
+| Environment    | How to find it               | Where to open the review                                                                |
+| -------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| Herdr app      | `$HC_TERMINAL_ID` is set     | Follow the `herdr-app` skill's "Show something" section, on the Mac or a remote machine |
+| Herdr TUI      | `herdr --skill` check passes | The Herdr TUI commands below                                                            |
+| tmux           | `$TMUX_PANE` is set          | A detached window in the task's running server                                          |
+| Plain terminal | none of the above            | A known Neovim host, or the destination the task supplies                               |
 
 Use the relevant executable from `PATH` and target native IDs explicitly. An
 inherited `HERDR_BIN_PATH` alone is not a reason to use a different binary.
@@ -106,6 +106,7 @@ resolved commit IDs. For a new destination, launch
   Read `result.tab.tab_id`, `result.tab.label`, and `result.root_pane.pane_id`
   from the first command's JSON. Apply the same `--session NAME` selector to
   every call when using a named server.
+
 - **tmux or a plain terminal.** Use that environment's native window or pane
   and run the command from the checkout.
 

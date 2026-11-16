@@ -15,11 +15,11 @@ contracts behind this setup.
 
 ## Quick start
 
-| Platform | Repository support |
-| --- | --- |
-| macOS | Primary platform; local editor integration and installer fixture tests pass. |
-| Linux | Installer support and simulated bootstrap tests; the complete setup has not been validated on a Linux host. |
-| Native Windows | Unsupported by this setup: the installer targets Unix. |
+| Platform       | Repository support                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| macOS          | Primary platform; local editor integration and installer fixture tests pass.                                |
+| Linux          | Installer support and simulated bootstrap tests; the complete setup has not been validated on a Linux host. |
+| Native Windows | Unsupported by this setup: the installer targets Unix.                                                      |
 
 Neovim itself supports macOS, Linux, and Windows; its
 [platform support](https://neovim.io/doc/user/support.html) does not imply
@@ -57,21 +57,21 @@ see [the Install Contract](AGENTS.md#install-contract) for its exact scope.
 
 ## Layout
 
-| Source              | Target                       | Notes                                        |
-| ------------------- | ---------------------------- | -------------------------------------------- |
-| `fish/`             | `~/.config/fish/`            | Prompt + `nvim-reset` alias                  |
-| `ghostty/`          | `~/.config/ghostty/`         | macOS Ghostty terminal config                |
-| `herdr/config.toml` | `~/.config/herdr/config.toml` | Shelved Herdr TUI config                    |
-| `herdr-app/`        | Personal files under `~/.config/herdr-app/` | Daily app settings and theme; file-level links only |
-| `hunk/config.toml`  | `~/.config/hunk/config.toml`  | Review preferences                          |
-| `lazygit/`          | `~/.config/lazygit/`         | Git Transaction Surface                      |
-| `mise/conf.d/00-dotfiles.toml` | `~/.config/mise/conf.d/00-dotfiles.toml` | Pinned global runtime defaults   |
-| `docs/agents/development-workflow.md` | Harness-global instruction files | Shared agent workflow; see [AGENTS.md](AGENTS.md#shared-agent-instructions) |
-| `docs/agents/skills/<name>/` | `~/.agents/skills/<name>`, `~/.claude/skills/<name>` | Shared global skills |
-| `nvim/`             | `~/.config/nvim/`            | kickstart-based config using native `vim.pack` |
-| `rex/macos.sh`      | macOS `com.superlogical.rex` preferences | Manually applied; personal experiment |
-| `tmux/`             | `~/.config/tmux/`            | Fallback multiplexer; 1-indexed windows and panes |
-| `zsh/.zshrc`        | `~/.zshrc`                   | λ prompt; no OMZ dependency                  |
+| Source                                | Target                                               | Notes                                                                       |
+| ------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------- |
+| `fish/`                               | `~/.config/fish/`                                    | Prompt + `nvim-reset` alias                                                 |
+| `ghostty/`                            | `~/.config/ghostty/`                                 | macOS Ghostty terminal config                                               |
+| `herdr/config.toml`                   | `~/.config/herdr/config.toml`                        | Shelved Herdr TUI config                                                    |
+| `herdr-app/`                          | Personal files under `~/.config/herdr-app/`          | Daily app settings and theme; file-level links only                         |
+| `hunk/config.toml`                    | `~/.config/hunk/config.toml`                         | Review preferences                                                          |
+| `lazygit/`                            | `~/.config/lazygit/`                                 | Git Transaction Surface                                                     |
+| `mise/conf.d/00-dotfiles.toml`        | `~/.config/mise/conf.d/00-dotfiles.toml`             | Pinned global runtime defaults                                              |
+| `docs/agents/development-workflow.md` | Harness-global instruction files                     | Shared agent workflow; see [AGENTS.md](AGENTS.md#shared-agent-instructions) |
+| `docs/agents/skills/<name>/`          | `~/.agents/skills/<name>`, `~/.claude/skills/<name>` | Shared global skills                                                        |
+| `nvim/`                               | `~/.config/nvim/`                                    | kickstart-based config using native `vim.pack`                              |
+| `rex/macos.sh`                        | macOS `com.superlogical.rex` preferences             | Manually applied; personal experiment                                       |
+| `tmux/`                               | `~/.config/tmux/`                                    | Fallback multiplexer; 1-indexed windows and panes                           |
+| `zsh/.zshrc`                          | `~/.zshrc`                                           | λ prompt; no OMZ dependency                                                 |
 
 Mutable runtime state (Herdr, Hunk, Herdr app) stays local and untracked.
 

@@ -22,12 +22,12 @@ That matters to typed linting. `typescript-eslint` documents that a relative `pa
 
 ## Options compared
 
-| Option | Root/CWD behavior | Fit for this configuration |
-| --- | --- | --- |
-| Keep `nvim-lint` + `eslint_d` | Caller must find the applicable root and pass `cwd` to every `try_lint` call. This is the documented `nvim-lint` design. | Valid and small, but the Neovim config owns marker policy and must keep it correct for monorepos. |
+| Option                                 | Root/CWD behavior                                                                                                                                      | Fit for this configuration                                                                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Keep `nvim-lint` + `eslint_d`          | Caller must find the applicable root and pass `cwd` to every `try_lint` call. This is the documented `nvim-lint` design.                               | Valid and small, but the Neovim config owns marker policy and must keep it correct for monorepos.                                                       |
 | Use `nvim-lspconfig`'s `eslint` server | Built-in project-root detection plus per-document `workingDirectory = { mode = 'auto' }`; one server supports different package configs in a monorepo. | Automatic alternative, but a larger capability swap whose Mason distribution is stale. Adopt for LSP features, not just to avoid a small root resolver. |
-| Use Conform's `eslint_d` formatter | Conform's built-in formatter already finds the nearest `package.json` and runs there. | Not a replacement for diagnostics. It is relevant only if ESLint should own fixing/formatting; this repo already assigns formatting to Prettier. |
-| Fix the ESLint config | Use `projectService: true`, or set `tsconfigRootDir: import.meta.dirname` alongside a relative `project`. | Recommended as defense in depth because terminal, CI, and every editor then agree. This is a project change, not an editor-side answer. |
+| Use Conform's `eslint_d` formatter     | Conform's built-in formatter already finds the nearest `package.json` and runs there.                                                                  | Not a replacement for diagnostics. It is relevant only if ESLint should own fixing/formatting; this repo already assigns formatting to Prettier.        |
+| Fix the ESLint config                  | Use `projectService: true`, or set `tsconfigRootDir: import.meta.dirname` alongside a relative `project`.                                              | Recommended as defense in depth because terminal, CI, and every editor then agree. This is a project change, not an editor-side answer.                 |
 
 ### ESLint LSP evidence
 

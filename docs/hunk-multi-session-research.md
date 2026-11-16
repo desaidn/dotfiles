@@ -126,7 +126,7 @@ different.
   attached to the current buffer and returns its own job/channel ID. Its options
   include `cwd`, `env`, and `on_exit`, which are the exact lifecycle inputs the
   local launcher already uses. See Neovim's
-  [`jobstart()` documentation](https://neovim.io/doc/user/vimfn/#jobstart()).
+  [`jobstart()` documentation](<https://neovim.io/doc/user/vimfn/#jobstart()>).
 - Neovim terminal buffers are ordinary buffers with terminal-specific behavior,
   and `jobstart(..., { term = true })` is an officially supported way to create
   one. Their default hidden-buffer behavior permits a process to remain alive
@@ -162,7 +162,7 @@ Neovim handles per instance is sufficient.
   ([lines 303-309](../nvim/lua/custom/lib/terminal_tool.lua#L303)); it needs an
   opaque instance token so two live generations under one declaration cannot
   be confused.
-- The existing tests prove that two *different declarations*—Hunk and
+- The existing tests prove that two _different declarations_—Hunk and
   LazyGit—can coexist. They do not model two instances of one declaration. See
   the current
   [Tool Tab coexistence test](../nvim/tests/terminal_tool_spec.lua#L390).
@@ -188,12 +188,12 @@ cleaned up and the check did not alter this repository.
 
 ## Design alternatives and recommendation
 
-| Option | What it changes | Strengths | Problems | Verdict |
-| --- | --- | --- | --- | --- |
-| Fixed Hunk slots | Register `hunk-1`, `hunk-2`, etc. as separate existing tool declarations | Small proof of concept; current handoff ID/generation isolation would work | Arbitrary ceiling, multiple mappings, slot bookkeeping, poor relationship to repository context | Useful only as a throwaway prototype |
-| Manual `:terminal hunk ...` tabs | Let the user start arbitrary terminal buffers | No launcher refactor | Bypasses Tool Tab lifecycle, source-aware Editor Handoff, consistent environment, cleanup, and tests | Reject |
-| Hunk daemon as Neovim manager | Poll `hunk session list`, then try to map daemon sessions back to tabs | Reuses Hunk's UUID and metadata | The documented session surface controls review contents, navigation, and comments—not Neovim tab focus—and Neovim remains the owner of all local handles. Creates two lifecycle authorities | Reject as the primary design |
-| Dynamic local instance registry | One declaration owns multiple Neovim runtime instances | Natural Tool Tabs, one mapping, no new dependency, keeps Hunk and Neovim responsibilities separate | Requires a careful launcher refactor and broader tests | **Recommend** |
+| Option                           | What it changes                                                          | Strengths                                                                                          | Problems                                                                                                                                                                                    | Verdict                              |
+| -------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Fixed Hunk slots                 | Register `hunk-1`, `hunk-2`, etc. as separate existing tool declarations | Small proof of concept; current handoff ID/generation isolation would work                         | Arbitrary ceiling, multiple mappings, slot bookkeeping, poor relationship to repository context                                                                                             | Useful only as a throwaway prototype |
+| Manual `:terminal hunk ...` tabs | Let the user start arbitrary terminal buffers                            | No launcher refactor                                                                               | Bypasses Tool Tab lifecycle, source-aware Editor Handoff, consistent environment, cleanup, and tests                                                                                        | Reject                               |
+| Hunk daemon as Neovim manager    | Poll `hunk session list`, then try to map daemon sessions back to tabs   | Reuses Hunk's UUID and metadata                                                                    | The documented session surface controls review contents, navigation, and comments—not Neovim tab focus—and Neovim remains the owner of all local handles. Creates two lifecycle authorities | Reject as the primary design         |
+| Dynamic local instance registry  | One declaration owns multiple Neovim runtime instances                   | Natural Tool Tabs, one mapping, no new dependency, keeps Hunk and Neovim responsibilities separate | Requires a careful launcher refactor and broader tests                                                                                                                                      | **Recommend**                        |
 
 The daemon remains valuable for the Agent Review Loop. The recommendation is
 only that it should not become the Neovim UI registry.

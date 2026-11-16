@@ -61,13 +61,13 @@ are established.
 
 ## 2. Build the upgrade inventory
 
-| Owner | Authoritative scope | Record before changing it |
-| --- | --- | --- |
-| Homebrew | Active-platform `Brewfile` entries, plus installer-owned macOS casks documented in the root README; their installed runtime dependency closure | Installed versions, pins, available stable versions, package type and ownership |
-| Mise | `mise/conf.d/00-dotfiles.toml` | Exact selectors, version lines/vendor, Rust profile/components, effective config sources, installed versions |
-| Neovim plugins | Configuration declarations and `nvim/nvim-pack-lock.json`, reconciled with installed `vim.pack` packages | Source, constraint, revision, active/inactive state, local plugin edits |
-| Mason | `mason_tools` from the enabled language adapters; additionally installed tools only when included in the user's scope | Receipt/installed version, refreshed registry candidate, any explicit pin or condition |
-| Treesitter | The adapters' `treesitter_parsers`; additional installed parsers only when included in scope | Installed parsers and revisions supported by the selected plugin |
+| Owner          | Authoritative scope                                                                                                                            | Record before changing it                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Homebrew       | Active-platform `Brewfile` entries, plus installer-owned macOS casks documented in the root README; their installed runtime dependency closure | Installed versions, pins, available stable versions, package type and ownership                              |
+| Mise           | `mise/conf.d/00-dotfiles.toml`                                                                                                                 | Exact selectors, version lines/vendor, Rust profile/components, effective config sources, installed versions |
+| Neovim plugins | Configuration declarations and `nvim/nvim-pack-lock.json`, reconciled with installed `vim.pack` packages                                       | Source, constraint, revision, active/inactive state, local plugin edits                                      |
+| Mason          | `mason_tools` from the enabled language adapters; additionally installed tools only when included in the user's scope                          | Receipt/installed version, refreshed registry candidate, any explicit pin or condition                       |
+| Treesitter     | The adapters' `treesitter_parsers`; additional installed parsers only when included in scope                                                   | Installed parsers and revisions supported by the selected plugin                                             |
 
 The platform owns SDKs, native compilers, and OS utilities. Verify required
 capabilities and report a missing/broken platform prerequisite; a dependency

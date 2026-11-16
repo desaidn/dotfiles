@@ -17,14 +17,14 @@ Implement one mutually exclusive TypeScript semantic router, retain the existing
 diagnostic and formatting owners, and leave the ESLint LSP migration
 conditional:
 
-| Concern | Decision | Owner |
-| --- | --- | --- |
-| JS/TS semantic LSP | Route a recognized root by its project-local TypeScript version: 7+ uses native `tsc --lsp --stdio`; earlier versions with a root-local `typescript/lib/tsserver.js` use `ts_ls`. | The project owns TypeScript semantics and compiler; Neovim selects exactly one client. |
-| Pre-TypeScript-7 compatibility | Install Mason's `typescript-language-server` only as transport and initialize it with the exact project's `node_modules/typescript/lib/tsserver.js`. | Mason owns the wrapper transport; the project owns the language service. |
-| ESLint diagnostics | Retain the working `nvim-lint` + `eslint_d` integration for now. | Mason owns `eslint_d`; the project owns ESLint and its config/plugins. |
-| Formatting | Keep Prettier/Prettierd through Conform as the only save formatter. | Conform owns buffer mutation. |
-| Node/browser debugging | Add Mason's `js-debug-adapter` directly through nvim-dap; do not add a wrapper plugin. Send js-debug's canonical `pwa-*` types on the wire. | Mason owns the adapter; the project owns runtime and launch details. |
-| Launch configuration | Keep using the existing buffer-rooted, on-demand `.vscode/launch.json` provider. | Each project owns non-trivial launch and attach recipes. |
+| Concern                        | Decision                                                                                                                                                                          | Owner                                                                                  |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| JS/TS semantic LSP             | Route a recognized root by its project-local TypeScript version: 7+ uses native `tsc --lsp --stdio`; earlier versions with a root-local `typescript/lib/tsserver.js` use `ts_ls`. | The project owns TypeScript semantics and compiler; Neovim selects exactly one client. |
+| Pre-TypeScript-7 compatibility | Install Mason's `typescript-language-server` only as transport and initialize it with the exact project's `node_modules/typescript/lib/tsserver.js`.                              | Mason owns the wrapper transport; the project owns the language service.               |
+| ESLint diagnostics             | Retain the working `nvim-lint` + `eslint_d` integration for now.                                                                                                                  | Mason owns `eslint_d`; the project owns ESLint and its config/plugins.                 |
+| Formatting                     | Keep Prettier/Prettierd through Conform as the only save formatter.                                                                                                               | Conform owns buffer mutation.                                                          |
+| Node/browser debugging         | Add Mason's `js-debug-adapter` directly through nvim-dap; do not add a wrapper plugin. Send js-debug's canonical `pwa-*` types on the wire.                                       | Mason owns the adapter; the project owns runtime and launch details.                   |
+| Launch configuration           | Keep using the existing buffer-rooted, on-demand `.vscode/launch.json` provider.                                                                                                  | Each project owns non-trivial launch and attach recipes.                               |
 
 This corrects two recommendations in
 [`lsp-dap-research.md`](lsp-dap-research.md): its nvim-lspconfig prerequisite
@@ -241,7 +241,7 @@ boundaries remain explicit:
 
 1. **Workspace trust.** This personal configuration assumes repositories
    opened for development are trusted. Opening a project runs its root-local `tsc
-   --version`, then starts that executable automatically; linting also loads
+--version`, then starts that executable automatically; linting also loads
    executable project ESLint configuration and plugins. Do not open an
    untrusted checkout with this setup before reviewing it. If untrusted-project
    editing becomes a supported workflow, Neovim 0.12 can persist a

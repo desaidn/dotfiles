@@ -129,15 +129,15 @@ toolchains require separate evidence before being advertised as supported.
 
 These are repository findings, distinct from upstream capabilities:
 
-| Surface | Current state | Gap |
-| --- | --- | --- |
-| Parsing | `supporting.lua` declares the `c` parser | No `cpp` parser; installing one manually is insufficient because parser attachment follows the declared whitelist |
-| LSP/completion | Shared native LSP, Blink completion, diagnostics and navigation exist | No C/C++ server is declared or enabled |
-| Formatting | Shared Conform manual formatting exists; C/C++ save formatting is explicitly disabled | No C/C++ formatter is declared |
-| Static analysis | Shared infrastructure supports language-owned linting | No C/C++ analysis route is configured |
-| Debugging | Rust already requests Mason's CodeLLDB; shared DAP UI/controls and root-aware launch files exist | No C/C++ DAP route or first-use adapter registration |
-| Build/test | Native terminal workflow exists | No C/C++ build/test contract or provisioned CMake/Ninja |
-| Compiler provisioning | Bootstrap checks `cc` and `make`, and installs native development tools | No explicit C++ compile/link or standard-library validation |
+| Surface               | Current state                                                                                    | Gap                                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Parsing               | `supporting.lua` declares the `c` parser                                                         | No `cpp` parser; installing one manually is insufficient because parser attachment follows the declared whitelist |
+| LSP/completion        | Shared native LSP, Blink completion, diagnostics and navigation exist                            | No C/C++ server is declared or enabled                                                                            |
+| Formatting            | Shared Conform manual formatting exists; C/C++ save formatting is explicitly disabled            | No C/C++ formatter is declared                                                                                    |
+| Static analysis       | Shared infrastructure supports language-owned linting                                            | No C/C++ analysis route is configured                                                                             |
+| Debugging             | Rust already requests Mason's CodeLLDB; shared DAP UI/controls and root-aware launch files exist | No C/C++ DAP route or first-use adapter registration                                                              |
+| Build/test            | Native terminal workflow exists                                                                  | No C/C++ build/test contract or provisioned CMake/Ninja                                                           |
+| Compiler provisioning | Bootstrap checks `cc` and `make`, and installs native development tools                          | No explicit C++ compile/link or standard-library validation                                                       |
 
 Evidence: [supporting adapter](../nvim/lua/custom/languages/adapters/supporting.lua),
 [adapter inventory](../nvim/lua/custom/languages/config.lua),
@@ -164,13 +164,13 @@ Mason clangd, Neovim attachment, CodeLLDB launches, and Linux remain unvalidated
 
 Recommended ownership follows the existing [dependency contract](../AGENTS.md):
 
-| Owner | Responsibility | Proposed change |
-| --- | --- | --- |
-| Platform bootstrap | Native compiler, linker, SDK, standard-library headers, `make` | Validate both C and C++ compilation/linking; preserve the existing bootstrap owner |
-| Homebrew | Standalone build applications | Add `cmake` and `ninja` for the reference workflow; CTest is part of CMake |
-| Neovim/Mason | Editor packages and tooling | Declare `clangd`, `clang-format`, and `codelldb`; collector deduplicates CodeLLDB already declared by Rust |
-| Neovim/Tree-sitter | Syntax parsers | Move `c` into the new adapter and add `cpp` |
-| Project | Compiler/version, standard, build presets, dependencies, tests and launch files | Document the contract without generating files or selecting a standard automatically |
+| Owner              | Responsibility                                                                  | Proposed change                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Platform bootstrap | Native compiler, linker, SDK, standard-library headers, `make`                  | Validate both C and C++ compilation/linking; preserve the existing bootstrap owner                         |
+| Homebrew           | Standalone build applications                                                   | Add `cmake` and `ninja` for the reference workflow; CTest is part of CMake                                 |
+| Neovim/Mason       | Editor packages and tooling                                                     | Declare `clangd`, `clang-format`, and `codelldb`; collector deduplicates CodeLLDB already declared by Rust |
+| Neovim/Tree-sitter | Syntax parsers                                                                  | Move `c` into the new adapter and add `cpp`                                                                |
+| Project            | Compiler/version, standard, build presets, dependencies, tests and launch files | Document the contract without generating files or selecting a standard automatically                       |
 
 Apple's Command Line Tools provide Clang and the macOS SDK; specialized Xcode
 workflows may require full Xcode. Do not install a complete second LLVM toolchain
@@ -327,11 +327,11 @@ an accidentally empty test selection from looking successful. Keep these native
 commands available even if a test UI is added later.
 ([CTest CLI](https://cmake.org/cmake/help/latest/manual/ctest.1.html))
 
-| Project test choice | Native integration | Recommendation |
-| --- | --- | --- |
+| Project test choice   | Native integration                                                                                                | Recommendation                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | GoogleTest/GoogleMock | `gtest_discover_tests()` registers built test cases with CTest; binary filtering uses `--gtest_filter=Suite.Test` | Respect projects already using it; test one case by passing that argument to the same DAP executable |
-| Catch2 | `catch_discover_tests()` registers tests with CTest; the test binary accepts test names/tags | Keep framework dependency and discovery in project CMake files |
-| Pure C | CTest can run an ordinary test executable with `add_test`; Unity is a C testing framework | Do not require a C++ testing framework to call C supported |
+| Catch2                | `catch_discover_tests()` registers tests with CTest; the test binary accepts test names/tags                      | Keep framework dependency and discovery in project CMake files                                       |
+| Pure C                | CTest can run an ordinary test executable with `add_test`; Unity is a C testing framework                         | Do not require a C++ testing framework to call C supported                                           |
 
 Sources: [CMake GoogleTest module](https://cmake.org/cmake/help/latest/module/GoogleTest.html),
 [GoogleTest filtering](https://google.github.io/googletest/advanced.html#running-a-subset-of-the-tests),
@@ -368,7 +368,7 @@ contract; use the compatible TCP `--port ${port}` setup unless the shared lifecy
 is intentionally redesigned and tested. CodeLLDB supports stdio in newer versions,
 so this is an integration choice, not a general lack of stdio support.
 ([repository Rust lifecycle](../nvim/lua/custom/languages/adapters/rust.lua),
-[nvim-dap CodeLLDB setup](https://github.com/mfussenegger/nvim-dap/wiki/C-C---Rust-(via--codelldb)))
+[nvim-dap CodeLLDB setup](<https://github.com/mfussenegger/nvim-dap/wiki/C-C---Rust-(via--codelldb)>))
 
 Keep the TCP adapter loopback-bound and launches user-triggered, following the
 repository's existing [debugger trust contract](../nvim/AGENTS.md).
@@ -543,14 +543,14 @@ An adapter-owned `LspAttach` callback can apply the existing formatting-disable 
 
 ### Existing navigation and a first reading exercise
 
-| Action | Key/command |
-| --- | --- |
-| Find files / search text | `<leader>sf` / `<leader>sg` |
-| Definition / declaration | `grd` / `grD` |
-| References / implementation / type | `grr` / `gri` / `grt` |
-| Hover | `K` |
-| Document / workspace symbols | `gO` / `gW` |
-| Source/header counterpart | `:LspClangdSwitchSourceHeader` |
+| Action                             | Key/command                    |
+| ---------------------------------- | ------------------------------ |
+| Find files / search text           | `<leader>sf` / `<leader>sg`    |
+| Definition / declaration           | `grd` / `grD`                  |
+| References / implementation / type | `grr` / `gri` / `grt`          |
+| Hover                              | `K`                            |
+| Document / workspace symbols       | `gO` / `gW`                    |
+| Source/header counterpart          | `:LspClangdSwitchSourceHeader` |
 
 These are the existing dotfiles interface, not new bindings. ([Telescope mappings](/Users/desaidn/dotfiles/nvim/lua/kickstart/plugins/telescope.lua), [shared mappings](/Users/desaidn/dotfiles/nvim/lua/custom/languages/lsp.lua))
 

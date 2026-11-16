@@ -12,13 +12,13 @@ This document uses upstream tool documentation and source only.
 
 Use two complementary native LSP clients and one formatting path:
 
-| Concern | Owner | Reason |
-| --- | --- | --- |
-| Semantic analysis, navigation, completion, rename, type diagnostics, inlay hints | `basedpyright` | BasedPyright is the sole Python semantic/type client. Do not disable its language services. |
-| Lint diagnostics and Ruff quick fixes/source actions | `ruff server` | Ruff's native Rust LSP supersedes the separate `ruff-lsp` package. |
-| Fixes, formatting, import sorting on save and `<leader>f` | Conform: `ruff_fix`, `ruff_format`, `ruff_organize_imports` | One deterministic mutation path; this is Ruff's documented Conform sequence. |
-| Debug adapter process | Mason `debugpy`, registered by `nvim-dap-python` | The adapter may use an environment independent of the debug target. Mason remains the editor-tool owner. |
-| Debug target interpreter | Project-derived interpreter | The target must use the project environment and dependencies, rather than the adapter's isolated debugpy environment. |
+| Concern                                                                          | Owner                                                       | Reason                                                                                                                |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Semantic analysis, navigation, completion, rename, type diagnostics, inlay hints | `basedpyright`                                              | BasedPyright is the sole Python semantic/type client. Do not disable its language services.                           |
+| Lint diagnostics and Ruff quick fixes/source actions                             | `ruff server`                                               | Ruff's native Rust LSP supersedes the separate `ruff-lsp` package.                                                    |
+| Fixes, formatting, import sorting on save and `<leader>f`                        | Conform: `ruff_fix`, `ruff_format`, `ruff_organize_imports` | One deterministic mutation path; this is Ruff's documented Conform sequence.                                          |
+| Debug adapter process                                                            | Mason `debugpy`, registered by `nvim-dap-python`            | The adapter may use an environment independent of the debug target. Mason remains the editor-tool owner.              |
+| Debug target interpreter                                                         | Project-derived interpreter                                 | The target must use the project environment and dependencies, rather than the adapter's isolated debugpy environment. |
 
 This does not replace mypy in projects whose CI uses mypy. BasedPyright reads
 its own project configuration and reports its own diagnostic model; it neither

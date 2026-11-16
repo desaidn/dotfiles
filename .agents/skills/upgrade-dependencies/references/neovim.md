@@ -52,6 +52,7 @@ not authorize clearing shared Neovim state.
    loads (`--cmd`), using its `confirm = false` option only for the authorized
    declarations. Use the maintenance process above and explicitly await the
    selected Mason and Treesitter operations below.
+
 4. Verify the tracked lockfile is preserved, every selected plugin HEAD matches
    its locked revision, and native builds work. Reconcile every declared Mason
    package and parser with its expected version/revision, wait for installation
@@ -79,6 +80,7 @@ not authorize clearing shared Neovim state.
    not its equivalent. Use it only for an authorized upgrade after the local-edit
    check. Interactive execution can instead use `:lua vim.pack.update()` and
    `:write` in its confirmation buffer.
+
 4. Inspect the new portion of `vim.fn.stdpath('log') .. '/nvim-pack.log'`, handling
    a new/rotated log explicitly. Per-plugin failures are caught internally and
    appear under `# Error`; exit zero alone does not establish success. Inspect

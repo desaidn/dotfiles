@@ -53,26 +53,26 @@ and primary-source evidence.
 
 ### Homebrew applications
 
-| Package | Requirement in this repo |
-| --- | --- |
-| `git` | Plugin retrieval and all Git-facing tools |
-| `fish` | Primary shell; version 3.2 or newer |
-| `zsh` | Secondary/login-shell handoff |
-| `neovim` | `nvim`; version 0.12.5 or newer |
-| `herdr` | Herdr TUI, the shelved alternative workspace manager |
-| `tmux` | Fallback multiplexer; version 3.5 or newer for `extended-keys-format` |
-| `lazygit` | Git Transaction Surface; version 0.64.0 or newer for `git.diffRenderers` |
-| `hunk` | Diffing Solution and stacked working-tree and staged Review Surface; version 0.18.1 or newer for efficient concurrent watch sessions (0.12 introduced LazyGit rendering) |
-| `mise` | Language runtime manager |
-| `atuin` | Shell history integration |
-| `btop` | Interactive system resource monitor |
-| `gh` | GitHub issue workflows described under `docs/agents/` |
-| `ripgrep` | `rg`; Neovim Telescope grep |
-| `tree-sitter-cli` | `tree-sitter` 0.26.1 or newer; parser management |
-| `cmake` | C/C++ project configuration, compilation databases, and CTest |
-| `ninja` | Build runner for CMake projects that select the Ninja generator |
-| `uv` | Python project and dependency management CLI; Mise continues to own Python runtimes |
-| `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers |
+| Package                 | Requirement in this repo                                                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `git`                   | Plugin retrieval and all Git-facing tools                                                                                                                                |
+| `fish`                  | Primary shell; version 3.2 or newer                                                                                                                                      |
+| `zsh`                   | Secondary/login-shell handoff                                                                                                                                            |
+| `neovim`                | `nvim`; version 0.12.5 or newer                                                                                                                                          |
+| `herdr`                 | Herdr TUI, the shelved alternative workspace manager                                                                                                                     |
+| `tmux`                  | Fallback multiplexer; version 3.5 or newer for `extended-keys-format`                                                                                                    |
+| `lazygit`               | Git Transaction Surface; version 0.64.0 or newer for `git.diffRenderers`                                                                                                 |
+| `hunk`                  | Diffing Solution and stacked working-tree and staged Review Surface; version 0.18.1 or newer for efficient concurrent watch sessions (0.12 introduced LazyGit rendering) |
+| `mise`                  | Language runtime manager                                                                                                                                                 |
+| `atuin`                 | Shell history integration                                                                                                                                                |
+| `btop`                  | Interactive system resource monitor                                                                                                                                      |
+| `gh`                    | GitHub issue workflows described under `docs/agents/`                                                                                                                    |
+| `ripgrep`               | `rg`; Neovim Telescope grep                                                                                                                                              |
+| `tree-sitter-cli`       | `tree-sitter` 0.26.1 or newer; parser management                                                                                                                         |
+| `cmake`                 | C/C++ project configuration, compilation databases, and CTest                                                                                                            |
+| `ninja`                 | Build runner for CMake projects that select the Ninja generator                                                                                                          |
+| `uv`                    | Python project and dependency management CLI; Mise continues to own Python runtimes                                                                                      |
+| `xclip`, `wl-clipboard` | Linux X11 and Wayland clipboard providers                                                                                                                                |
 
 On macOS, the setup also uses the `ghostty`, `font-jetbrains-mono`,
 `herdr-app`, `raycast`, and `flashspace` casks. They are macOS-only; the
@@ -319,11 +319,11 @@ version requirements change.
 [agent development workflow](docs/agents/development-workflow.md) into these
 global instruction locations:
 
-| Harness | Default managed path | Configured location |
-| --- | --- | --- |
-| Codex | `~/.codex/AGENTS.md` | `$CODEX_HOME/AGENTS.md` when `CODEX_HOME` is set |
-| Pi | `~/.pi/agent/AGENTS.md` | `$PI_CODING_AGENT_DIR/AGENTS.md` when `PI_CODING_AGENT_DIR` is set |
-| Claude Code | `~/.claude/rules/development-workflow.md` | Fixed global rules location |
+| Harness     | Default managed path                      | Configured location                                                |
+| ----------- | ----------------------------------------- | ------------------------------------------------------------------ |
+| Codex       | `~/.codex/AGENTS.md`                      | `$CODEX_HOME/AGENTS.md` when `CODEX_HOME` is set                   |
+| Pi          | `~/.pi/agent/AGENTS.md`                   | `$PI_CODING_AGENT_DIR/AGENTS.md` when `PI_CODING_AGENT_DIR` is set |
+| Claude Code | `~/.claude/rules/development-workflow.md` | Fixed global rules location                                        |
 
 The harnesses load these instructions automatically. All links share one
 source, so editing the workflow updates the installed instructions. No Herdr
@@ -336,15 +336,15 @@ global skill directories. Skills follow the open
 [Agent Skills](https://agentskills.io) format, so one directory serves every
 harness, and agents load a skill only when its description matches the task:
 
-| Harness | Global skill directory |
-| --- | --- |
+| Harness      | Global skill directory    |
+| ------------ | ------------------------- |
 | Codex and Pi | `~/.agents/skills/<name>` |
-| Claude Code | `~/.claude/skills/<name>` |
+| Claude Code  | `~/.claude/skills/<name>` |
 
-| Skill | Purpose |
-| --- | --- |
-| [`development-review`](docs/agents/skills/development-review/SKILL.md) | Review, findings, adversarial review on request, approval, landing, and optional delivery as a code review submission or GitHub pull request, with one procedure on every machine |
-| [`herdr-app`](docs/agents/skills/herdr-app/SKILL.md) | Driving Herdr app and `hc`: finding the agent's machine and tab, showing a tab when asked, starting and messaging agents, and harness-specific pitfalls |
+| Skill                                                                  | Purpose                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`development-review`](docs/agents/skills/development-review/SKILL.md) | Review, findings, adversarial review on request, approval, landing, and optional delivery as a code review submission or GitHub pull request, with one procedure on every machine                               |
+| [`herdr-app`](docs/agents/skills/herdr-app/SKILL.md)                   | Driving Herdr app and `hc`: finding the agent's machine and tab, showing a tab when asked, starting and messaging agents, and harness-specific pitfalls                                                         |
 | [`parallel-worktrees`](docs/agents/skills/parallel-worktrees/SKILL.md) | Running parallel worktrees from a clean root checkout: independent ideas, or a manager and workers on a coordinated feature with a canonical WIP branch, review pieces, testing, recovery, handoff, and cleanup |
 
 An existing skill with the same name, or a redirected skill directory, stops

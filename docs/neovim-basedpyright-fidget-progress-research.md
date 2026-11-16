@@ -82,11 +82,11 @@ workspaces with their committed BasedPyright include/exclude configuration.
 
 ### Golden configurations reviewed
 
-| Source | Relevant practice | Result |
-| --- | --- | --- |
-| [BasedPyright's official Neovim 0.11+ example](https://docs.basedpyright.com/latest/configuration/language-server-settings/#neovim) | Uses ordinary server settings and `diagnosticMode = "openFilesOnly"`; it does not discuss the Neovim 0.12 pull-diagnostics interaction. | Good generic baseline, but not a whole-workspace Neovim 0.12 configuration. |
-| [nvim-lspconfig's BasedPyright definition](https://github.com/neovim/nvim-lspconfig/blob/master/lsp/basedpyright.lua) | Uses the normal command, Python filetype, project roots, and `openFilesOnly`. It does not set initialization options. | Confirms the inherited default that the high-fidelity inventory needed to override explicitly. |
-| [kickstart.nvim](https://github.com/nvim-lua/kickstart.nvim/blob/master/init.lua#L565-L567) | Uses Fidget with its upstream defaults as a generic LSP-status UI; Python is intentionally only an example/commented server there. | Confirms Fidget itself was not customized incorrectly; the missing policy is in the Python diagnostic path. |
+| Source                                                                                                                              | Relevant practice                                                                                                                       | Result                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| [BasedPyright's official Neovim 0.11+ example](https://docs.basedpyright.com/latest/configuration/language-server-settings/#neovim) | Uses ordinary server settings and `diagnosticMode = "openFilesOnly"`; it does not discuss the Neovim 0.12 pull-diagnostics interaction. | Good generic baseline, but not a whole-workspace Neovim 0.12 configuration.                                 |
+| [nvim-lspconfig's BasedPyright definition](https://github.com/neovim/nvim-lspconfig/blob/master/lsp/basedpyright.lua)               | Uses the normal command, Python filetype, project roots, and `openFilesOnly`. It does not set initialization options.                   | Confirms the inherited default that the high-fidelity inventory needed to override explicitly.              |
+| [kickstart.nvim](https://github.com/nvim-lua/kickstart.nvim/blob/master/init.lua#L565-L567)                                         | Uses Fidget with its upstream defaults as a generic LSP-status UI; Python is intentionally only an example/commented server there.      | Confirms Fidget itself was not customized incorrectly; the missing policy is in the Python diagnostic path. |
 
 These samples establish the baseline but do not yet account for the Neovim
 0.12 pull-diagnostics interaction. A current Neovim 0.12.2 community report
@@ -99,10 +99,10 @@ BasedPyright diagnostic report](https://www.reddit.com/r/neovim/comments/1t64ymg
 The regression harness used a real BasedPyright client, the production Fidget
 configuration, and a two-file Python workspace:
 
-| Configuration | Startup progress | Progress after edit/delete | Live invalid-type diagnostic |
-| --- | --- | --- | --- |
-| inherited pull diagnostics + `openFilesOnly` | repeated cycles | repeated cycles | yes |
-| `disablePullDiagnostics = true` + `workspace` | one begin/report/end | none | yes |
+| Configuration                                 | Startup progress     | Progress after edit/delete | Live invalid-type diagnostic |
+| --------------------------------------------- | -------------------- | -------------------------- | ---------------------------- |
+| inherited pull diagnostics + `openFilesOnly`  | repeated cycles      | repeated cycles            | yes                          |
+| `disablePullDiagnostics = true` + `workspace` | one begin/report/end | none                       | yes                          |
 
 Ruff remained attached in the successful case, ruling out the auxiliary LSP as
 the source. Current official Pyright was also tested under the same Neovim
@@ -111,14 +111,14 @@ rolling back the BasedPyright package is not the fix.
 
 ## Rejected alternatives
 
-| Alternative | Why it is not the recommended fix |
-| --- | --- |
-| `progress.ignore = { 'basedpyright' }` | Hides both useful startup analysis and noisy edit progress; it treats the presentation symptom rather than restoring the intended diagnostic path. |
-| `progress.suppress_on_insert = true` | Fidget documents it as Insert-mode-only suppression. A Normal-mode delete still opens the popup. |
-| `done_ttl = 0` or a custom `format_message` | Hides or relabels the symptom after the task has been reported; it does not establish a meaningful progress contract. |
-| `window.workDoneProgress = false` for BasedPyright | Removes both startup and edit progress and makes the client inaccurately advertise a capability; BasedPyright still analyzes and switches to legacy notifications. |
-| Disabling diagnostics | Sacrifices live feedback and conflicts with the high-fidelity requirement. |
-| Stateful "show the first progress event only" filter | Startup and edit sequences use the same protocol shape, so this is an unreliable custom policy with no semantic boundary. |
+| Alternative                                          | Why it is not the recommended fix                                                                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `progress.ignore = { 'basedpyright' }`               | Hides both useful startup analysis and noisy edit progress; it treats the presentation symptom rather than restoring the intended diagnostic path.                 |
+| `progress.suppress_on_insert = true`                 | Fidget documents it as Insert-mode-only suppression. A Normal-mode delete still opens the popup.                                                                   |
+| `done_ttl = 0` or a custom `format_message`          | Hides or relabels the symptom after the task has been reported; it does not establish a meaningful progress contract.                                              |
+| `window.workDoneProgress = false` for BasedPyright   | Removes both startup and edit progress and makes the client inaccurately advertise a capability; BasedPyright still analyzes and switches to legacy notifications. |
+| Disabling diagnostics                                | Sacrifices live feedback and conflicts with the high-fidelity requirement.                                                                                         |
+| Stateful "show the first progress event only" filter | Startup and edit sequences use the same protocol shape, so this is an unreliable custom policy with no semantic boundary.                                          |
 
 ## Validation for a future implementation
 

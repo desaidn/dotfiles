@@ -68,19 +68,19 @@ not require that separate architectural refactor to be completed first.
 This inventory records existing repository guidance, not newly executed checks
 or a claim that every application has a safe standalone validator.
 
-| Configuration family | Existing foundation and remaining investigation |
-| --- | --- |
-| Lua and Neovim | LuaLS, StyLua, isolated Lua specs, installed-plugin tests, and real-PTY Hunk tests; strengthen interface annotations and unify editor/CLI settings. |
-| Bash/POSIX shell | Mason-owned ShellCheck and shfmt, syntax checks, installer and performance harnesses; define tracked-file coverage and shell dialects. |
-| Fish | `fish -n` and `fish_indent` are documented; real-shell integration tests already exist. |
-| Zsh | Native shell parsing and real-shell integration tests; do not treat ShellCheck's Bash/sh analysis as Zsh support. Verify formatter dialect support in the installed version. |
-| Herdr | [`herdr/AGENTS.md`](../../herdr/AGENTS.md) documents `herdr config check`; confirm how to target the checkout's file independently of live/user configuration. Reload is a separate mutation. |
-| tmux | [`tmux/AGENTS.md`](../../tmux/AGENTS.md) documents a fresh server, unique socket, and harmless pane. Validation must never use or terminate the user's active server. |
-| Ghostty, Hunk, and LazyGit | Investigate upstream configuration validation and file-selection options; their repository guides do not currently define standalone validation commands. Report gaps explicitly. |
-| JSON, YAML, and TOML | Existing editor support can help, but syntax parsing alone does not validate an application's accepted keys or values. Prefer native validation or supported schemas and name the coverage provided. |
-| Brewfile and Mise manifest | Installer fixtures already verify inventory and pins. Keep configuration validation separate from package installation or upgrade. |
-| Rex | [`rex/macos.sh`](../../rex/macos.sh) changes macOS preferences. Check its shell safely; never execute it against real preferences as an automatic validation step. |
-| Documentation and repository control files | Decide which link, schema, or formatting checks add useful coverage, and record exclusions rather than silently omitting these files. |
+| Configuration family                       | Existing foundation and remaining investigation                                                                                                                                                      |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lua and Neovim                             | LuaLS, StyLua, isolated Lua specs, installed-plugin tests, and real-PTY Hunk tests; strengthen interface annotations and unify editor/CLI settings.                                                  |
+| Bash/POSIX shell                           | Mason-owned ShellCheck and shfmt, syntax checks, installer and performance harnesses; define tracked-file coverage and shell dialects.                                                               |
+| Fish                                       | `fish -n` and `fish_indent` are documented; real-shell integration tests already exist.                                                                                                              |
+| Zsh                                        | Native shell parsing and real-shell integration tests; do not treat ShellCheck's Bash/sh analysis as Zsh support. Verify formatter dialect support in the installed version.                         |
+| Herdr                                      | [`herdr/AGENTS.md`](../../herdr/AGENTS.md) documents `herdr config check`; confirm how to target the checkout's file independently of live/user configuration. Reload is a separate mutation.        |
+| tmux                                       | [`tmux/AGENTS.md`](../../tmux/AGENTS.md) documents a fresh server, unique socket, and harmless pane. Validation must never use or terminate the user's active server.                                |
+| Ghostty, Hunk, and LazyGit                 | Investigate upstream configuration validation and file-selection options; their repository guides do not currently define standalone validation commands. Report gaps explicitly.                    |
+| JSON, YAML, and TOML                       | Existing editor support can help, but syntax parsing alone does not validate an application's accepted keys or values. Prefer native validation or supported schemas and name the coverage provided. |
+| Brewfile and Mise manifest                 | Installer fixtures already verify inventory and pins. Keep configuration validation separate from package installation or upgrade.                                                                   |
+| Rex                                        | [`rex/macos.sh`](../../rex/macos.sh) changes macOS preferences. Check its shell safely; never execute it against real preferences as an automatic validation step.                                   |
+| Documentation and repository control files | Decide which link, schema, or formatting checks add useful coverage, and record exclusions rather than silently omitting these files.                                                                |
 
 ## Research and candidate approach
 
@@ -240,6 +240,6 @@ to justify implementation changes.
 Run the full migrated installer, shell, Neovim Lua, diagnostics, performance,
 and Hunk PTY suites plus the selected native configuration checks. Record which
 platforms and installed versions actually ran. Use the existing
-[dependency inventory](../../README.md#dependency-ownership),
+[dependency inventory](../../AGENTS.md#dependency-ownership),
 [Neovim constraints](../../nvim/AGENTS.md), and
 [TODO lifecycle](README.md#lifecycle) as the maintenance owners.

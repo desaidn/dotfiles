@@ -184,15 +184,15 @@ Lua diagnostics also pass this implementation.
 
 ## Documentation corrections
 
-| Owner | Correction | Status |
-| --- | --- | --- |
-| [tmux guidance](../tmux/AGENTS.md) | Replace the shared-server syntax check, which may skip reading `-f`, with isolated validation. Remove unscoped `kill-server` from routine testing guidance. The [tmux manual](https://github.com/tmux/tmux/blob/master/tmux.1) documents startup-only config loading and destruction of all sessions by `kill-server`. | Updated; documented command passed on an isolated server |
-| [Neovim usage](../nvim/README.md) | Document Neo-tree's actual `<` and `>` source-switching keys rather than `<Tab>`, and clarify path-copy behavior after the fix. [Pinned defaults](https://github.com/nvim-neo-tree/neo-tree.nvim/blob/83e7a2982fd12b9c3d35bc39dd5877cd91a02a61/lua/neo-tree/defaults.lua). | Updated |
-| [Neovim usage and constraints](../nvim/AGENTS.md) | Identify Java's FileType DAP initialization alongside Rust's attachment-time exception, and describe the corrected Python launch context. | Updated |
-| [Dependency research](dependency-research.md) | Correct the claim that a Brew receipt alone satisfies font validation. The installer requires a matching font file. | Updated |
-| [Dependency research](dependency-research.md) | Reconcile the omitted CMake/Ninja entries and narrow the native-toolchain ownership wording. Link the root inventory rather than maintaining another supposedly complete package list. | Updated |
-| [Neovim bootstrap comment](../nvim/init.lua) | Attribute parser update hooks to `custom/languages/treesitter.lua`, not `custom/lib/pack.lua`. | Updated |
-| [Language research](lsp-dap-research.md) | Distinguish historical observations from current behavior and link maintained usage. This documentation drift is already tracked in [primary language support](todos/09-complete-primary-language-support.md); preserve its remaining work. | Historical scope clarified; broader acceptance work remains tracked |
+| Owner                                             | Correction                                                                                                                                                                                                                                                                                                             | Status                                                              |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [tmux guidance](../tmux/AGENTS.md)                | Replace the shared-server syntax check, which may skip reading `-f`, with isolated validation. Remove unscoped `kill-server` from routine testing guidance. The [tmux manual](https://github.com/tmux/tmux/blob/master/tmux.1) documents startup-only config loading and destruction of all sessions by `kill-server`. | Updated; documented command passed on an isolated server            |
+| [Neovim usage](../nvim/README.md)                 | Document Neo-tree's actual `<` and `>` source-switching keys rather than `<Tab>`, and clarify path-copy behavior after the fix. [Pinned defaults](https://github.com/nvim-neo-tree/neo-tree.nvim/blob/83e7a2982fd12b9c3d35bc39dd5877cd91a02a61/lua/neo-tree/defaults.lua).                                             | Updated                                                             |
+| [Neovim usage and constraints](../nvim/AGENTS.md) | Identify Java's FileType DAP initialization alongside Rust's attachment-time exception, and describe the corrected Python launch context.                                                                                                                                                                              | Updated                                                             |
+| [Dependency research](dependency-research.md)     | Correct the claim that a Brew receipt alone satisfies font validation. The installer requires a matching font file.                                                                                                                                                                                                    | Updated                                                             |
+| [Dependency research](dependency-research.md)     | Reconcile the omitted CMake/Ninja entries and narrow the native-toolchain ownership wording. Link the root inventory rather than maintaining another supposedly complete package list.                                                                                                                                 | Updated                                                             |
+| [Neovim bootstrap comment](../nvim/init.lua)      | Attribute parser update hooks to `custom/languages/treesitter.lua`, not `custom/lib/pack.lua`.                                                                                                                                                                                                                         | Updated                                                             |
+| [Language research](lsp-dap-research.md)          | Distinguish historical observations from current behavior and link maintained usage. This documentation drift is already tracked in [primary language support](todos/09-complete-primary-language-support.md); preserve its remaining work.                                                                            | Historical scope clarified; broader acceptance work remains tracked |
 
 ## Dependency proposals considered and retained
 
@@ -200,13 +200,13 @@ These were discussion options, not defects. The user needs the dependencies and
 has directed that all remain. This audit does not authorize their removal or a
 replacement implementation.
 
-| Proposal considered | Evidence and tradeoff | Direction |
-| --- | --- | --- |
-| Choose one Prettier runner | Adapters provision `prettierd` and `prettier` and prefer the first available. [Prettierd](https://github.com/fsouza/prettierd) provides daemon-based speed; the separate executable is an availability fallback. | Retain both. |
-| Replace nvim-autopairs with mini.pairs | The complete mini.nvim library is already installed; [mini.pairs](https://github.com/nvim-mini/mini.pairs) provides basic pairing but differs in typing behavior. | Retain nvim-autopairs and mini.nvim. |
-| Consolidate FFF and Telescope | [Telescope](https://github.com/nvim-telescope/telescope.nvim) can perform ordinary file/grep search; [FFF](https://github.com/dmtrKovalenko/fff) adds indexing, frequency/recency ranking, and fuzzy content search, with native binary installation. | Retain both and their current responsibilities. |
-| Remove telescope-fzf-native | It is an active optional accelerator, with additional [query operators](https://github.com/nvim-telescope/telescope-fzf-native.nvim/blob/b25b749b9db64d375d782094e2b9dce53ad53a40/README.md), not unused code. | Retain the plugin and build hook. |
-| Omit desktop clipboard packages on headless Linux | OSC 52 supplies remote copying, while X11 and Wayland providers cover desktop sessions. Selective installation would change the explicit package policy. | Retain both providers and existing installation requirements. |
+| Proposal considered                               | Evidence and tradeoff                                                                                                                                                                                                                                 | Direction                                                     |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Choose one Prettier runner                        | Adapters provision `prettierd` and `prettier` and prefer the first available. [Prettierd](https://github.com/fsouza/prettierd) provides daemon-based speed; the separate executable is an availability fallback.                                      | Retain both.                                                  |
+| Replace nvim-autopairs with mini.pairs            | The complete mini.nvim library is already installed; [mini.pairs](https://github.com/nvim-mini/mini.pairs) provides basic pairing but differs in typing behavior.                                                                                     | Retain nvim-autopairs and mini.nvim.                          |
+| Consolidate FFF and Telescope                     | [Telescope](https://github.com/nvim-telescope/telescope.nvim) can perform ordinary file/grep search; [FFF](https://github.com/dmtrKovalenko/fff) adds indexing, frequency/recency ranking, and fuzzy content search, with native binary installation. | Retain both and their current responsibilities.               |
+| Remove telescope-fzf-native                       | It is an active optional accelerator, with additional [query operators](https://github.com/nvim-telescope/telescope-fzf-native.nvim/blob/b25b749b9db64d375d782094e2b9dce53ad53a40/README.md), not unused code.                                        | Retain the plugin and build hook.                             |
+| Omit desktop clipboard packages on headless Linux | OSC 52 supplies remote copying, while X11 and Wayland providers cover desktop sessions. Selective installation would change the explicit package policy.                                                                                              | Retain both providers and existing installation requirements. |
 
 The installer/uninstaller safety guards remain self-contained as required by
 project policy. Repeated link-inventory design is already an open question in
@@ -230,12 +230,12 @@ documentation-link checks, and `git diff --check`. Test environments must keep
 temporary state separate from the user's running tools. Additional checks will
 follow only when changed behavior or failures justify them.
 
-| Step | Result |
-| --- | --- |
-| Create the research and direction document before code edits | Complete |
-| Reproduce and fix the four code defects | Implemented, including the coroutine/workspace-variable combination found during review; focused regressions pass |
-| Correct documentation in its existing owners | Complete |
-| Run required validation and record outcomes here | Installer suite, all 23 Neovim harnesses, Lua diagnostics, tmux positive/negative checks, syntax and formatting checks pass; affected validation repeated after the asynchronous correction |
+| Step                                                         | Result                                                                                                                                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create the research and direction document before code edits | Complete                                                                                                                                                                                    |
+| Reproduce and fix the four code defects                      | Implemented, including the coroutine/workspace-variable combination found during review; focused regressions pass                                                                           |
+| Correct documentation in its existing owners                 | Complete                                                                                                                                                                                    |
+| Run required validation and record outcomes here             | Installer suite, all 23 Neovim harnesses, Lua diagnostics, tmux positive/negative checks, syntax and formatting checks pass; affected validation repeated after the asynchronous correction |
 
 The committed snapshot, Hunk presentation, review findings, and any subsequent
 approval or landing decision are recorded in the conversation under the shared

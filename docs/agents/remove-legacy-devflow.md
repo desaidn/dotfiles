@@ -43,13 +43,13 @@ this task. Do not run old `devflow init`; guard-era versions install Git hooks.
 
 The final installer used these paths regardless of the source checkout's name:
 
-| Item | Known dotfiles-managed location |
-| --- | --- |
-| Ownership receipt | `$HOME/.local/share/dotfiles/devflow-tool.receipt` |
-| Private uv tool root | `$HOME/.local/share/dotfiles/uv-tools` |
-| Dedicated environment | `<private-root>/dotfiles-devflow` |
-| Public executables | `$HOME/.local/bin/devflow`; older versions also installed `devflow-pre-push` and `devflow-reference-transaction` |
-| Editable source | `<old-checkout>/tools/devflow`, or earlier `<old-checkout>/devflow` |
+| Item                  | Known dotfiles-managed location                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Ownership receipt     | `$HOME/.local/share/dotfiles/devflow-tool.receipt`                                                               |
+| Private uv tool root  | `$HOME/.local/share/dotfiles/uv-tools`                                                                           |
+| Dedicated environment | `<private-root>/dotfiles-devflow`                                                                                |
+| Public executables    | `$HOME/.local/bin/devflow`; older versions also installed `devflow-pre-push` and `devflow-reference-transaction` |
+| Editable source       | `<old-checkout>/tools/devflow`, or earlier `<old-checkout>/devflow`                                              |
 
 Read receipts as data; never source or evaluate them. Use `lstat`/`lexists` or
 equivalent checks so dangling links remain visible. Save evidence before removal.
@@ -60,11 +60,11 @@ The dotfiles receipt contains exactly three lines: a marker, the absolute
 editable-source path, and the absolute Python-interpreter path. Recognized
 historical markers are:
 
-| Marker | Expected completed installation |
-| --- | --- |
+| Marker                                                 | Expected completed installation                                |
+| ------------------------------------------------------ | -------------------------------------------------------------- |
 | `dotfiles-devflow-v1` or `dotfiles-devflow-pending-v1` | `devflow`, `devflow-pre-push`, `devflow-reference-transaction` |
-| `dotfiles-devflow-v2` or `dotfiles-devflow-pending-v2` | Only `devflow` |
-| `dotfiles-devflow-migrating-v2` | Interrupted v1-to-v2 transition; inspect actual inventory |
+| `dotfiles-devflow-v2` or `dotfiles-devflow-pending-v2` | Only `devflow`                                                 |
+| `dotfiles-devflow-migrating-v2`                        | Interrupted v1-to-v2 transition; inspect actual inventory      |
 
 A pending/migrating marker does not establish that installation completed.
 For a complete owned installation, check all of the following:

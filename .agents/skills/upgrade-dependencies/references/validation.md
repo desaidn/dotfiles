@@ -4,16 +4,16 @@ Select checks from the current root/tool `AGENTS.md` files. Version-only updates
 still change executable behavior; compare receipts, active executables, and plugin
 HEADs rather than relying solely on successful downloads.
 
-| Changed surface | Required or relevant evidence |
-| --- | --- |
-| Brewfile, Mise manifest, installer, or activation templates | `tests/install_test.sh`, required by root AGENTS |
-| Broad Neovim plugin/runtime/native-library updates | Full documented Lua `*_spec.lua` suite, Lua diagnostics, fresh configured startup and `:checkhealth` |
-| A narrow editor-tool update | Installed-version verification and the matching language/integration checks from `nvim/AGENTS.md` |
-| Hunk or terminal integration | The real-PTY Hunk regression documented in `nvim/AGENTS.md`; use only its isolated fixtures and sessions |
-| Fish/zsh or shell integration | `nvim --clean --headless -l tests/shell_test.lua`, plus applicable tool instructions; report any skipped Python or Ghostty integration checks |
-| tmux | The isolated server/config check in `tmux/AGENTS.md` |
-| Herdr | `herdr config check` and compatible client/server verification; restarting a live workspace is separate from checking the installed binary |
-| Other selected applications/casks | Installed version/ownership and an appropriate non-disruptive capability/config check; report anything that requires a user restart |
+| Changed surface                                             | Required or relevant evidence                                                                                                                 |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Brewfile, Mise manifest, installer, or activation templates | `tests/install_test.sh`, required by root AGENTS                                                                                              |
+| Broad Neovim plugin/runtime/native-library updates          | Full documented Lua `*_spec.lua` suite, Lua diagnostics, fresh configured startup and `:checkhealth`                                          |
+| A narrow editor-tool update                                 | Installed-version verification and the matching language/integration checks from `nvim/AGENTS.md`                                             |
+| Hunk or terminal integration                                | The real-PTY Hunk regression documented in `nvim/AGENTS.md`; use only its isolated fixtures and sessions                                      |
+| Fish/zsh or shell integration                               | `nvim --clean --headless -l tests/shell_test.lua`, plus applicable tool instructions; report any skipped Python or Ghostty integration checks |
+| tmux                                                        | The isolated server/config check in `tmux/AGENTS.md`                                                                                          |
+| Herdr                                                       | `herdr config check` and compatible client/server verification; restarting a live workspace is separate from checking the installed binary    |
+| Other selected applications/casks                           | Installed version/ownership and an appropriate non-disruptive capability/config check; report anything that requires a user restart           |
 
 For the full Neovim Lua suite, use the documented zsh glob from the repository
 root in the selected runtime environment:
