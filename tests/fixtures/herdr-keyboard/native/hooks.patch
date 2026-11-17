@@ -1,0 +1,54 @@
+diff --git a/src/terminal.rs b/src/terminal.rs
+index d480e5d..9c3f2f3 100644
+--- a/src/terminal.rs
++++ b/src/terminal.rs
+@@ -296,6 +296,11 @@ fn track_mouse_button(buttons: &mut Vec<MouseButton>, action: GhosttyMouseAction
+ }
+ 
+ impl TerminalView {
++    #[cfg(test)]
++    pub(crate) fn personal_fixture_output(&mut self, cx: &mut Context<Self>) {
++        self.grid.borrow_mut().vt.write(b"one two three four five\r\nsecond terminal line\r\ncopy this useful text");
++        cx.notify();
++    }
+     /// Waits for pane layout before replay, bounded so an unpainted view still attaches.
+     pub fn attach(core: Arc<Core>, address: String, size_hint: (u16, u16), cx: &mut Context<Self>) -> Self {
+         let attach_deadline = cx.background_executor().now() + Duration::from_millis(100);
+@@ -984,6 +989,8 @@ impl TerminalView {
+     }
+ 
+     fn key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
++        #[cfg(test)]
++        PERSONAL_NATIVE_KEYS.with(|keys| keys.borrow_mut().push(ev.keystroke.key.clone()));
+         if self.find_field_focused(window, cx) && ev.keystroke.key == "escape" {
+             self.close_search(window, cx);
+             cx.stop_propagation();
+@@ -1204,6 +1211,16 @@ impl TerminalView {
+     }
+ }
+ 
++#[cfg(test)]
++thread_local! {
++    static PERSONAL_NATIVE_KEYS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
++}
++
++#[cfg(test)]
++pub(crate) fn personal_fixture_key_count() -> usize {
++    PERSONAL_NATIVE_KEYS.with(|keys| keys.borrow().len())
++}
++
+ #[derive(Debug, PartialEq)]
+ pub enum ScrollTarget {
+     Lines(isize),
+diff --git a/src/window.rs b/src/window.rs
+index 41c07e8..a62ebc9 100644
+--- a/src/window.rs
++++ b/src/window.rs
+@@ -5335,6 +5335,7 @@ fn reconcile_core_update_error(dismissed: &mut Option<String>, core: &crate::upd
+ 
+ #[cfg(test)]
+ mod tests {
++    include!(concat!(env!("HERDR_NATIVE_FIXTURE_DIR"), "/lifecycle.rs"));
+     use gpui::{div, point, px, size, Context, IntoElement, Render, TestAppContext, Window};
+     use gpui::prelude::*;
+ 

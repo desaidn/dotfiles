@@ -1,0 +1,9 @@
+{
+  "place": "none",
+  "title": "Keyboard guide",
+  "overlay": {
+    "kind": "dialog",
+    "width": 820,
+    "height": 480
+  }
+}

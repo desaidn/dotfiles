@@ -89,6 +89,17 @@ HERDR_APP_DIRECTORY="$(normalize_agent_directory "${HERDR_APP_HOME-$HOME/.config
 HERDR_APP_FILES=(
     settings.json
     themes/terminal.json
+    keys.json
+    mods/keyboard-guide/mod.json
+    mods/keyboard-guide/main.js
+    mods/keyboard-tabs/mod.json
+    mods/keyboard-tabs/main.js
+    mods/keyboard-agents/mod.json
+    mods/keyboard-agents/main.js
+    mods/keyboard-status/mod.json
+    mods/keyboard-status/main.js
+    layouts/keyboard.svg
+    layouts/keyboard.json
 )
 # Global skills shared by Codex and pi (~/.agents/skills) and Claude Code.
 SKILL_SOURCES=(
@@ -551,8 +562,8 @@ install_macos_casks() {
         die "Herdr app at '$HERDR_APP_BIN' could not report its version; repair the application and rerun"
     version="${output%%$'\n'*}"
     version="${version#herdr-app }"
-    version_at_least "$version" "0.1.12" ||
-        die "Herdr app 0.1.12+ is required for this configuration (found '${version:-unknown}'); update Herdr app and rerun"
+    version_at_least "$version" "0.1.16" ||
+        die "Herdr app 0.1.16+ is required for this configuration (found '${version:-unknown}'); update Herdr app and rerun"
 
     install_macos_app Raycast raycast
     install_macos_app FlashSpace flashspace
@@ -931,7 +942,10 @@ preflight_links() {
 
 preflight_herdr_app_directory() {
     local directory redirected protected physical_directory physical_protected
-    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes"
+    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes" \
+        "$HERDR_APP_DIRECTORY/layouts" "$HERDR_APP_DIRECTORY/mods" \
+        "$HERDR_APP_DIRECTORY/mods/keyboard-guide" "$HERDR_APP_DIRECTORY/mods/keyboard-tabs" \
+        "$HERDR_APP_DIRECTORY/mods/keyboard-agents" "$HERDR_APP_DIRECTORY/mods/keyboard-status"
     do
         validate_agent_directory "$directory" HERDR_APP_HOME
         redirected="$(redirected_agent_parent "$directory")"
@@ -976,7 +990,9 @@ initialize_local_template() {
 
 link_herdr_app_configs() {
     local file
-    mkdir -p "$HERDR_APP_DIRECTORY/themes"
+    mkdir -p "$HERDR_APP_DIRECTORY/themes" "$HERDR_APP_DIRECTORY/layouts" \
+        "$HERDR_APP_DIRECTORY/mods/keyboard-guide" "$HERDR_APP_DIRECTORY/mods/keyboard-tabs" \
+        "$HERDR_APP_DIRECTORY/mods/keyboard-agents" "$HERDR_APP_DIRECTORY/mods/keyboard-status"
     for file in "${HERDR_APP_FILES[@]}"; do
         link "herdr-app/$file" "$HERDR_APP_DIRECTORY/$file"
     done

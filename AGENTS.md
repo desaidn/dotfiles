@@ -77,7 +77,7 @@ and primary-source evidence.
 On macOS, the setup also uses the `ghostty`, `font-jetbrains-mono`,
 `herdr-app`, `raycast`, and `flashspace` casks. They are macOS-only; the
 installer provisions casks separately from the Brewfile to preserve compatible
-manual installations. Ghostty 1.3.0 and Herdr app 0.1.12 are the validated
+manual installations. Ghostty 1.3.0 and Herdr app 0.1.16 are the validated
 configuration baselines the installer enforces; newer versions are accepted.
 Herdr app's cask requires Apple Silicon; the app owns installation and updates
 of its Herdr core dependency, and the existing `herdr` Homebrew formula
@@ -159,6 +159,13 @@ existing runtime. The following exceptions serve specific tools or tests:
   `Brewfile`, JSON/TOML/YAML configuration, and browser-rendered HTML/JavaScript
   reports. Homebrew owns its Ruby runtime; the repository does not add a separate
   Ruby installation.
+- Herdr app mods use the app's native JavaScript API. The keyboard guide's
+  focused JavaScript test fixture uses the existing Mise-owned Node runtime
+  with app API doubles; a shell script owns test orchestration.
+  Its opt-in native Rust fixture exercises Herdr's real terminal view and
+  keyboard routing in GPUI's isolated test platform. Mise owns Rust; the
+  prepared upstream build supplies test-only Zig 0.16 and cached dependencies.
+  The native runner installs nothing and never connects to the user's core.
 - The installer embeds C/C++ probes to check real compilation and standard-library
   linking. The uninstaller's embedded C helper calls the platform's exclusive
   rename operation for safe restoration. Both use the platform toolchain.
@@ -307,7 +314,7 @@ restate the workflow's rules here or in other repo docs; link to it.
 - **Neovim ↔ Terminal tools**: Neovim-owned terminal tools use `nvim/lua/custom/lib/terminal_tool.lua`: one persistent Tool Tab per selected tool instance, singleton by default and keyed by canonical Git checkout root for Hunk, with flatten.nvim for Editor Handoff and host tmux prefix and pane navigation kept upstream when using the fallback
 - **Shell ↔ Workspace manager**: Herdr app (and shelved Ghostty) launch the system shell; interactive zsh hands off to Fish with `exec fish`; Herdr app is the daily workspace, with Herdr TUI or tmux started directly when chosen
 - **Runtime Management**: Mise owns language runtimes; Mason owns editor tooling
-- **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead, and Ghostty keeps its native word-navigation shortcuts. Herdr app keeps its native macOS keymap, including Option combinations.
+- **Keybinding Constraints**: Option/Alt is reserved for FlashSpace workspace management; terminal shortcuts use Cmd or Ctrl modifiers instead, and Ghostty keeps its native word-navigation shortcuts. Herdr app uses `Ctrl-b` as its single command entry point; terminal clipboard and text-editing shortcuts remain native. See the [Herdr app key guide](herdr-app/README.md#keys).
 
 Keep the macOS-first setup Linux-compatible where practical. Update the
 [dependency inventory](#dependency-ownership) when ownership or

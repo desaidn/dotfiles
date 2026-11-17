@@ -476,7 +476,7 @@ case "${0##*/}" in
         if [[ -f "$DOTFILES_TEST_STATE/herdr-app-version" ]]; then
             printf 'herdr-app %s\n' "$(cat "$DOTFILES_TEST_STATE/herdr-app-version")"
         else
-            printf 'herdr-app 0.1.12\n'
+            printf 'herdr-app 0.1.16\n'
         fi
         ;;
     *)
@@ -785,13 +785,24 @@ assert_workflow_links() {
 }
 
 assert_herdr_app_links() {
-    local file
-    for file in settings.json themes/terminal.json
+    local file directory
+    for file in settings.json themes/terminal.json keys.json \
+        mods/keyboard-guide/main.js mods/keyboard-guide/mod.json \
+        mods/keyboard-tabs/main.js mods/keyboard-tabs/mod.json \
+        mods/keyboard-agents/main.js mods/keyboard-agents/mod.json \
+        mods/keyboard-status/main.js mods/keyboard-status/mod.json \
+        layouts/keyboard.json layouts/keyboard.svg
     do
         assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/$file" "$REPO_ROOT/herdr-app/$file"
     done
-    [[ -d "$FIXTURE_HERDR_APP_DIRECTORY/themes" && ! -L "$FIXTURE_HERDR_APP_DIRECTORY/themes" ]] ||
-        fail "Herdr app theme container must remain a real directory"
+    for directory in "$FIXTURE_HERDR_APP_DIRECTORY" "$FIXTURE_HERDR_APP_DIRECTORY/themes" \
+        "$FIXTURE_HERDR_APP_DIRECTORY/layouts" "$FIXTURE_HERDR_APP_DIRECTORY/mods" \
+        "$FIXTURE_HERDR_APP_DIRECTORY/mods/keyboard-guide" "$FIXTURE_HERDR_APP_DIRECTORY/mods/keyboard-tabs" \
+        "$FIXTURE_HERDR_APP_DIRECTORY/mods/keyboard-agents" "$FIXTURE_HERDR_APP_DIRECTORY/mods/keyboard-status"
+    do
+        [[ -d "$directory" && ! -L "$directory" ]] ||
+            fail "Herdr app container must remain a real directory: $directory"
+    done
 }
 
 assert_non_mise_links() {
@@ -819,7 +830,12 @@ assert_common_links() {
 
 assert_common_links_removed() {
     local file
-    for file in settings.json themes/terminal.json
+    for file in settings.json themes/terminal.json keys.json \
+        mods/keyboard-guide/main.js mods/keyboard-guide/mod.json \
+        mods/keyboard-tabs/main.js mods/keyboard-tabs/mod.json \
+        mods/keyboard-agents/main.js mods/keyboard-agents/mod.json \
+        mods/keyboard-status/main.js mods/keyboard-status/mod.json \
+        layouts/keyboard.json layouts/keyboard.svg
     do
         assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/$file"
     done
@@ -957,15 +973,15 @@ test_ghostty_compatibility_precedes_configuration_links() {
 
 test_herdr_app_installation_preserves_existing_applications() {
     local version
-    for version in 0.1.11 0.1.12 0.2.0 invalid; do
+    for version in 0.1.15 0.1.16 0.2.0 invalid; do
         new_fixture "herdr-app-$version" Darwin
         mkdir -p "$FIXTURE_APPLICATION_DIR/Herdr.app/Contents/MacOS"
         cp "$FIXTURE_FORMULA_TEMPLATE" "$FIXTURE_APPLICATION_DIR/Herdr.app/Contents/MacOS/Herdr"
         chmod +x "$FIXTURE_APPLICATION_DIR/Herdr.app/Contents/MacOS/Herdr"
         printf '%s\n' "$version" >"$FIXTURE_STATE/herdr-app-version"
-        if [[ "$version" == 0.1.11 || "$version" == invalid ]]; then
+        if [[ "$version" == 0.1.15 || "$version" == invalid ]]; then
             run_installer failure
-            grep -Fq 'Herdr app 0.1.12+ is required' "$FIXTURE_OUTPUT" ||
+            grep -Fq 'Herdr app 0.1.16+ is required' "$FIXTURE_OUTPUT" ||
                 fail "incompatible Herdr app did not explain its required version"
             assert_not_exists "$FIXTURE_HOME/.config"
         else
@@ -999,6 +1015,11 @@ test_herdr_app_links_preserve_state_and_restore_personal_files() {
     local file backup count
     new_fixture herdr-app-state Darwin
     for file in settings.json themes/terminal.json keys.json \
+        mods/keyboard-guide/mod.json mods/keyboard-guide/main.js \
+        mods/keyboard-tabs/mod.json mods/keyboard-tabs/main.js \
+        mods/keyboard-agents/mod.json mods/keyboard-agents/main.js \
+        mods/keyboard-status/mod.json mods/keyboard-status/main.js \
+        layouts/keyboard.json layouts/keyboard.svg \
         mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
     do
         mkdir -p "$(dirname "$FIXTURE_HERDR_APP_DIRECTORY/$file")"
@@ -1009,13 +1030,19 @@ test_herdr_app_links_preserve_state_and_restore_personal_files() {
     printf 'generated guide\n' >"$FIXTURE_HERDR_APP_DIRECTORY/AGENTS.md"
     mkdir -p "$FIXTURE_HERDR_APP_DIRECTORY/mods/shipped"
     printf 'shipped mod\n' >"$FIXTURE_HERDR_APP_DIRECTORY/mods/shipped/main.js"
+    printf 'shipped layout\n' >"$FIXTURE_HERDR_APP_DIRECTORY/layouts/main.json"
 
     run_installer
     run_installer
     assert_herdr_app_links
     grep -Fxq '{"agents.sort":"recent","layout":"main","personal":true}' "$FIXTURE_HERDR_APP_DIRECTORY/shared.json" ||
         fail "installer overwrote existing Herdr app preferences"
-    for file in settings.json themes/terminal.json
+    for file in settings.json themes/terminal.json keys.json \
+        mods/keyboard-guide/mod.json mods/keyboard-guide/main.js \
+        mods/keyboard-tabs/mod.json mods/keyboard-tabs/main.js \
+        mods/keyboard-agents/mod.json mods/keyboard-agents/main.js \
+        mods/keyboard-status/mod.json mods/keyboard-status/main.js \
+        layouts/keyboard.json layouts/keyboard.svg
     do
         count=0
         for backup in "$FIXTURE_HERDR_APP_DIRECTORY/$file".bak.*; do
@@ -1025,7 +1052,7 @@ test_herdr_app_links_preserve_state_and_restore_personal_files() {
         done
         assert_eq 1 "$count" "repeat installation should preserve exactly one original backup for $file"
     done
-    for file in keys.json mods/legacy-prefix/mod.json mods/legacy-prefix/main.js; do
+    for file in mods/legacy-prefix/mod.json mods/legacy-prefix/main.js; do
         grep -Fxq "original $file" "$FIXTURE_HERDR_APP_DIRECTORY/$file" ||
             fail "installer changed an unmanaged Herdr app file: $file"
         assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/$file.bak."*
@@ -1034,6 +1061,11 @@ test_herdr_app_links_preserve_state_and_restore_personal_files() {
     run_uninstaller 0 --restore
     run_uninstaller 0 --restore
     for file in keys.json settings.json themes/terminal.json \
+        mods/keyboard-guide/mod.json mods/keyboard-guide/main.js \
+        mods/keyboard-tabs/mod.json mods/keyboard-tabs/main.js \
+        mods/keyboard-agents/mod.json mods/keyboard-agents/main.js \
+        mods/keyboard-status/mod.json mods/keyboard-status/main.js \
+        layouts/keyboard.json layouts/keyboard.svg \
         mods/legacy-prefix/mod.json mods/legacy-prefix/main.js
     do
         grep -Fxq "original $file" "$FIXTURE_HERDR_APP_DIRECTORY/$file" ||
@@ -1042,6 +1074,7 @@ test_herdr_app_links_preserve_state_and_restore_personal_files() {
     grep -Fxq 'personal view' "$FIXTURE_HERDR_APP_DIRECTORY/view.json" || fail "Herdr app view was changed"
     grep -Fxq 'generated guide' "$FIXTURE_HERDR_APP_DIRECTORY/AGENTS.md" || fail "generated app guide was changed"
     grep -Fxq 'shipped mod' "$FIXTURE_HERDR_APP_DIRECTORY/mods/shipped/main.js" || fail "shipped mod was changed"
+    grep -Fxq 'shipped layout' "$FIXTURE_HERDR_APP_DIRECTORY/layouts/main.json" || fail "shipped layout was changed"
     pass "Herdr app personal files are backed up once and restored without touching generated or runtime state"
 }
 
@@ -1057,7 +1090,7 @@ test_herdr_app_home_preflight_and_uninstall_are_safe() {
         assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
         assert_not_exists "$FIXTURE_HOME/.zshrc"
     done
-    for blocked in themes; do
+    for blocked in themes layouts mods mods/keyboard-guide mods/keyboard-tabs mods/keyboard-agents mods/keyboard-status; do
         new_fixture "herdr-app-blocked-${blocked//\//-}" Darwin
         mkdir -p "$(dirname "$FIXTURE_HERDR_APP_DIRECTORY/$blocked")"
         printf 'personal parent\n' >"$FIXTURE_HERDR_APP_DIRECTORY/$blocked"
@@ -1071,9 +1104,7 @@ test_herdr_app_home_preflight_and_uninstall_are_safe() {
     FIXTURE_HERDR_APP_DIRECTORY="$FIXTURE_HOME/custom app"
     run_installer
     assert_herdr_app_links
-    assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/keys.json"
     assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/shared.json"
-    assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/mods"
     run_uninstaller 0
     assert_common_links_removed
     assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/shared.json"
@@ -1086,19 +1117,43 @@ test_herdr_app_home_preflight_and_uninstall_are_safe() {
     assert_not_exists "$FIXTURE_HOME/other-profile/app"
     assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
 
-    new_fixture herdr-app-uninstall-redirect Darwin
-    mkdir -p "$FIXTURE_HERDR_APP_DIRECTORY" "$FIXTURE_HOME/redirected-mods/legacy-prefix"
-    printf 'custom keymap\n' >"$FIXTURE_HOME/custom-keys.json"
-    ln -s "$FIXTURE_HOME/custom-keys.json" "$FIXTURE_HERDR_APP_DIRECTORY/keys.json"
-    ln -s "$REPO_ROOT/herdr-app/mods/legacy-prefix/main.js" "$FIXTURE_HOME/redirected-mods/legacy-prefix/main.js"
-    ln -s "$FIXTURE_HOME/redirected-mods" "$FIXTURE_HERDR_APP_DIRECTORY/mods"
+    for blocked in layouts mods mods/keyboard-guide mods/keyboard-tabs mods/keyboard-agents mods/keyboard-status; do
+        new_fixture "herdr-app-redirect-${blocked//\//-}" Darwin
+        mkdir -p "$(dirname "$FIXTURE_HERDR_APP_DIRECTORY/$blocked")" "$FIXTURE_HOME/redirected-mods"
+        printf 'personal mod\n' >"$FIXTURE_HOME/redirected-mods/main.js"
+        ln -s "$FIXTURE_HOME/redirected-mods" "$FIXTURE_HERDR_APP_DIRECTORY/$blocked"
+        run_installer failure
+        assert_log_count 0 "brew bootstrap" "$FIXTURE_LOG"
+        assert_not_exists "$FIXTURE_HERDR_APP_DIRECTORY/keys.json"
+        grep -Fxq 'personal mod' "$FIXTURE_HOME/redirected-mods/main.js" || fail "redirected mod was changed"
+
+        new_fixture "herdr-app-uninstall-redirect-${blocked//\//-}" Darwin
+        run_installer
+        mv "$FIXTURE_HERDR_APP_DIRECTORY/$blocked" "$FIXTURE_HOME/redirected-mods"
+        ln -s "$FIXTURE_HOME/redirected-mods" "$FIXTURE_HERDR_APP_DIRECTORY/$blocked"
+        run_uninstaller 0
+        assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/$blocked" "$FIXTURE_HOME/redirected-mods"
+        assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/keys.json" "$REPO_ROOT/herdr-app/keys.json"
+        assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/mods/keyboard-guide/main.js" "$REPO_ROOT/herdr-app/mods/keyboard-guide/main.js"
+        run_uninstaller 0 --restore
+        assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/mods/keyboard-guide/main.js" "$REPO_ROOT/herdr-app/mods/keyboard-guide/main.js"
+    done
+
+    new_fixture herdr-app-uninstall-foreign-files Darwin
     run_installer
-    assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/keys.json" "$FIXTURE_HOME/custom-keys.json"
-    assert_symlink "$FIXTURE_HOME/redirected-mods/legacy-prefix/main.js" "$REPO_ROOT/herdr-app/mods/legacy-prefix/main.js"
+    for blocked in keys.json layouts/keyboard.json mods/keyboard-guide/main.js \
+        mods/keyboard-tabs/main.js mods/keyboard-agents/main.js mods/keyboard-status/main.js; do
+        unlink "$FIXTURE_HERDR_APP_DIRECTORY/$blocked"
+        printf 'custom file\n' >"$FIXTURE_HOME/custom-${blocked//\//-}"
+        ln -s "$FIXTURE_HOME/custom-${blocked//\//-}" "$FIXTURE_HERDR_APP_DIRECTORY/$blocked"
+    done
     run_uninstaller 0
-    assert_common_links_removed
-    assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/keys.json" "$FIXTURE_HOME/custom-keys.json"
-    assert_symlink "$FIXTURE_HOME/redirected-mods/legacy-prefix/main.js" "$REPO_ROOT/herdr-app/mods/legacy-prefix/main.js"
+    run_uninstaller 0 --restore
+    for blocked in keys.json layouts/keyboard.json mods/keyboard-guide/main.js \
+        mods/keyboard-tabs/main.js mods/keyboard-agents/main.js mods/keyboard-status/main.js; do
+        assert_symlink "$FIXTURE_HERDR_APP_DIRECTORY/$blocked" "$FIXTURE_HOME/custom-${blocked//\//-}"
+        grep -Fxq 'custom file' "$FIXTURE_HOME/custom-${blocked//\//-}" || fail "foreign file was changed"
+    done
 
     new_fixture herdr-app-ambiguous-restore Darwin
     run_installer

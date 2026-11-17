@@ -444,7 +444,10 @@ SKILL_CONTAINERS=(
 
 manage_herdr_app_configs() {
     local directory redirected file
-    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes"
+    for directory in "$HERDR_APP_DIRECTORY" "$HERDR_APP_DIRECTORY/themes" \
+        "$HERDR_APP_DIRECTORY/layouts" "$HERDR_APP_DIRECTORY/mods" \
+        "$HERDR_APP_DIRECTORY/mods/keyboard-guide" "$HERDR_APP_DIRECTORY/mods/keyboard-tabs" \
+        "$HERDR_APP_DIRECTORY/mods/keyboard-agents" "$HERDR_APP_DIRECTORY/mods/keyboard-status"
     do
         redirected="$(redirected_agent_parent "$directory")"
         if [[ -n "$redirected" ]]; then
@@ -459,7 +462,12 @@ manage_herdr_app_configs() {
             fi
         fi
     done
-    for file in settings.json themes/terminal.json
+    for file in settings.json themes/terminal.json keys.json \
+        mods/keyboard-guide/main.js mods/keyboard-guide/mod.json \
+        mods/keyboard-tabs/main.js mods/keyboard-tabs/mod.json \
+        mods/keyboard-agents/main.js mods/keyboard-agents/mod.json \
+        mods/keyboard-status/main.js mods/keyboard-status/mod.json \
+        layouts/keyboard.json layouts/keyboard.svg
     do
         if (( RESTORE_BACKUPS == 1 )); then
             restore_direct "herdr-app/$file" "$HERDR_APP_DIRECTORY/$file"
@@ -524,6 +532,12 @@ backups=(
     "$HERDR_APP_DIRECTORY".bak.*
     "$HERDR_APP_DIRECTORY"/*.bak.*
     "$HERDR_APP_DIRECTORY"/themes/*.bak.*
+    "$HERDR_APP_DIRECTORY"/layouts/*.bak.*
+    "$HERDR_APP_DIRECTORY"/mods/*.bak.*
+    "$HERDR_APP_DIRECTORY"/mods/keyboard-guide/*.bak.*
+    "$HERDR_APP_DIRECTORY"/mods/keyboard-tabs/*.bak.*
+    "$HERDR_APP_DIRECTORY"/mods/keyboard-agents/*.bak.*
+    "$HERDR_APP_DIRECTORY"/mods/keyboard-status/*.bak.*
     "$CODEX_DIRECTORY"/AGENTS.md.bak.*
     "$PI_DIRECTORY"/AGENTS.md.bak.*
     "$HOME"/.claude/rules/development-workflow.md.bak.*

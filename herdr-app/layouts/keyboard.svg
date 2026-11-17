@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">
+  <rect width="480" height="300" rx="10" fill="#101010"/>
+  <path d="M120 0v300M0 140h120M120 35h360" stroke="#343434"/>
+  <g font-family="monospace" font-size="12" fill="#bcbcbc">
+    <text x="14" y="27">Herdr</text><text x="14" y="62">Spaces</text>
+    <text x="14" y="90">dotfiles</text><text x="14" y="165">Agents</text>
+    <text x="43" y="195">Codex</text><text x="43" y="223">Claude</text>
+    <text x="157" y="23">editor</text><text x="271" y="23">shell</text>
+    <text x="142" y="70">~/dotfiles</text><text x="142" y="105">❯ _</text>
+    <text x="142" y="278">Ctrl-b → next command</text>
+  </g>
+  <g font-family="monospace" font-size="12" fill="#8abeb7">
+    <text x="14" y="195">⇧1</text><text x="14" y="223">⇧2</text>
+    <text x="138" y="23">1</text><text x="252" y="23">2</text>
+  </g>
+  <rect x="130" y="43" width="340" height="210" rx="7" fill="none" stroke="#8abeb7"/>
+</svg>
