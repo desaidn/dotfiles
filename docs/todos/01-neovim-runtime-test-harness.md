@@ -35,6 +35,7 @@ The motivating architecture review describes a reusable seam serving terminal-to
 
 ## Open decisions
 
+- Can Neovim's own test framework replace or support the proposed local harness? Evaluate the `:help dev-test-plugin` approach for repository and CI tests using a small Makefile before committing to the fake-runtime extraction above. Recheck upstream availability, dependencies, and compatibility when implementation starts; shipping the framework with Neovim is planned upstream, not assumed to be available in the installed version.
 - What is the smallest interface that covers setup, user actions, external events, time/deferred work, and observations without exposing fake internals?
 - Which second consumer best proves the seam is real: package-build behavior, keymap declarations, a production plugin declaration, or a real-headless adapter?
 - How much behavior can genuinely be shared between deterministic fake execution and a real Neovim process?
@@ -71,6 +72,8 @@ Also start the production configuration headlessly to catch runtime-path and mod
 
 ## Starting points / references
 
+- [`:help dev-test-plugin`](https://neovim.io/doc/user/dev_test/#dev-test-plugin) — starting point for the proposed Makefile setup using Neovim's own test framework in the repository and CI.
+- [Upstream test-framework distribution work](https://github.com/neovim/neovim/issues/34592#issuecomment-6771450985) — track the planned work toward shipping the framework with Neovim itself.
 - [`nvim/tests/terminal_tool_spec.lua`](../../nvim/tests/terminal_tool_spec.lua) — current fake runtime, scenario helpers, and protected behaviors.
 - [`nvim/lua/custom/lib/terminal_tool.lua`](../../nvim/lua/custom/lib/terminal_tool.lua) — production interface and runtime calls the fake models.
 - [`nvim/tests/terminal_tool_hunk_render.exp`](../../nvim/tests/terminal_tool_hunk_render.exp) — real-PTY behavior and external dependency checks.
