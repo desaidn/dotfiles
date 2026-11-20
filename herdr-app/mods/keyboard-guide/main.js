@@ -346,8 +346,13 @@ export default class KeyboardGuide extends View {
   available(row) { return !row.needs || !!this.context()?.[row.needs]; }
 
   agentList() {
-    // Stable space/tab order, with pins first. Show the exact numbered targets.
     const list = agents();
+    const order = shared("keyboard.agents.order");
+    if (order && order.layout === shared("layout") && Array.isArray(order.addresses)) {
+      const byAddress = new Map(list.map(a => [a.address, a]));
+      return order.addresses.map(address => byAddress.get(address)).filter(Boolean);
+    }
+    // The guide also works in layouts without the numbered sidebar.
     return [...list.filter(a => a.pinned), ...list.filter(a => !a.pinned)];
   }
 
@@ -669,7 +674,7 @@ export default class KeyboardGuide extends View {
       root.child(div().child("Clipboard and text editing keep their standard keys. Herdr commands start with Ctrl-b."));
       root.child(div().text_color(t.accent).child(":  find any command     Backspace  prefix commands     Esc  close"));
     } else if (this.mode === "agents") {
-      root.child(div().text_color(t.muted).child("Pins first, then space / tab order. Numbered targets update as agents change."));
+      root.child(div().text_color(t.muted).child("Numbers follow the agent list from top to bottom and update when rows move."));
       root.child(v_flex().flex_1().min_h(0).overflow_y_scrollbar().children(
         this.agentList().slice(0, 9).map((a, i) => this.row(action(String(i + 1), `${a.space_name} / ${a.tab_name} · ${a.program?.name ?? a.app ?? a.address} · ${a.status}`, "agent.focus", { terminal: a.address }), t, cx, `agent-${a.address}`))));
       if (this.agentList().length > 9) root.child(div().text_color(t.muted).child("First nine agents shown. Use g then [ / ] to reach the others."));

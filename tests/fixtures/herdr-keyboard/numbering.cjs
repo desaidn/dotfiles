@@ -43,7 +43,10 @@ const api = {
   theme: () => ({ background: '#0e0e0e', foreground: '#ffffff', accent: '#8abeb7' }),
   window: () => ({ platform: 'macos' }), settings: () => ({ zoom: 1 }),
   layout: () => ({ children: [{ id: 'sidebar', size: { px: scene.sidebarWidth } }] }),
-  shared: key => scene.shared[key], setShared: (key, value) => { scene.shared[key] = value; },
+  shared: key => scene.shared[key], setShared: (key, value) => {
+    scene.publications.push([key, JSON.parse(JSON.stringify(value))]);
+    if (!scene.deferShared) scene.shared[key] = value;
+  },
   setAgentOrder: order => { scene.displayOrder = Array.from(order); },
   run: (command, args = {}) => scene.calls.push([command, JSON.parse(JSON.stringify(args))]),
   openOverlay() {}, closeOverlay: () => scene.closed++, checking: () => true,
@@ -70,8 +73,8 @@ const KeyboardGuide = load('keyboard-guide', 'KeyboardGuide');
 
 function fresh() {
   scene = {
-    agents: [], terminals: [], panes: [], calls: [], closed: 0, storage: new Map(),
-    sidebarWidth: 268, shared: { 'agents.sort': 'priority' }, props: { overlay: 'test' },
+    agents: [], terminals: [], panes: [], calls: [], publications: [], closed: 0, storage: new Map(),
+    sidebarWidth: 268, shared: { layout: 'keyboard', 'agents.sort': 'priority' }, props: { overlay: 'test' },
     focus: { space: 's1', tab: 't1', pane: 'p1', terminal: 'term1' },
     spaces: [{ id: 's1', name: 'One', active: true, tabs: [] }, { id: 's2', name: 'Two', tabs: [] }],
   };
@@ -117,6 +120,8 @@ function badges(tree, prefix) {
 function checkBadges(tree, kind, expected) {
   const agent = kind === 'agent', prefix = `${kind}-key-`;
   const rendered = badges(tree, prefix);
+  if (agent) assert.deepEqual(rendered.map(text), rendered.map((_, i) => `⇧${i + 1}`),
+    'Agent badges must increase consecutively in actual rendered row order');
   const actual = {};
   for (const badge of rendered) {
     const target = badge.nodeId.slice(prefix.length);
@@ -187,46 +192,46 @@ test('Tab badges change with the active space and stop at nine', () => {
     other6: '6', other7: '7', other8: '8', other9: '9' });
 });
 
-test('Agent badges remain attached to targets when status changes reorder priority rows', () => {
+test('Agent badges and both shortcuts follow status changes in priority row order', () => {
   const idle = addAgent('idle', 'idle');
   const busy = addAgent('busy', 'working');
   const blocked = addAgent('remote/blocked', 'blocked', 's2');
   const done = addAgent('done', 'done', 's2');
   const sidebar = view(Agents);
-  const expected = { idle: '⇧1', busy: '⇧2', 'remote/blocked': '⇧3', done: '⇧4' };
-  checkBadges(sidebar.render(cx), 'agent', expected);
+  checkBadges(sidebar.render(cx), 'agent', { 'remote/blocked': '⇧1', done: '⇧2', busy: '⇧3', idle: '⇧4' });
   assert.deepEqual(scene.displayOrder, ['remote/blocked', 'done', 'busy', 'idle']);
   idle.status = 'blocked'; busy.status = 'done'; blocked.status = 'idle'; done.status = 'working';
-  checkBadges(sidebar.render(cx), 'agent', expected);
+  checkBadges(sidebar.render(cx), 'agent', { idle: '⇧1', busy: '⇧2', done: '⇧3', 'remote/blocked': '⇧4' });
   assert.deepEqual(scene.displayOrder, ['idle', 'busy', 'done', 'remote/blocked']);
 });
 
-test('Pin changes renumber both sidebar and guide, independently of priority order', () => {
+test('Pin changes renumber both sidebar and guide in displayed order', () => {
   const first = addAgent('first', 'blocked');
   const pin = addAgent('pin', 'idle', 's2', { pinned: true });
   addAgent('last', 'done', 's2');
   const sidebar = view(Agents);
   checkBadges(sidebar.render(cx), 'agent', { pin: '⇧1', first: '⇧2', last: '⇧3' });
   pin.pinned = false; first.pinned = true;
-  checkBadges(sidebar.render(cx), 'agent', { first: '⇧1', pin: '⇧2', last: '⇧3' });
+  checkBadges(sidebar.render(cx), 'agent', { first: '⇧1', last: '⇧2', pin: '⇧3' });
 });
 
-test('Grouped, folded, and collapsed sidebar presentations keep the same key targets', () => {
+test('Grouping, folding and narrowing renumber only the displayed agent rows', () => {
   addAgent('one', 'idle'); addAgent('two', 'blocked'); addAgent('three', 'working', 's2');
   const sidebar = view(Agents);
   const expected = { one: '⇧1', two: '⇧2', three: '⇧3' };
-  checkBadges(sidebar.render(cx), 'agent', expected);
+  checkBadges(sidebar.render(cx), 'agent', { two: '⇧1', three: '⇧2', one: '⇧3' });
   let tree = switchSort(sidebar, 'grouped');
   assert.deepEqual(scene.displayOrder, ['one', 'two', 'three']);
   checkBadges(tree, 'agent', expected);
   find(tree, 'sp-s1').events.on_click({}, cx);
   tree = sidebar.render(cx);
-  checkBadges(tree, 'agent', { three: '⇧3' });
+  checkBadges(tree, 'agent', { three: '⇧1' });
+  assert.deepEqual(scene.displayOrder, ['three']);
   find(tree, 'sp-s1').events.on_click({}, cx);
   checkBadges(sidebar.render(cx), 'agent', expected);
   scene.sidebarWidth = 76;
   checkBadges(sidebar.render(cx), 'agent', expected);
-  checkBadges(switchSort(sidebar, 'priority'), 'agent', expected);
+  checkBadges(switchSort(sidebar, 'priority'), 'agent', { two: '⇧1', three: '⇧2', one: '⇧3' });
 });
 
 test('Kept child badges target the child; unlisted background children have no digit', () => {
@@ -241,28 +246,102 @@ test('Kept child badges target the child; unlisted background children have no d
   assert.equal(badges(find(tree, 'sub-background'), 'agent-key-').length, 0);
   checkBadges(tree, 'agent', expected);
   find(tree, 'fold-parent').events.on_click({}, cx);
-  checkBadges(sidebar.render(cx), 'agent', { parent: '⇧1', peer: '⇧3' });
+  checkBadges(sidebar.render(cx), 'agent', { parent: '⇧1', peer: '⇧2' });
   scene.sidebarWidth = 76;
   tree = sidebar.render(cx);
   find(find(tree, 'ag-child'), 'agent-key-child');
-  checkBadges(tree, 'agent', expected);
+  checkBadges(tree, 'agent', { parent: '⇧1', peer: '⇧2', child: '⇧3' });
   scene.sidebarWidth = 268;
   child.pinned = true;
   checkBadges(sidebar.render(cx), 'agent', { child: '⇧1', parent: '⇧2', peer: '⇧3' });
+  sidebar.folded.delete('parent');
+  tree = sidebar.render(cx);
+  checkBadges(tree, 'agent', { child: '⇧1', parent: '⇧2', peer: '⇧3' });
+  assert.equal(badges(find(tree, 'sub-child'), 'agent-key-').length, 0,
+    'A pinned child must not advertise a second badge in its parent tree');
+  find(tree, 'pinned').events.on_click({}, cx);
+  tree = sidebar.render(cx);
+  checkBadges(tree, 'agent', expected);
+  find(find(tree, 'sub-child'), 'agent-key-child');
 });
 
-test('More than nine agents remain visible without advertising unsupported digits', () => {
+test('Only the first nine displayed agents receive digits', () => {
   for (let i = 1; i <= 12; i++) addAgent(`a${i}`, i % 2 ? 'idle' : 'blocked', i <= 6 ? 's1' : 's2');
   const sidebar = view(Agents);
-  const expected = { a1: '⇧1', a2: '⇧2', a3: '⇧3', a4: '⇧4', a5: '⇧5', a6: '⇧6', a7: '⇧7', a8: '⇧8', a9: '⇧9' };
+  const expected = { a12: '⇧1', a10: '⇧2', a8: '⇧3', a6: '⇧4', a4: '⇧5', a2: '⇧6',
+    a11: '⇧7', a9: '⇧8', a7: '⇧9' };
   for (const width of [268, 76]) {
     scene.sidebarWidth = width;
     const tree = sidebar.render(cx);
-    for (const address of ['a10', 'a11', 'a12']) {
+    for (const address of ['a5', 'a3', 'a1']) {
       assert.equal(badges(find(tree, `ag-${address}`), 'agent-key-').length, 0);
     }
     checkBadges(tree, 'agent', expected);
   }
+});
+
+test('Grouped numbers follow changes to space and tab model order', () => {
+  addAgent('one', 'idle'); addAgent('two', 'idle'); addAgent('three', 'idle', 's2');
+  scene.shared['agents.sort'] = 'grouped';
+  const sidebar = view(Agents);
+  checkBadges(sidebar.render(cx), 'agent', { one: '⇧1', two: '⇧2', three: '⇧3' });
+  scene.agents = [scene.agents[2], scene.agents[1], scene.agents[0]];
+  checkBadges(sidebar.render(cx), 'agent', { three: '⇧1', two: '⇧2', one: '⇧3' });
+});
+
+test('The chooser renders the sidebar order and keeps the empty folded order', () => {
+  addAgent('idle', 'idle'); addAgent('blocked', 'blocked');
+  const sidebar = view(Agents);
+  sidebar.render(cx);
+  let guide = view(KeyboardGuide);
+  press(guide, 'a');
+  assert.deepEqual(walk(guide.render(cx)).filter(node => /^agent-(?!key-)/.test(node.nodeId ?? ''))
+    .map(node => node.nodeId), ['agent-blocked', 'agent-idle']);
+  sidebar.folded.add('sec-4'); sidebar.folded.add('sec-1');
+  checkBadges(sidebar.render(cx), 'agent', {});
+  guide = view(KeyboardGuide);
+  press(guide, 'a'); press(guide, '1');
+  assert.equal(scene.calls.length, 0);
+  assert.match(guide.message, /No agent 1/);
+});
+
+test('Order publication is stable and the guide ignores stale layouts and removed agents', () => {
+  addAgent('one', 'idle'); addAgent('two', 'blocked', 's2', { pinned: true });
+  const sidebar = view(Agents);
+  sidebar.render(cx);
+  const publications = scene.publications.length;
+  sidebar.render(cx);
+  assert.equal(scene.publications.length, publications, 'Unchanged renders must not republish shared state');
+  scene.agents = scene.agents.filter(a => a.address !== 'two');
+  assert.equal(dispatch(1, true)[1].terminal, 'one', 'Removed addresses must never be dispatched');
+  addAgent('three', 'working');
+  scene.shared.layout = 'main';
+  assert.equal(dispatch(2, true)[1].terminal, 'three', 'A different layout uses the standalone guide fallback');
+  scene.shared.layout = 'keyboard';
+  checkBadges(sidebar.render(cx), 'agent', { three: '⇧1', one: '⇧2' });
+});
+
+test('An open chooser follows reordering after shared snapshots are published', () => {
+  const idle = addAgent('idle', 'idle');
+  const blocked = addAgent('blocked', 'blocked');
+  scene.deferShared = true;
+  const publish = () => {
+    for (const [key, value] of scene.publications.splice(0)) scene.shared[key] = value;
+  };
+  const sidebar = view(Agents);
+  let tree = sidebar.render(cx);
+  assert.equal(scene.shared['keyboard.agents.order'], undefined);
+  publish();
+  checkBadges(tree, 'agent', { blocked: '⇧1', idle: '⇧2' });
+  const guide = view(KeyboardGuide);
+  press(guide, 'a');
+  idle.status = 'blocked'; blocked.status = 'idle';
+  tree = sidebar.render(cx);
+  publish();
+  checkBadges(tree, 'agent', { idle: '⇧1', blocked: '⇧2' });
+  scene.calls = [];
+  press(guide, '1');
+  assert.deepEqual(scene.calls, [['agent.focus', { terminal: 'idle' }]]);
 });
 
 test('Empty tab and agent models render without phantom shortcut badges', () => {

@@ -39,6 +39,7 @@ const sandbox = {
   terminals: () => scene.terminals, focused: () => scene.focus,
   props: () => ({ overlay: 'guide' }), closeOverlay: () => scene.closed++,
   openOverlay: spec => scene.overlays.push(spec), run, theme: () => ({}), checking: () => scene.checking,
+  shared: () => null,
   hc: async args => { scene.calls.push(['hc', args]); return { code: 0 }; },
   window: { viewport_size: () => ({ width: 1200, height: 800 }) },
   settings: () => ({ zoom: 1 }),

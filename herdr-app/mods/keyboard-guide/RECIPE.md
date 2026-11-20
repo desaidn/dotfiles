@@ -41,13 +41,14 @@ commands. The header and available destinations follow live app state.
 - **Tabs:** `c` creates, `p/n` move, `1…9` select, `T` renames and `X` closes.
 - **Spaces:** `N` creates, `W` renames, `D` closes, `w` searches spaces and
   tabs inside the guide, and `G` opens the native new-worktree dialog.
-- **Agents:** Shift-1…9 selects from the exact list shown by `a`: pins first,
-  then space/tab order. Rows show the agent's working, blocked, idle, or
-  done state as text. Beyond nine agents, use navigation mode's `[/]`.
-  The numbered sidebar keeps these same targets while sorting rows by status
-  or grouping by space. Status changes do not change a target's number;
-  pinning, reordering, adding or removing targets can. Background children
-  without panes are not numbered. Tab badges skip settled tabs and stop at nine.
+- **Agents:** Shift-1…9 selects from the exact list shown by `a`, following
+  the numbered sidebar from top to bottom. Numbers update as rows move,
+  are pinned or are folded. Visible kept children participate; repeated
+  child rows and folded rows consume no extra number. Rows show the agent's
+  working, blocked, idle, or done state as text. Beyond nine agents, use
+  navigation mode's `[/]`. Without the numbered sidebar, the guide uses
+  pins first, then space/tab order. Background children without panes are
+  not numbered. Tab badges skip settled tabs and stop at nine.
 - **Scroll and copy:** `[` enters copy mode. `h j k l` move its cursor;
   `v` anchors selection, `V` selects a line, and `y` or Enter copies.
   Ctrl-u/d move by a page, g/G go to the top/bottom, and 0/$ move to line
@@ -80,30 +81,7 @@ replace its menu commands.
 
 ## Built from
 
-`mods/keyboard-guide/main.js` is a self-contained gpui-kit `View` with
-`gpui-base` flex elements. A single command table supplies both labels and
-dispatch. Search derives those same actions and adds available native commands
-and named targets. Its instance owns mode, query, message, focus handle, copy
-target, input queue and pending confirmation; it writes no shared preferences
-or runtime files.
-
-It reads Herdr's `spaces`, `panes`, `agents`, `terminals`, `focused`, and
-`theme` APIs. App commands implement navigation, splits, selection, copying,
-dialogs and window controls. `openOverlay` creates the compact copy popup and
-the shipped worktree dialog; shipped mods are referenced without modification.
-`nextCommand` also accepts `root`, `navigate`, `agents`, `copy`, `help`,
-`commands`, `places` and `focus` while this mod is loaded.
-The `close` command dismisses the particular guide overlay that received it.
-
-Native `run()` queues changes, while getters read published snapshots. Copy
-mode captures its terminal before opening the strip, then processes one key
-intent at a time. A private acknowledgement sent through the same first-in,
-first-out command queue lets each selection change finish before the guide
-reads its endpoints or processes the next key. Cancellation discards queued
-input. Tests must model that delay; an immediate read after `run()` cannot
-prove real selection movement. The strip uses native popup focus and Escape
-handling; a floating window can lose keyboard focus without closing.
-
+The guide uses Herdr's native mod runtime and your theme.
 `layouts/keyboard.json` is a personal clone of Herdr 0.1.16's main layout.
 Together with the guide, the package has four mods: `keyboard-tabs` and
 `keyboard-agents` add shortcut badges to the corresponding shipped panels;
@@ -118,16 +96,6 @@ cloned Herdr mods and layout retain Apache-2.0; the package includes the
 unchanged upstream license at `upstream/LICENSE-herdr-app-0.1.16` and source,
 version and change attribution in `upstream/README.md`. Keep those files
 with redistributed copies; the MIT license does not relicense Herdr's code.
-
-Pressing Ctrl-b twice runs `hc keys <focused-terminal> ctrl+b`. On remote
-spaces, the target terminal address includes its machine name. Herdr owns
-`hc`. Before opening the native Remove worktree dialog, command search runs
-two read-only Git checks in the target folder, on its machine:
-`git rev-parse --absolute-git-dir` and
-`git rev-parse --path-format=absolute --git-common-dir`. Equal normalized
-paths identify the main checkout, so the guide refuses removal; failed checks
-leave an explanation in the guide. A linked worktree proceeds to the native
-dialog. These checks do not remove files or change Git state.
 
 ## Install
 
@@ -174,7 +142,6 @@ The dotfiles installer instead manages individual file links and backups.
   `window.minimize` for `q`.
 - Keyboard pane resizing, pane renaming, and edit-scrollback have no app
   command. `r`, `P`, and `e` explain alternatives. `R` explains live reload.
-- Agent badges follow the guide's list even when sidebar rows sort by urgency.
 - The optional panels are personal clones and do not receive upstream mod
   changes automatically. Reconcile those deliberately when upgrading Herdr.
 - Herdr has no scrollback for alternate-screen programs such as Neovim;
@@ -185,9 +152,8 @@ The dotfiles installer instead manages individual file links and backups.
   `touch -h ~/.config/herdr-app/mods/keyboard-guide/main.js` refreshes the
   watched link; use your `HERDR_APP_HOME` when customized. Confirm live
   status after refreshing. Ordinary copied-file installations reload on save.
-- There is no timer-driven redraw or polling. `cx` is used only within
-  its callback. Native `check` uses empty app data; passing it does not
-  prove real keyboard delivery or selection behavior.
+- Native `check` uses empty app data; passing it does not prove real
+  keyboard delivery or selection behavior.
 
 ## Done when
 
@@ -215,11 +181,4 @@ The dotfiles installer instead manages individual file links and backups.
   during the read-only preflight.
 - The full guide and copy strip are legible at the intended window size.
 
-The dotfiles repository additionally runs `bash tests/herdr_keyboard_test.sh`
-against API doubles and `./tests/install_test.sh` for link ownership,
-backups, restoration, and repeat installation. Its opt-in
-`tests/herdr_keyboard_native_test.sh` exercises real key events, focus,
-selection, clipboard text and repeated dismissal in Herdr v0.1.16's isolated
-test platform. This caught a floating copy window remaining open after a
-terminal click took its keyboard focus. Before publishing, repeat the live
-keyboard checks above on the version you intend to support.
+Before publishing, repeat these checks on the version you intend to support.

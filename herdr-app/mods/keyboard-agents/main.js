@@ -1,5 +1,5 @@
 // Derived from Herdr app v0.1.16, defaults/mods/agents/main.js (Apache-2.0).
-// Modified by Dhairya Desai: Ctrl-b Shift-digit badges in full, nested and narrow rows.
+// Modified by Dhairya Desai: Ctrl-b Shift-digit badges follow the displayed rows.
 // Source: https://github.com/herdrdev/herdr-app/tree/v0.1.16
 // License and attribution: upstream/LICENSE-herdr-app-0.1.16, upstream/README.md.
 // Agents in grouped or priority views; parents take their most urgent sub-agent's place.
@@ -183,7 +183,7 @@ export default class Agents extends View {
     });
   }
 
-  subRow(t, s, shown, compact) {
+  subRow(t, s, shown, compact, number) {
     const k = s.t;
     const st = kidStatus(k, this.listed);
     const pic = icon(k.program, 14, t.foreground);
@@ -204,14 +204,13 @@ export default class Agents extends View {
       .children(s.lines.map(l => div().self_start().mt(-4).w(9).h(17).mr(4).flex_none()
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
         .when(l === "└" || l === "├", el => el.border_b(1.5).rounded_bl(6))))
-      .when(this.shortcuts.has(k.address), el => el.child(this.shortcut(t, k.address).mr(8)))
+      .when(Boolean(number), el => el.child(this.shortcut(t, k.address, number).mr(8)))
       .when(Boolean(pic), el => el.child(div().mr(8).child(pic)))
       .child(div().flex_1().truncate().text_color(on ? t.foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
       .child(this.status(t, { status: st }, compact));
   }
 
-  shortcut(t, address) {
-    const number = this.shortcuts.get(address);
+  shortcut(t, address, number) {
     return div().id(`agent-key-${address}`).flex_none().text_size(11)
       .font_semibold().text_color(t.accent)
       .tooltip(`Ctrl-b, then Shift-${number} · or Ctrl-b, a, ${number}`)
@@ -235,10 +234,6 @@ export default class Agents extends View {
     const collapsed = narrow();
     const sort = sortOf();
     let list = agents();
-    // Match the guide before status sorting or nesting changes the visible order.
-    // Kept children have shortcuts too; background children outside agents() do not.
-    this.shortcuts = new Map([...list.filter(a => a.pinned), ...list.filter(a => !a.pinned)]
-      .slice(0, 9).map((a, i) => [a.address, i + 1]));
     this.listed = new Map(list.map((a) => [a.address, a.status]));
     const all = terminals();
     this.migratePins(all);
@@ -258,14 +253,42 @@ export default class Agents extends View {
     const pinned = list.filter((a) => a.pinned);
     const rest = list.filter((a) => !a.pinned);
     list = [...pinned, ...rest];
-    setAgentOrder(list.map((a) => a.address));
 
-    const withKids = (a, i) => {
+    // Groups in list order: spaces (grouped) or priority sections.
+    const groups = pinned.length ? [{ id: "pinned", label: "Pinned", status: null, members: pinned }] : [];
+    for (const a of rest) {
+      const r = rankOf(a) || RANK.idle;
+      const id = byPriority ? `sec-${r}` : `sp-${a.space}`;
+      if (groups.at(-1)?.id === id) groups.at(-1).members.push(a);
+      else groups.push({ id, label: byPriority ? SECTION[r] : a.space_name || "", status: byPriority ? SECTION_STATUS[r] : null, members: [a] });
+    }
+
+    // Build the rows once so badges, the guide and navigation follow what is shown.
+    const withKids = (a) => {
       const subs = collapsed ? [] : this.tree(all, a.address);
-      const r = row(a, i, subs);
-      if (this.folded.has(a.address)) return [r];
-      return [r, ...subs.map((s) => this.subRow(t, s, shown, byPriority))];
+      return [{ agent: a, subs }, ...(this.folded.has(a.address) ? [] : subs.map(sub => ({ sub })))];
     };
+    const entries = collapsed
+      ? list.flatMap(withKids)
+      : groups.flatMap(group => [{ group }, ...(this.folded.has(group.id) ? [] : group.members.flatMap(withKids))]);
+    const order = [];
+    const numbered = new Set();
+    for (const entry of entries) {
+      const address = entry.agent?.address ?? entry.sub?.t.address;
+      // Background children have no digit. A pinned child can also appear in its
+      // parent's tree; only its first visible occurrence gets a number.
+      if (!this.listed.has(address) || numbered.has(address)) continue;
+      numbered.add(address);
+      order.push(address);
+      if (order.length <= 9) entry.number = order.length;
+    }
+    setAgentOrder(order);
+    const previous = shared("keyboard.agents.order");
+    const layoutName = shared("layout");
+    // Shared updates redraw every mod, so publish only when the order changes.
+    if (previous?.layout !== layoutName || JSON.stringify(previous?.addresses) !== JSON.stringify(order)) {
+      setShared("keyboard.agents.order", { layout: layoutName, addresses: order });
+    }
 
     // The fold chevron; folded, the count too, colored by the most urgent one.
     const fold = (a, subs) => {
@@ -312,7 +335,7 @@ export default class Agents extends View {
       if (detail.get(a.address) == null && seen[`${a.space_name}\u0000`] > 1) detail.set(a.address, label(a));
     }
 
-    const row = (a, i, subs = []) => {
+    const row = (a, subs, number) => {
       const pic = icon(a.program, 16, t.foreground);
       const more = detail.get(a.address);
       // An agent on another machine (`vps/t7`) says which.
@@ -328,8 +351,8 @@ export default class Agents extends View {
           .hover((s) => s.bg(t.hover))
           .on_click(() => run("pane.focus", { pane: a.pane }))
           .child(div().flex_1().min_w(0).whitespace_nowrap().text_right()
-            .when(this.shortcuts.has(a.address), el => el.child(this.shortcut(t, a.address)))
-            .when(!this.shortcuts.has(a.address), el => el.child(pic ?? div().text_color(t.dim).child("·"))))
+            .when(Boolean(number), el => el.child(this.shortcut(t, a.address, number)))
+            .when(!number, el => el.child(pic ?? div().text_color(t.dim).child("·"))))
           .child(h_flex().w(14).flex_none().items_center().justify_center().child(this.status(t, a, true)));
       }
       const when = this.since(a);
@@ -373,7 +396,7 @@ export default class Agents extends View {
           cx.notify();
         })
         .on_click(() => run("pane.focus", { pane: a.pane }))
-        .when(this.shortcuts.has(a.address), el => el.child(this.shortcut(t, a.address)))
+        .when(Boolean(number), el => el.child(this.shortcut(t, a.address, number)))
         .when(Boolean(pic), el => el.child(div().id(`agent-fold-${a.address}`)
           .when(subs.length > 0, el => el.on_click((_e, cx) => {
             cx.stop_propagation();
@@ -389,16 +412,6 @@ export default class Agents extends View {
         .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(duration(now - when))))
         .child(this.status(t, a, byPriority && !isPinned));
     };
-
-    // Groups in list order: spaces (grouped) or priority sections. Agents of a
-    // space are next to each other in agents(), so neighbours make a group.
-    const groups = pinned.length ? [{ id: "pinned", label: "Pinned", status: null, members: pinned }] : [];
-    for (const a of rest) {
-      const r = rankOf(a) || RANK.idle;
-      const id = byPriority ? `sec-${r}` : `sp-${a.space}`;
-      if (groups.at(-1)?.id === id) groups.at(-1).members.push(a);
-      else groups.push({ id, label: byPriority ? SECTION[r] : a.space_name || "", status: byPriority ? SECTION_STATUS[r] : null, members: [a] });
-    }
 
     // A group's header; it folds the group. Folded, it says how many and the most urgent state.
     const header = (g) => {
@@ -427,9 +440,9 @@ export default class Agents extends View {
           .when(!byPriority && top && top !== "idle", (el) => el.child(this.status(t, { status: top }, true)))
           .child(svg("mods/workspace-chrome/chevron-right.svg").size(11).flex_none().text_color(t.dim)));
     };
-    const rows = collapsed
-      ? list.flatMap(withKids)
-      : groups.flatMap((g) => [header(g), ...(this.folded.has(g.id) ? [] : g.members.flatMap(withKids))]);
+    const rows = entries.map(entry => entry.group ? header(entry.group)
+      : entry.sub ? this.subRow(t, entry.sub, shown, byPriority, entry.number)
+      : row(entry.agent, entry.subs, entry.number));
 
     return v_flex()
       .size_full()
