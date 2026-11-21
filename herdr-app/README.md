@@ -64,7 +64,8 @@ All keys below follow `Ctrl-b`; uppercase letters mean Shift.
 | `c`, `p/n`, `1…9` | New, previous/next, or numbered tab |
 | `a`, `Shift-1…9` | Show numbered agents; focus one directly |
 | `[`, `/` | Scroll and copy; search the terminal |
-| `w`, `:`, `?` | Search spaces/tabs, search commands, or show full help |
+| `w` | Search spaces and tabs |
+| `:` | Search commands; search for `help` to show full help |
 | `Ctrl-b` again | Send a literal Ctrl-b to the focused terminal |
 
 Numbered tabs run left to right and agents top to bottom, updating as they

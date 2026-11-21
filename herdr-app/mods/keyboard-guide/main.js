@@ -54,7 +54,6 @@ const ROOT = [
     action("s", "Settings…", "app.settings"),
     mode(":", "Find any command…", "commands"),
     action("shift-g", "New worktree…", "worktree", {}, "space"),
-    mode("?", "More keys & app limits →", "help"),
     action("q", "Minimize; keep terminals", "window.minimize")]],
 ];
 
@@ -116,6 +115,8 @@ function guideCatalogue(rootGroups, snapshot) {
       add({ ...base, key: row.keys?.[0] });
     }
   }
+  add({ mode: "help", group: "Guide", label: "More keys & app limits",
+    words: "help keyboard shortcuts" });
 
   // The shipped palette's additional public actions. Prefix actions above are
   // deliberately not redefined here. Missing installed commands never appear.
@@ -623,9 +624,9 @@ export default class KeyboardGuide extends View {
 
   row(row, t, cx, id) {
     const enabled = this.available(row);
-    return h_flex().id(id).h(20).gap(9).items_center().cursor_pointer()
+    return h_flex().id(id).h(22).gap(9).items_center().cursor_pointer()
       .hover(s => s.bg(t.hover)).on_click((_e, cx) => this.runAction(row, row.keys[0], cx))
-      .child(div().w(62).flex_none().text_color(enabled ? t.accent : t.dim)
+      .child(div().w(76).flex_none().text_color(enabled ? t.accent : t.dim)
         .child(row.keys.map(k => this.keyLabel(k)).join(" ")))
       .child(div().text_color(enabled ? t.foreground : t.dim).truncate().child(row.label));
   }
@@ -637,7 +638,7 @@ export default class KeyboardGuide extends View {
     const tab = space?.tabs.find(tab => tab.id === f?.tab);
     const root = v_flex().id("keyboard-guide").track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx)).size_full().p(16).gap(8)
-      .bg(t.background).text_color(t.foreground).text_size(12);
+      .bg(t.background).text_color(t.foreground).text_size(14);
     root.child(h_flex().items_center().justify_between()
       .child(h_flex().gap(10).child(div().font_semibold().text_color(t.accent).child("Ctrl-b"))
         .child(div().child(this.mode === "root" ? " /  next command" : ` /  ${this.mode}`)))
@@ -654,8 +655,8 @@ export default class KeyboardGuide extends View {
           .bg(start + i === this.at ? t.selected : t.background).hover(s => s.bg(t.hover))
           .cursor_pointer().on_click((_e, cx) => this.chooseSearch(cx, entry))
           .child(div().flex_1().min_w(0).truncate().text_color(this.available(entry) ? t.foreground : t.dim).child(entry.label))
-          .child(div().text_color(t.muted).text_size(10).child(entry.group))
-          .child(div().text_color(t.accent).text_size(11).child(entry.keys?.length ? `Ctrl-b ${entry.keys.map(k => this.keyLabel(k)).join(" / ")}` : "")) )));
+          .child(div().text_color(t.muted).text_size(12).child(entry.group))
+          .child(div().text_color(t.accent).text_size(13).child(entry.keys?.length ? `Ctrl-b ${entry.keys.map(k => this.keyLabel(k)).join(" / ")}` : "")) )));
       if (!rows.length) root.child(div().text_color(t.muted).child("No matching commands or places."));
       root.child(div().text_color(t.muted).child(`↑ / ↓ choose · Enter runs · Ctrl-b returns · Esc closes · ${rows.length} matches`));
     } else if (this.mode === "copy") {
@@ -685,10 +686,10 @@ export default class KeyboardGuide extends View {
       root.child(div().child("[ / ]  previous / next agent    1…9  choose tab & return"));
       root.child(div().text_color(t.accent).child("Enter  finish     Backspace  all commands     Esc  leave"));
     } else {
-      root.child(h_flex().gap(26).children([ROOT.slice(0, 2), ROOT.slice(2)].map((groups, col) =>
+      root.child(h_flex().gap(26).items_start().children([ROOT.slice(0, 2), ROOT.slice(2)].map((groups, col) =>
         v_flex().flex_1().min_w(0).gap(6).children(groups.map(([title, rows], group) =>
           v_flex().gap(2)
-            .child(div().text_size(10).text_color(t.muted).child(title))
+            .child(div().text_size(12).text_color(t.muted).child(title))
             .children(rows.map((row, i) => this.row(row, t, cx, `action-${col}-${group}-${i}`))))))));
       const tabs = space?.tabs.filter(t => !t.settled).slice(0, 9) ?? [];
       root.child(div().h(1).bg(t.border));

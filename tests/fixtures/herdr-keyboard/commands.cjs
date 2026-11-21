@@ -116,16 +116,41 @@ function forbidExternalPalette() {
 let count = 0;
 function test(name, fn) { fresh(); fn(); console.log(`ok ${++count} - ${name}`); }
 
-test('Prefix help, command search, and places stay inside the guide', () => {
-  press('?');
+test('Colon opens command search directly', () => {
+  for (const event of [[':'], [';', { shift: true }, ':']]) {
+    fresh();
+    press(...event);
+    assert.equal(guide.mode, 'commands');
+    assert.equal(guide.query, '');
+    assert.ok(scene.inputFocus > 0);
+    assert.ok(guide.searchRows().length > 0);
+    guide.input.type('focus pane right');
+    guide.input.submit();
+    assert.deepEqual(scene.calls, [['pane.go', { direction: 'right' }]]);
+    forbidExternalPalette();
+  }
+});
+
+test('Question mark no longer opens command search or help', () => {
+  for (const event of [['?'], ['/', { shift: true }, '?']]) {
+    fresh();
+    press(...event);
+    assert.equal(guide.mode, 'root');
+    assert.equal(scene.inputFocus, 0);
+    assert.equal(scene.closed, 0);
+    assert.deepEqual(scene.calls, []);
+    assert.deepEqual(scene.overlays, []);
+    assert.match(guide.message, /No command/);
+  }
+});
+
+test('Help and places remain available inside the guide', () => {
+  press(':');
+  choose('More keys & app limits', 'help');
   assert.equal(guide.mode, 'help');
   assert.match(text(guide.render(cx)), /find any command/);
-  press('?');
-  assert.equal(guide.mode, 'root', 'Repeated help must not launch the native help dialog');
-  press('?');
   press(':');
   assert.equal(guide.mode, 'commands');
-  assert.ok(scene.inputFocus > 0);
   press('backspace');
   press('w');
   assert.equal(guide.mode, 'places');

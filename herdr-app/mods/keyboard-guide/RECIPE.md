@@ -11,6 +11,7 @@ and tmux's keyboard selection flow into the app, using your own theme.
 The main dialog is 820 × 480 logical pixels, centered in the window.
 A header shows `Ctrl-b / next command` and the current space/tab.
 Two columns list Move, Panes, Tabs / Spaces, and Workspace commands.
+The main text is 14 px, with 12 px headings and 13 px search shortcuts.
 Teal keys, white labels, muted headings and thin dividers come from the
 host theme; this preview uses JetBrains Mono and a near-black background.
 The footer shows numbered tabs, cancellation keys, and feedback for an
@@ -29,9 +30,10 @@ button opens the same guide as the prefix key.
 The prefix captures the next key; unrelated input is not sent to the shell.
 Known one-shot commands close the guide and act. `g` replaces the hint list
 with persistent navigation controls, `a` lists numbered agents, `[` opens
-the smaller scroll/copy popup, and `?` explains the remaining keys and
-app limits inside the guide. `w` searches spaces and tabs; `:` searches
-commands. The header and available destinations follow live app state.
+the smaller scroll/copy popup. `w` searches spaces and tabs; `:` opens
+the commands list immediately. Search for `help` and choose **More keys &
+app limits** for the remaining keys and app limits inside the guide.
+The header and available destinations follow live app state.
 
 - **Move:** `h j k l` focus left/down/up/right. Tab and Shift-Tab cycle panes.
   In `g` mode, ↑/↓ switch spaces, `p/n` switch tabs, and `[/]` switch agents.
@@ -59,7 +61,8 @@ commands. The header and available destinations follow live app state.
   outside cancels the popup instead of leaving an unfocused strip on screen.
 - **Workspace:** `b` toggles the sidebar, `s` opens settings, `:` opens the
   guide's command search, `/` searches the terminal, and `q` minimizes the
-  window while terminal programs keep running. `?` stays in the guide's help.
+  window while terminal programs keep running. Help is available by searching
+  for `help` in the commands list.
 - **Cancel/confirm:** Escape, Ctrl-[ or Ctrl-c leaves. Backspace goes back. Closing
   a pane/tab/space captures that target and asks for Enter/y; n returns.
   Ctrl-b a second time sends a literal Ctrl-b to the focused terminal.
@@ -160,7 +163,8 @@ The dotfiles installer instead manages individual file links and backups.
 - Native `herdr-app check` passes and the running app reports no errors.
 - Ctrl-b opens the complete guide; g changes the hints; Escape returns
   typing to the original terminal. Unknown keys remain inside the guide.
-- `w`, `:` and `?` stay inside the guide. Filtering, ↑/↓ or Ctrl-p/n,
+- `:` opens commands directly; searching for `help` reaches the help
+  page. `w` searches places. All stay inside the guide. Filtering, ↑/↓ or Ctrl-p/n,
   Enter and Ctrl-b work in both searches; confirmations name their effect.
 - On a disposable tab, h/j/k/l select the expected panes; Tab cycles;
   v and - split in the named directions; x followed by n cancels closing.

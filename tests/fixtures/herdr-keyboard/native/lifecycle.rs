@@ -236,7 +236,7 @@ fn personal_keyboard_events(cx: &mut gpui::TestAppContext) {
         } else {
             match scenario.as_str() {
                 "navigate_escape" => personal_keys(cx, "g"),
-                "help_escape" => personal_keys(cx, "?"),
+                "help_escape" => personal_keys(cx, ": h e l p enter"),
                 "agents_escape" => personal_keys(cx, "a"),
                 "commands_escape" => personal_keys(cx, ": a p p"),
                 "places_escape" => personal_keys(cx, "w o n e"),
